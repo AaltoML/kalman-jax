@@ -3,9 +3,14 @@ Approximate inference in Markov Gaussian processes using iterated Kalman filteri
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
 
-We aim to implement a full suite of approximate inference algorithms, all of which will call the same underlying Kalman filter and smoother methods. Inference methods will be distinguished by the way in which the approximate likelihood terms are computed.
+### We combine two recent exciting advances in the field of probabilistic machine learning:
+ - Development of state space methods for linear-time approximate inference in Gaussian processes
+ - The ability to JIT compile and autodiff through loops efficiently with JAX
 
-# TODO
+### Code structure
+Each approximate inference algorithm will call the same underlying Kalman filter and smoother methods, and will be distinguished by the way in which the approximate likelihood terms are computed.
+
+### Approximate inference algorithms
  - [x] ADF - assumed density filtering (single-sweep EP)
  - [ ] PEP - power expectation propagation
  - [ ] EKF - extended Kalman filtering
@@ -20,6 +25,6 @@ We aim to implement a full suite of approximate inference algorithms, all of whi
  - [ ] VI - variational inference
  - [ ] CVI - conjugate-computation variational inference
  - [ ] S2VI - doubly-sparse variational inference
- - [ ] S2EP - doubly-sparse expectation propagation
- - [ ] STVI - spatio-temproal variational inference
- - [ ] STEP - spatio-temporal expectatiomn propagation
+ - [ ] S2EP - doubly-sparse expectation propagation (new)
+ - [ ] STVI - spatio-temporal variational inference (new)
+ - [ ] STEP - spatio-temporal expectation propagation (new)
