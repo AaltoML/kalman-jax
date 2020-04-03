@@ -1,6 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 from jax.nn import softplus
+from utils import softplus_inv
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
@@ -21,11 +22,6 @@ y_ = f + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
 y = np.sign(y_)
 
 x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
-
-
-def softplus_inv(x_):
-    return jnp.log(jnp.exp(x_) - 1)
-
 
 var_f = softplus_inv(1.0)  # GP variance
 len_f = softplus_inv(5.0)  # GP lengthscale
