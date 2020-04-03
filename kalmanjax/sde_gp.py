@@ -89,7 +89,7 @@ class SDEGP(object):
     @partial(jit, static_argnums=(0, 4))
     def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
         """
-        run the Kalman filter to get p(f_k | y_{1:k})
+        run the Kalman filter to get p(fₖ|y₁,...,yₖ)
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)
@@ -158,7 +158,7 @@ class SDEGP(object):
     @partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, m_filtered, P_filtered, dt):
         """
-        run the RTS smoother to get p(f_k | y_{1:N})
+        run the RTS smoother to get p(fₖ|y₁,...,yₙ)
         """
         self.update_model()  # for some reason, this model refresh is required for JIT
         N = dt.shape[0]
