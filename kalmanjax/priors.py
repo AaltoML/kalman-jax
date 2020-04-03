@@ -58,15 +58,16 @@ class Exponential(Prior):
         Pinf = np.array([[var]])
         return F, L, Qc, H, Pinf
 
-    @staticmethod
-    @jit
-    def expm(dt, hyperparams):
+    @partial(jit, static_argnums=0)
+    def expm(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the exponential prior
         :param dt: step size(s), Δt = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [1, 1]
         """
+        if hyperparams is None:
+            hyperparams = softplus(self.hyp)
         ell = hyperparams[1]
         A = np.broadcast_to(np.exp(-dt / ell), [1, 1])
         return A
@@ -117,15 +118,16 @@ class Matern32(Prior):
                          [0.0, 3.0 * var / ell ** 2.0]])
         return F, L, Qc, H, Pinf
 
-    @staticmethod
-    @jit
-    def expm(dt, hyperparams):
+    @partial(jit, static_argnums=0)
+    def expm(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-3/2 prior
         :param dt: step size(s), Δt = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [2, 2]
         """
+        if hyperparams is None:
+            hyperparams = softplus(self.hyp)
         ell = hyperparams[1]
         lam = np.sqrt(3.0) / ell
         A = np.exp(-dt * lam) * (dt * np.array([[lam, 1.0], [-lam**2.0, -lam]]) + np.eye(2))
@@ -185,15 +187,16 @@ class Matern52(Prior):
                          [-kappa, 0.0,   25.0*var / ell**4.0]])
         return F, L, Qc, H, Pinf
 
-    @staticmethod
-    @jit
-    def expm(dt, hyperparams):
+    @partial(jit, static_argnums=0)
+    def expm(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior
         :param dt: step size(s), Δt = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [3, 3]
         """
+        if hyperparams is None:
+            hyperparams = softplus(self.hyp)
         ell = hyperparams[1]
         lam = np.sqrt(5.0) / ell
         dtlam = dt * lam
@@ -261,15 +264,16 @@ class Matern72(Prior):
                          [0.0,    -kappa2, 0.0,    343.0*var / ell**6.0]])
         return F, L, Qc, H, Pinf
 
-    @staticmethod
-    @jit
-    def expm(dt, hyperparams):
+    @partial(jit, static_argnums=0)
+    def expm(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-7/2 prior
         :param dt: step size(s), Δt = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [4, 4]
         """
+        if hyperparams is None:
+            hyperparams = softplus(self.hyp)
         ell = hyperparams[1]
         lam = np.sqrt(7.0) / ell
         lam2 = lam * lam

@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
-from jax import jit
+from jax import jit, partial
 # from numpy import random as nprandom
 from jax import random
 pi = 3.141592653589793
@@ -91,7 +91,7 @@ class Gaussian(Likelihood):
 
     @staticmethod
     @jit
-    def moment_match(y, m, v, hyp, derivatives=True):
+    def moment_match(y, m, v, hyp=None, derivatives=True):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:

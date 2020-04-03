@@ -65,8 +65,7 @@ class SDEGP(object):
         """
         if params is None:
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params,
-                                                                              None, None, False)
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False)
         return neg_log_marg_lik, dlZ
 
     def predict(self, y=None, dt=None, mask=None, site_params=None):
@@ -77,19 +76,18 @@ class SDEGP(object):
         dt = self.dt_all if dt is None else dt
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        # self.update_model(params[0])
-        filter_mean, filter_cov, site_mean, site_var = self.kalman_filter(y, dt, params, mask, site_params, True)
-        posterior_mean, posterior_var = self.rauch_tung_striebel_smoother(filter_mean, filter_cov, dt, params)
+        filter_mean, filter_cov, site_mean, site_var = self.kalman_filter(y, dt, params, True, mask, site_params)
+        posterior_mean, posterior_var = self.rauch_tung_striebel_smoother(filter_mean, filter_cov, dt)
         return posterior_mean, posterior_var, site_mean, site_var
 
-    def update_model(self, theta_prior):
+    def update_model(self, theta_prior=None):
         """
         re-construct the SDE-GP model with latest parameters
         """
-        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(theta_prior)
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
 
-    @partial(jit, static_argnums=(0, 6))
-    def kalman_filter(self, y, dt, params, mask=None, site_params=None, store=False):
+    @partial(jit, static_argnums=(0, 4))
+    def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
         """
         run the Kalman filter to get p(f_k | y_{1:k})
         """
@@ -159,12 +157,11 @@ class SDEGP(object):
         return s.neg_log_marg_lik
 
     @partial(jit, static_argnums=0)
-    def rauch_tung_striebel_smoother(self, m_filtered, P_filtered, dt, params):
+    def rauch_tung_striebel_smoother(self, m_filtered, P_filtered, dt):
         """
         run the RTS smoother to get p(f_k | y_{1:N})
         """
-        theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
-        self.update_model(theta_prior)
+        self.update_model()  # for some reason, this model refresh is required for JIT
         N = dt.shape[0]
         dt = jnp.concatenate([dt[1:], jnp.array([0.0])], axis=0)
         with loops.Scope() as s:
@@ -172,7 +169,7 @@ class SDEGP(object):
             s.smoothed_mean = jnp.zeros([N, self.obs_dim])
             s.smoothed_var = jnp.zeros([N, self.obs_dim])
             for k in s.range(N-1, -1, -1):
-                A = self.prior.expm(dt[k], self.prior.hyp)  # closed form integration of transition matrix
+                A = self.prior.expm(dt[k])  # , theta_prior)  # closed form integration of transition matrix
                 m_predicted = A @ m_filtered[k, ...]
                 tmp_gain_cov = A @ P_filtered[k, ...]
                 P_predicted = A @ (P_filtered[k, ...] - self.Pinf) @ A.T + self.Pinf
