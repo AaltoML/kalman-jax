@@ -300,7 +300,6 @@ class Erf(Probit):
 
 class Poisson(Likelihood):
     """
-    TODO: not tested
     The Poisson likelihood:
         p(yₙ|fₙ) = Poisson(fₙ) = μʸ exp(-μ) / yₙ!
     where μ = g(fₙ) = mean = variance is the Poisson intensity.
