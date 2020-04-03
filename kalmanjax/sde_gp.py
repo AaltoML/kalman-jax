@@ -31,16 +31,14 @@ class SDEGP(object):
         (self.t_all, self.test_id, self.train_id,
          self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y)
         self.t_test = jnp.array(t_test)
-        self.nlml = 0.0
         self.prior = prior
         self.likelihood = likelihood
         # construct the state space model:
         print('building SDE-GP with', self.prior.name, 'prior and', self.likelihood.name, 'likelihood ...')
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss()
-        self.latent_size = self.F.shape[0]
-        self.observation_size = self.y.shape[1]
-        self.minf = jnp.zeros([self.latent_size, 1])  # stationary state mean
-        self.filtered_mean, self.filtered_cov, self.site_mean, self.site_var = [], [], [], []
+        self.state_dim = self.F.shape[0]
+        self.obs_dim = self.y.shape[1]
+        self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
 
     @staticmethod
     def input_admin(t_train, t_test, y):
@@ -90,7 +88,7 @@ class SDEGP(object):
         """
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(theta_prior)
 
-    @partial(jit, static_argnums=(0, 6))  # make jit work with self
+    @partial(jit, static_argnums=(0, 6))
     def kalman_filter(self, y, dt, params, mask=None, site_params=None, store=False):
         """
         run the Kalman filter to get p(f_k | y_{1:k})
@@ -105,14 +103,14 @@ class SDEGP(object):
             s.neg_log_marg_lik = 0.0  # negative log-marginal likelihood
             s.m, s.P = self.minf, self.Pinf
             if store:
-                s.filtered_mean = jnp.zeros([N, self.latent_size, 1])
-                s.filtered_cov = jnp.zeros([N, self.latent_size, self.latent_size])
+                s.filtered_mean = jnp.zeros([N, self.state_dim, 1])
+                s.filtered_cov = jnp.zeros([N, self.state_dim, self.state_dim])
             if site_params is not None:
                 s.site_mean, s.site_var = site_params
             else:
                 if store:
-                    s.site_mean = jnp.zeros([N, self.observation_size])
-                    s.site_var = jnp.zeros([N, self.observation_size])
+                    s.site_mean = jnp.zeros([N, self.obs_dim])
+                    s.site_var = jnp.zeros([N, self.obs_dim])
             for k in s.range(N):
                 y_k = y[k]
                 # -- KALMAN PREDICT --
@@ -157,14 +155,10 @@ class SDEGP(object):
                     s.site_mean = index_update(s.site_mean, index[k, ...], jnp.squeeze(m_site.T))
                     s.site_var = index_update(s.site_var, index[k, ...], jnp.squeeze(P_site.T))
         if store:
-            # self.filtered_mean = s.filtered_mean
-            # self.filtered_cov = s.filtered_cov
-            # self.site_mean = s.site_mean
-            # self.site_var = s.site_var
             return s.filtered_mean, s.filtered_cov, s.site_mean, s.site_var
         return s.neg_log_marg_lik
 
-    @partial(jit, static_argnums=0)  # make jit work with self
+    @partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, m_filtered, P_filtered, dt, params):
         """
         run the RTS smoother to get p(f_k | y_{1:N})
@@ -175,8 +169,8 @@ class SDEGP(object):
         dt = jnp.concatenate([dt[1:], jnp.array([0.0])], axis=0)
         with loops.Scope() as s:
             s.m, s.P = m_filtered[-1, ...], P_filtered[-1, ...]
-            s.smoothed_mean = jnp.zeros([N, self.observation_size])
-            s.smoothed_var = jnp.zeros([N, self.observation_size])
+            s.smoothed_mean = jnp.zeros([N, self.obs_dim])
+            s.smoothed_var = jnp.zeros([N, self.obs_dim])
             for k in s.range(N-1, -1, -1):
                 A = self.prior.expm(dt[k], self.prior.hyp)  # closed form integration of transition matrix
                 m_predicted = A @ m_filtered[k, ...]
@@ -207,16 +201,16 @@ class SDEGP(object):
             dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(x)])
         N = dt.shape[0]
         with loops.Scope() as s:
-            s.f_sample = jnp.zeros([N, self.observation_size, num_samps])
-            s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(99), shape=[self.latent_size, 1])
+            s.f_sample = jnp.zeros([N, self.obs_dim, num_samps])
+            s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(99), shape=[self.state_dim, 1])
             for i in s.range(num_samps):
-                s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.latent_size, 1])
+                s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.state_dim, 1])
                 for k in s.range(N):
                     A = self.prior.expm(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
-                    C = jnp.linalg.cholesky(Q + 2e-6 * jnp.eye(self.latent_size))  # <--- unstable
+                    C = jnp.linalg.cholesky(Q + 1e-5 * jnp.eye(self.state_dim))  # <--- unstable
                     # we need to provide a different PRNG seed every time:
-                    s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.latent_size, 1])
+                    s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
                     f = (self.H @ s.m).T
                     s.f_sample = index_update(s.f_sample, index[k, ..., i], jnp.squeeze(f))
         return s.f_sample

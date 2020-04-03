@@ -1,5 +1,6 @@
 import jax.numpy as np
 from jax import jit, partial
+from jax.nn import softplus
 
 
 class Prior(object):
@@ -48,7 +49,7 @@ class Exponential(Prior):
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         if hyperparams is None:
-            hyperparams = self.hyp
+            hyperparams = softplus(self.hyp)
         var, ell = hyperparams[0], hyperparams[1]
         F = np.array([[-1.0 / ell]])
         L = np.array([[1.0]])
@@ -103,7 +104,7 @@ class Matern32(Prior):
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         if hyperparams is None:
-            hyperparams = self.hyp
+            hyperparams = softplus(self.hyp)
         var, ell = hyperparams[0], hyperparams[1]
         lam = 3.0 ** 0.5 / ell
         F = np.array([[0.0,       1.0],
@@ -166,7 +167,7 @@ class Matern52(Prior):
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         if hyperparams is None:
-            hyperparams = self.hyp
+            hyperparams = softplus(self.hyp)
         var, ell = hyperparams[0], hyperparams[1]
         # lam = tf.constant(5.0**0.5 / ell, dtype=floattype)
         lam = 5.0**0.5 / ell
@@ -239,7 +240,7 @@ class Matern72(Prior):
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         if hyperparams is None:
-            hyperparams = self.hyp
+            hyperparams = softplus(self.hyp)
         var, ell = hyperparams[0], hyperparams[1]
         lam = 7.0**0.5 / ell
         F = np.array([[0.0,       1.0,           0.0,           0.0],
