@@ -55,13 +55,6 @@ for j in range(20):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
-# t0 = time.time()
-# nlml, [dtheta_prior, dtheta_lik] = sde_gp_model.neg_log_marg_lik()
-# t1 = time.time()
-# print('NLML: %0.2f' % nlml)
-# print('gradients:', dtheta_prior, dtheta_lik)
-# print('gradient step time: %2.2f secs' % (t1-t0))
-
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
