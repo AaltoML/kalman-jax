@@ -1,0 +1,84 @@
+# This is a .gitignore file which aims to keep the git 
+# repository tidy by preventing the inclusion of different
+# temporary or system files.
+#
+# Last modified by Arno Solin, 2012-11-22
+
+# Exclude TeX temporary working files
+*.acn
+*.acr
+*.alg
+*.aux
+*.bbl
+*.blg
+*.dvi
+*.fdb_latexmk
+*.glg
+*.glo
+*.gls
+*.idx
+*.ilg
+*.ind
+*.ist
+*.lof
+*.log
+*.lot
+*.maf
+*.mtc
+*.mtc0
+*.nav
+*.nlo
+*.out
+*.pdfsync
+*.ps
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.xdy
+*.tdo
+*.dpth
+*.auxlock
+*.dep
+*.brf
+
+# Exclude backup files freated by e.g. Matlab and Emacs
+*~
+
+# Exclude system specific thumbnail and other folder metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+
+# Exclude externalisation results from tikz
+tikz*.pdf
+*.md5
+*.spl
+
+*.lock
+*.bin
+*.iml
+
+.DS_Store
+kalmanjax/.idea*
+kalmanjax/__pycache__*
+
+**/.ipynb_checkpoints/*
+**/kalman_tmp/*
+*.png
+*.pickle
+*.npy
+*.pyc
+
+# Exclude the paper
+aabi/paper/article.pdf
+aabi/poster/poster.pdf
+aabi/slides/pres.pdf
+aabi/paper/arxiv.zip
+aabi/paper/arxiv
+paper/article.pdf
