@@ -15,7 +15,7 @@ class SDEGP(object):
     """
     The stochastic differential equation (SDE) form of a Gaussian process (GP) model
     """
-    def __init__(self, kernel, likelihood, x, y, theta_prior=np.zeros(2), theta_lik=0.0, x_test=None):
+    def __init__(self, prior, likelihood, x, y, theta_prior=np.zeros(2), theta_lik=0.0, x_test=None):
         # TODO: implement EP
         # TODO: implement lookup table for A
         x, ind = np.unique(x, return_index=True)
@@ -34,11 +34,11 @@ class SDEGP(object):
         self.nlml = 0.0
         self.theta_prior = jnp.array(theta_prior)
         self.theta_lik = jnp.array(theta_lik)
-        self.kernel = kernel(self.theta_prior)
+        self.prior = prior(self.theta_prior)
         self.likelihood = likelihood(self.theta_lik)
         # construct the state space model:
-        print('building SDE-GP with', self.kernel.kernel_name, 'kernel ...')
-        self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel.cf_to_ss(self.theta_prior)
+        print('building SDE-GP with', self.prior.name, 'prior and', self.likelihood.name, 'likelihood ...')
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(self.theta_prior)
         self.latent_size = self.F.shape[0]
         self.observation_size = self.y.shape[1]
         self.minf = jnp.zeros([self.latent_size, 1])  # stationary state mean
@@ -68,7 +68,7 @@ class SDEGP(object):
         calculate the negative log-marginal likelihood by running the Kalman filter across training locations
         """
         if params is None:
-            params = [self.kernel.hyp.copy(), self.likelihood.hyp.copy()]
+            params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params,
                                                                               None, None, False)
         return neg_log_marg_lik, dlZ
@@ -80,7 +80,7 @@ class SDEGP(object):
         y = self.y_all if y is None else y
         dt = self.dt_all if dt is None else dt
         mask = self.mask if mask is None else mask
-        params = [self.kernel.hyp.copy(), self.likelihood.hyp.copy()]
+        params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         self.update_model(params[0])
         filter_mean, filter_cov, site_mean, site_var = self.kalman_filter(y, dt, params, mask, site_params, True)
         posterior_mean, posterior_var = self.rauch_tung_striebel_smoother(filter_mean, filter_cov, dt, params)
@@ -90,7 +90,7 @@ class SDEGP(object):
         """
         re-construct the SDE-GP model with latest parameters
         """
-        self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel.cf_to_ss(theta_prior)
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(theta_prior)
 
     @partial(jit, static_argnums=(0, 6))  # make jit work with self
     def kalman_filter(self, y, dt, params, mask=None, site_params=None, store=False):
@@ -121,7 +121,7 @@ class SDEGP(object):
                 #  m_{k|k-1} = A_k m_{k-1}
                 #  P_{k|k-1} = A_k P_{k-1} A_k' + Q_k, where Q_k = Pinf - A_k Pinf A_k'
                 # A = tf.linalg.expm(self.F * dt[k])  # this is naive but dynamic step size checking is also expensive
-                A = self.kernel.expm(dt[k], theta_prior)
+                A = self.prior.expm(dt[k], theta_prior)
                 m_ = A @ s.m
                 P_ = A @ (s.P - self.Pinf) @ A.T + self.Pinf
                 # --- KALMAN UPDATE ---
@@ -180,7 +180,7 @@ class SDEGP(object):
             s.smoothed_mean = jnp.zeros([N, self.observation_size])
             s.smoothed_var = jnp.zeros([N, self.observation_size])
             for k in s.range(N-1, -1, -1):
-                A = self.kernel.expm(dt[k], self.kernel.hyp)  # closed form integration of transition matrix
+                A = self.prior.expm(dt[k], self.prior.hyp)  # closed form integration of transition matrix
                 m_predicted = A @ m_filtered[k, ...]
                 tmp_gain_cov = A @ P_filtered[k, ...]
                 P_predicted = A @ (P_filtered[k, ...] - self.Pinf) @ A.T + self.Pinf
@@ -201,7 +201,7 @@ class SDEGP(object):
         """
         sample from the prior
         """
-        self.update_model(softplus(self.kernel.hyp))
+        self.update_model(softplus(self.prior.hyp))
         # TODO: sort out prior sampling - currently very unstable
         if x is None:
             dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(self.t_all)])
@@ -214,7 +214,7 @@ class SDEGP(object):
             for i in s.range(num_samps):
                 s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.latent_size, 1])
                 for k in s.range(N):
-                    A = self.kernel.expm(dt[k], self.kernel.hyp)  # transition and noise process matrices
+                    A = self.prior.expm(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
                     C = jnp.linalg.cholesky(Q + 2e-6 * jnp.eye(self.latent_size))  # <--- unstable
                     # we need to provide a different PRNG seed every time:

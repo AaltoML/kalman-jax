@@ -5,11 +5,11 @@ from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
-import sde_kernels
+import priors
 import likelihoods
 pi = 3.141592653589793
 
-kern = sde_kernels.Matern52
+kern = priors.Matern52
 lik = likelihoods.Probit
 
 print('generating some data ...')
@@ -33,7 +33,7 @@ len_f = softplus_inv(5.0)  # GP lengthscale
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array([])
 
-sde_gp_model = SDEGP(kernel=kern, likelihood=lik, x=x, y=y, theta_prior=theta_prior, x_test=x_test)
+sde_gp_model = SDEGP(prior=kern, likelihood=lik, x=x, y=y, theta_prior=theta_prior, x_test=x_test)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 opt_state = opt_init([theta_prior, theta_lik])  # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -41,7 +41,7 @@ opt_state = opt_init([theta_prior, theta_lik])  # parameters should be a 2-eleme
 
 def gradient_step(i, state):
     params = get_params(state)
-    sde_gp_model.kernel.hyp = params[0]
+    sde_gp_model.prior.hyp = params[0]
     sde_gp_model.likelihood.hyp = params[1]
     neg_log_marg_lik, gradients = sde_gp_model.neg_log_marg_lik()
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %

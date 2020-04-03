@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax import jit
 
 
-class Kernel(object):
+class Prior(object):
     """
     The GP Kernel / prior class.
     Implements methods for converting GP priors,
@@ -24,7 +24,7 @@ class Kernel(object):
         self.hyp = hyp
 
 
-class Exponential(Kernel):
+class Exponential(Prior):
     """
     Exponential, i.e. Matern-1/2 kernel in SDE form
     Hyperparameters:
@@ -42,7 +42,7 @@ class Exponential(Kernel):
         if self.hyp is None:
             print('using default kernel parameters since none were supplied')
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
-        self.kernel_name = 'Exponential'
+        self.name = 'Exponential'
 
     @staticmethod
     @jit
@@ -74,7 +74,7 @@ class Matern12(Exponential):
     pass
 
 
-class Matern32(Kernel):
+class Matern32(Prior):
     """
     Matern-3/2 kernel in SDE form
     Hyperparameters:
@@ -96,7 +96,7 @@ class Matern32(Kernel):
         if self.hyp is None:
             print('using default kernel parameters since none were supplied')
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
-        self.kernel_name = 'Matern-3/2'
+        self.name = 'Matern-3/2'
 
     @staticmethod
     @jit
@@ -129,7 +129,7 @@ class Matern32(Kernel):
         return A
 
 
-class Matern52(Kernel):
+class Matern52(Prior):
     """
     Matern-5/2 kernel in SDE form
     Hyperparameters:
@@ -155,7 +155,7 @@ class Matern52(Kernel):
         if self.hyp is None:
             print('using default kernel parameters since none were supplied')
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
-        self.kernel_name = 'Matern-5/2'
+        self.name = 'Matern-5/2'
 
     def set_hyperparams(self, hyp):
         self.hyp = hyp
@@ -201,7 +201,7 @@ class Matern52(Kernel):
         return A
 
 
-class Matern72(Kernel):
+class Matern72(Prior):
     """
     Matern-7/2 kernel in SDE form
     Hyperparameters:
@@ -230,7 +230,7 @@ class Matern72(Kernel):
         if self.hyp is None:
             print('using default kernel parameters since none were supplied')
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
-        self.kernel_name = 'Matern-7/2'
+        self.name = 'Matern-7/2'
 
     @staticmethod
     @jit

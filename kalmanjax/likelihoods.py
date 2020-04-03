@@ -65,6 +65,7 @@ class Gaussian(Likelihood):
         if self.hyp is None:
             print('using default likelihood parameter since none was supplied')
             self.hyp = -2.25  # softplus(-2.25) ~= 0.1
+        self.name = 'Gaussian'
 
     def evaluate_likelihood(self, y, f):
         """
@@ -139,6 +140,7 @@ class Probit(Likelihood):
         :param hyp: None. This likelihood model has no hyperparameters
         """
         super().__init__(hyp=hyp)
+        self.name = 'Probit'
 
     @staticmethod
     @jit
@@ -251,6 +253,7 @@ class Poisson(Likelihood):
             self.link = lambda mu: np.log(1.0 + np.exp(mu))
         else:
             raise NotImplementedError('link function not implemented')
+        self.name = 'Poisson'
 
     def evaluate_likelihood(self, y, f):
         """
