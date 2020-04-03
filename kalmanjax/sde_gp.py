@@ -126,10 +126,10 @@ class SDEGP(object):
                     y_k = jnp.where(mask[k], mu, y_k)  # fill in masked obs with prior expectation to prevent NaN grads
                 if site_params is None:
                     # likelihood-specific moment matching function:
-                    log_marg_lik_k, d1, d2 = self.likelihood.moment_match(y=y_k, m=mu, v=var, hyp=theta_lik)
+                    log_marg_lik_k, d1, d2 = self.likelihood.moment_match(y_k, mu, var, theta_lik, True)
                 else:
                     # use supplied site variance (for the smoothing operation in posterior sampling)
-                    log_marg_lik_k, d1, d2 = Gaussian.moment_match(y_k, mu, var, hyp=s.site_var[k])
+                    log_marg_lik_k, d1, d2 = Gaussian.moment_match([], y_k, mu, var, s.site_var[k], True)
                 m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
                 P_site = -var - 1 / d2  # approximate likelihood (site) variance
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):

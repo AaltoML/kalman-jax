@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
 from jax import jit, partial
-# from numpy import random as nprandom
+from numpy.polynomial.hermite import hermgauss
 from jax import random
 pi = 3.141592653589793
 
@@ -22,21 +22,81 @@ class Likelihood(object):
         """
         self.hyp = hyp
 
-    def evaluate_likelihood(self, y, f):
+    def evaluate_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this likelihood is not implemented')
 
-    def evaluate_log_likelihood(self, y, f):
+    def evaluate_log_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this log-likelihood is not implemented')
 
-    # def moment_match(self, y, mu, var, var_y, derivatives=True):
-    @staticmethod
-    def moment_match(y, mu, var, hyp, derivatives=True):
+    @partial(jit, static_argnums=(0, 5))
+    def moment_match_quadrature(self, y, m, v, hyp=None, derivatives=True, ep_fraction=1, num_quad_points=20):
         """
+        Perform moment matching via Gauss-Hermite quadrature
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
-            logZₙ = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[p(yₙ|fₙ)]
-        which is equivalent to the expectation w.r.t the cavity
+            logZₙ = log ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        with EP power a.
+        :param y: observed data (yₙ) [scalar]
+        :param m: cavity mean (mₙ) [scalar]
+        :param v: cavity variance (vₙ) [scalar]
+        :param hyp: likelihood hyperparameter [scalar]
+        :param derivatives: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
+        :param ep_fraction: EP power / fraction (a) [scalar]
+        :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
+        :return:
+            lZ: the log partition function, logZₙ  [scalar]
+            dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True)  [scalar]
+            d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True)  [scalar]
         """
-        raise NotImplementedError('moment matching not implemented for this likelihood')
+        x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
+        w = w / np.sqrt(pi)  # scale weights by 1/√π
+        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** ep_fraction
+
+        # a different approach, based on the log-likelihood, which can be more stable:
+        # ll = self.evaluate_log_likelihood(y, sigma_points)
+        # lmax = np.max(ll)
+        # weighted_likelihood_eval = np.exp(lmax * ep_fraction) * w * np.exp(ep_fraction * (ll - lmax))
+
+        # Compute partition function via quadrature:
+        # Zₙ = ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #    ≈ ∑ᵢ wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        Z = np.sum(
+            weighted_likelihood_eval
+        )
+        lZ = np.log(Z)
+        if derivatives:
+            Zinv = 1.0 / Z
+            # Compute derivative of partition function via quadrature:
+            # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+            #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+            dZ = np.sum(
+                (sigma_points - m) / v
+                * weighted_likelihood_eval
+            )
+            # dlogZₙ/dmₙ = (dZₙ/dmₙ) / Zₙ
+            dlZ = Zinv * dZ
+            # Compute second derivative of partition function via quadrature:
+            # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+            #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+            d2Z = np.sum(
+                ((sigma_points - m) ** 2 / v ** 2 - 1.0 / v)
+                * weighted_likelihood_eval
+            )
+            # d²logZₙ/dmₙ² = d[(dZₙ/dmₙ) / Zₙ]/dmₙ
+            #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
+            #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
+            d2lZ = -dlZ ** 2 + Zinv * d2Z
+            return lZ, dlZ, d2lZ
+        else:
+            return lZ
+
+    @partial(jit, static_argnums=(0, 5))
+    def moment_match(self, y, m, v, hyp=None, derivatives=True, ep_fraction=1):
+        """
+        If no custom moment matching method is provided, we use Gauss-Hermite quadrature
+        """
+        return self.moment_match_quadrature(y, m, v, hyp, derivatives, ep_fraction=ep_fraction)
 
     @staticmethod
     def link_fn(latent_mean):
@@ -67,31 +127,38 @@ class Gaussian(Likelihood):
             self.hyp = -2.25  # softplus(-2.25) ~= 0.1
         self.name = 'Gaussian'
 
-    def evaluate_likelihood(self, y, f):
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Gaussian function 𝓝(yₙ|fₙ,σ²)
         Can be used to evaluate Q quadrature points
         :param y: observed data yₙ [scalar]
         :param f: mean, i.e. the latent function value fₙ [Q, 1]
+        :param hyp: likelihood variance σ² [scalar]
         :return:
             𝓝(yₙ|fₙ,σ²), where σ² is the observation noise [Q, 1]
         """
-        return (2 * pi * self.hyp) ** -0.5 * np.exp(-0.5 * (y - f) ** 2 / self.hyp)
+        if hyp is None:
+            hyp = softplus(self.hyp)
+        return (2 * pi * hyp) ** -0.5 * np.exp(-0.5 * (y - f) ** 2 / hyp)
 
-    def evaluate_log_likelihood(self, y, f):
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
         """
         Evaluate the log-Gaussian function log𝓝(yₙ|fₙ,σ²)
         Can be used to evaluate Q quadrature points
         :param y: observed data yₙ [scalar]
         :param f: mean, i.e. the latent function value fₙ [Q, 1]
+        :param hyp: likelihood variance σ² [scalar]
         :return:
             log𝓝(yₙ|fₙ,σ²), where σ² is the observation noise [Q, 1]
         """
-        return -0.5 * np.log(2 * pi * self.hyp) - 0.5 * (y - f) ** 2 / self.hyp
+        if hyp is None:
+            hyp = softplus(self.hyp)
+        return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
 
-    @staticmethod
-    @jit
-    def moment_match(y, m, v, hyp=None, derivatives=True):
+    @partial(jit, static_argnums=(0, 5))
+    def moment_match(self, y, m, v, hyp=None, derivatives=True):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -107,6 +174,8 @@ class Gaussian(Likelihood):
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
+        if hyp is None:
+            hyp = softplus(self.hyp)
         # log partition function, lZ:
         # logZₙ = log ∫ 𝓝(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #       = log 𝓝(yₙ|mₙ,σ²+vₙ)
@@ -157,7 +226,8 @@ class Probit(Likelihood):
         yvar = 4 * p * (1 - p)
         return lp, ymu, yvar
 
-    def evaluate_likelihood(self, y, f):
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Gaussian CDF likelihood model,
             Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
@@ -165,12 +235,14 @@ class Probit(Likelihood):
         Can be used to evaluate Q quadrature points when performing moment matching
         :param y: observed data yₙ ϵ {-1, +1} [scalar]
         :param f: latent function value fₙ [Q, 1]
+        :param hyp: dummy input, Probit has no hyperparameters
         :return:
             Φ(yₙfₙ) [Q, 1]
         """
         return (1.0 + erf(y * f / np.sqrt(2.0))) / 2.0  # Φ(z)
 
-    def evaluate_log_likelihood(self, y, f):
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Gaussian CDF log-likelihood,
             log Φ(yₙfₙ) = log[(1 + erf(yₙfₙ / √2)) / 2]
@@ -178,14 +250,14 @@ class Probit(Likelihood):
         Can be used to evaluate Q quadrature points when performing moment matching
         :param y: observed data yₙ ϵ {-1, +1} [scalar]
         :param f: latent function value fₙ [Q, 1]
+        :param hyp: dummy input, Probit has no hyperparameters
         :return:
             log Φ(yₙfₙ) [Q, 1]
         """
         return np.log(1.0 + erf(y * f / np.sqrt(2.0)) + 1e-10) - np.log(2)  # logΦ(z)
 
-    @staticmethod
-    @jit
-    def moment_match(y, m, v, hyp=None, derivatives=True):
+    @partial(jit, static_argnums=(0, 5))
+    def moment_match(self, y, m, v, hyp=None, derivatives=True):
         """
         Probit likelihood moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -227,7 +299,7 @@ class Erf(Probit):
 
 class Poisson(Likelihood):
     """
-    TODO: not JIT'ed and not tested, just here for an example of how quadrature can be implemented
+    TODO: not tested
     The Poisson likelihood:
         p(yₙ|fₙ) = Poisson(fₙ) = μʸ exp(-μ) / yₙ!
     where μ = g(fₙ) = mean = variance is the Poisson intensity.
@@ -248,14 +320,15 @@ class Poisson(Likelihood):
         """
         super().__init__(hyp=hyp)
         if link is 'exp':
-            self.link = lambda mu: np.exp(mu)
+            self.link_fn = lambda mu: np.exp(mu)
         elif link is 'logistic':
-            self.link = lambda mu: np.log(1.0 + np.exp(mu))
+            self.link_fn = lambda mu: np.log(1.0 + np.exp(mu))
         else:
             raise NotImplementedError('link function not implemented')
         self.name = 'Poisson'
 
-    def evaluate_likelihood(self, y, f):
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Poisson likelihood:
             p(yₙ|fₙ) = Poisson(fₙ) = μʸ exp(-μ) / yₙ!
@@ -264,13 +337,15 @@ class Poisson(Likelihood):
         Can be used to evaluate Q quadrature points when performing moment matching
         :param y: observed data (yₙ) [scalar]
         :param f: latent function value (fₙ) [Q, 1]
+        :param hyp: dummy variable (Poisson has no hyperparameters)
         :return:
             Poisson(fₙ) = μʸ exp(-μ) / yₙ! [Q, 1]
         """
-        mu = self.link(f)
+        mu = self.link_fn(f)
         return mu**y * np.exp(-mu) / np.exp(gammaln(y + 1))
 
-    def evaluate_log_likelihood(self, y, f):
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Poisson log-likelihood:
             log p(yₙ|fₙ) = log Poisson(fₙ) = log(μʸ exp(-μ) / yₙ!)
@@ -279,71 +354,12 @@ class Poisson(Likelihood):
         Can be used to evaluate Q quadrature points when performing moment matching
         :param y: observed data (yₙ) [scalar]
         :param f: latent function value (fₙ) [Q, 1]
+        :param hyp: dummy variable (Poisson has no hyperparameters)
         :return:
             log Poisson(fₙ) = log(μʸ exp(-μ) / yₙ!) [Q, 1]
         """
-        mu = self.link(f)
+        mu = self.link_fn(f)
         return y * np.log(mu) - mu - gammaln(y + 1)
-
-    def moment_match(self, y, m, v, hyp=None, derivatives=True, num_quad_points=20):
-        """
-        Perform moment matching via Gauss-Hermite quadrature
-        Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
-            logZₙ = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[p(yₙ|fₙ)]
-        :param y: observed data (yₙ) [scalar]
-        :param m: cavity mean (mₙ) [scalar]
-        :param v: cavity variance (vₙ) [scalar]
-        :param hyp: dummy variable
-        :param derivatives: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
-        :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
-        :return:
-            lZ: the log partition function, logZₙ  [scalar]
-            dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True)  [scalar]
-            d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True)  [scalar]
-        """
-        x, w = np.polynomial.hermite.hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
-        w = w / np.sqrt(pi)  # scale weights by 1/√π
-        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
-        # pre-compute wᵢ p(yₙ|xᵢ√(2vₙ) + mₙ)
-        weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points)
-
-        # a different approach, based on the log-likelihood, which can be more stable:
-        # ll = self.evaluate_log_likelihood(y, sigma_points)
-        # lmax = np.max(ll)
-        # weighted_likelihood_eval = np.exp(lmax) * w * np.exp(ll - lmax)
-
-        # Compute partition function via quadrature:
-        # Zₙ = ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #    ≈ ∑ᵢ wᵢ p(yₙ|xᵢ√(2vₙ) + mₙ)
-        Z = np.sum(
-            weighted_likelihood_eval
-        )
-        lZ = np.log(Z)
-        if derivatives:
-            Zinv = 1.0 / Z
-            # Compute derivative of partition function via quadrature:
-            # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-            #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ p(yₙ|xᵢ√(2vₙ) + mₙ)
-            dZ = np.sum(
-                (sigma_points - m) / v
-                * weighted_likelihood_eval
-            )
-            # dlogZₙ/dmₙ = (dZₙ/dmₙ) / Zₙ
-            dlZ = Zinv * dZ
-            # Compute second derivative of partition function via quadrature:
-            # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-            #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] p(yₙ|xᵢ√(2vₙ) + mₙ)
-            d2Z = np.sum(
-                ((sigma_points - m)**2 / v**2 - 1.0 / v)
-                * weighted_likelihood_eval
-            )
-            # d²logZₙ/dmₙ² = d[(dZₙ/dmₙ) / Zₙ]/dmₙ
-            #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
-            #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
-            d2lZ = -dlZ**2 + Zinv * d2Z
-            return lZ, dlZ, d2lZ
-        else:
-            return lZ
 
 
 def logphi(z):
