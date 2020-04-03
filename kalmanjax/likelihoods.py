@@ -1,9 +1,8 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
-from jax import jit, partial
+from jax import jit, partial, random
 from numpy.polynomial.hermite import hermgauss
-from jax import random
 from utils import logphi
 pi = 3.141592653589793
 

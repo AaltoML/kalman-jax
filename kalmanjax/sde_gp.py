@@ -2,10 +2,8 @@ import jax.numpy as jnp
 from jax.ops import index, index_update
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
-from jax import value_and_grad
-from jax import random
+from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
-from jax import jit, partial
 import numpy as np
 from likelihoods import Gaussian
 pi = 3.141592653589793
