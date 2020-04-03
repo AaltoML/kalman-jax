@@ -10,7 +10,7 @@ import priors
 import likelihoods
 pi = 3.141592653589793
 
-kern = priors.Matern52
+prior = priors.Matern52
 lik = likelihoods.Gaussian
 
 
@@ -40,7 +40,10 @@ var_y = softplus_inv(0.5)  # observation noise
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array(var_y)
 
-sde_gp_model = SDEGP(prior=kern, likelihood=lik, x=x, y=y, theta_prior=theta_prior, theta_lik=theta_lik, x_test=x_test)
+prior_ = prior(softplus(theta_prior))
+lik_ = lik(softplus(theta_lik))
+
+sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 opt_state = opt_init([theta_prior, theta_lik])  # parameters should be a 2-element list [param_prior, param_likelihood]

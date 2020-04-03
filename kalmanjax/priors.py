@@ -1,5 +1,5 @@
 import jax.numpy as np
-from jax import jit
+from jax import jit, partial
 
 
 class Prior(object):
@@ -37,17 +37,18 @@ class Exponential(Prior):
     H      = 1
     Pinf   = σ²
     """
-    def __init__(self, hyp):
+    def __init__(self, hyp=None):
         super().__init__(hyp=hyp)
         if self.hyp is None:
             print('using default kernel parameters since none were supplied')
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
         self.name = 'Exponential'
 
-    @staticmethod
-    @jit
-    def cf_to_ss(hyperparams):
+    @partial(jit, static_argnums=0)
+    def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
+        if hyperparams is None:
+            hyperparams = self.hyp
         var, ell = hyperparams[0], hyperparams[1]
         F = np.array([[-1.0 / ell]])
         L = np.array([[1.0]])
@@ -98,10 +99,11 @@ class Matern32(Prior):
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
         self.name = 'Matern-3/2'
 
-    @staticmethod
-    @jit
-    def cf_to_ss(hyperparams):
+    @partial(jit, static_argnums=0)
+    def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
+        if hyperparams is None:
+            hyperparams = self.hyp
         var, ell = hyperparams[0], hyperparams[1]
         lam = 3.0 ** 0.5 / ell
         F = np.array([[0.0,       1.0],
@@ -160,10 +162,11 @@ class Matern52(Prior):
     def set_hyperparams(self, hyp):
         self.hyp = hyp
 
-    @staticmethod
-    @jit
-    def cf_to_ss(hyperparams):
+    @partial(jit, static_argnums=0)
+    def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
+        if hyperparams is None:
+            hyperparams = self.hyp
         var, ell = hyperparams[0], hyperparams[1]
         # lam = tf.constant(5.0**0.5 / ell, dtype=floattype)
         lam = 5.0**0.5 / ell
@@ -232,10 +235,11 @@ class Matern72(Prior):
             self.hyp = [0.55, 0.55]  # softplus(0.55) ~= 1
         self.name = 'Matern-7/2'
 
-    @staticmethod
-    @jit
-    def cf_to_ss(hyperparams):
+    @partial(jit, static_argnums=0)
+    def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
+        if hyperparams is None:
+            hyperparams = self.hyp
         var, ell = hyperparams[0], hyperparams[1]
         lam = 7.0**0.5 / ell
         F = np.array([[0.0,       1.0,           0.0,           0.0],

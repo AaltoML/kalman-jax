@@ -15,7 +15,7 @@ class SDEGP(object):
     """
     The stochastic differential equation (SDE) form of a Gaussian process (GP) model
     """
-    def __init__(self, prior, likelihood, x, y, theta_prior=np.zeros(2), theta_lik=0.0, x_test=None):
+    def __init__(self, prior, likelihood, x, y, x_test=None):
         # TODO: implement EP
         # TODO: implement lookup table for A
         x, ind = np.unique(x, return_index=True)
@@ -32,13 +32,11 @@ class SDEGP(object):
          self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y)
         self.t_test = jnp.array(t_test)
         self.nlml = 0.0
-        self.theta_prior = jnp.array(theta_prior)
-        self.theta_lik = jnp.array(theta_lik)
-        self.prior = prior(self.theta_prior)
-        self.likelihood = likelihood(self.theta_lik)
+        self.prior = prior
+        self.likelihood = likelihood
         # construct the state space model:
         print('building SDE-GP with', self.prior.name, 'prior and', self.likelihood.name, 'likelihood ...')
-        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(self.theta_prior)
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss()
         self.latent_size = self.F.shape[0]
         self.observation_size = self.y.shape[1]
         self.minf = jnp.zeros([self.latent_size, 1])  # stationary state mean
@@ -81,7 +79,7 @@ class SDEGP(object):
         dt = self.dt_all if dt is None else dt
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        self.update_model(params[0])
+        # self.update_model(params[0])
         filter_mean, filter_cov, site_mean, site_var = self.kalman_filter(y, dt, params, mask, site_params, True)
         posterior_mean, posterior_var = self.rauch_tung_striebel_smoother(filter_mean, filter_cov, dt, params)
         return posterior_mean, posterior_var, site_mean, site_var
