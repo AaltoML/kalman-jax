@@ -112,15 +112,14 @@ class SDEGP(object):
             for k in s.range(N):
                 y_k = y[k]
                 # -- KALMAN PREDICT --
-                #  m_{k|k-1} = A_k m_{k-1}
-                #  P_{k|k-1} = A_k P_{k-1} A_k' + Q_k, where Q_k = Pinf - A_k Pinf A_k'
-                # A = tf.linalg.expm(self.F * dt[k])  # this is naive but dynamic step size checking is also expensive
+                #  mₖ⁻ = Aₖ mₖ₋₁
+                #  Pₖ⁻ = Aₖ Pₖ₋₁ Aₖ' + Qₖ, where Qₖ = Pinf - Aₖ Pinf Aₖ'
                 A = self.prior.expm(dt[k], theta_prior)
                 m_ = A @ s.m
                 P_ = A @ (s.P - self.Pinf) @ A.T + self.Pinf
                 # --- KALMAN UPDATE ---
-                # Given previous predicted mean m_{k|k-1} and cov P_{k|k-1}, incorporate y_k to get filtered mean m_k &
-                # cov P_k and compute the marginal likelihood p(y[k] | y[:k-1])
+                # Given previous predicted mean mₖ⁻ and cov Pₖ⁻, incorporate yₖ to get filtered mean mₖ &
+                # cov Pₖ and compute the marginal likelihood p(yₖ|y₁,...,yₖ₋₁)
                 mu = self.H @ m_
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
@@ -133,7 +132,7 @@ class SDEGP(object):
                     log_marg_lik_k, d1, d2 = Gaussian.moment_match(y_k, mu, var, hyp=s.site_var[k])
                 m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
                 P_site = -var - 1 / d2  # approximate likelihood (site) variance
-                # slightly modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
+                # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + P_site
                 if scalar_obs:  # if S is scalar
                     K = P_ @ self.H.T / S
