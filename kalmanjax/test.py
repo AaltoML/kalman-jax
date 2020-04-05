@@ -143,8 +143,7 @@ def gradient_step(i, state):
     param = get_params(state)
     # l, dl = value_and_grad(my_obj.loss, argnums=0)(param)
     l, dl = value_and_grad(my_obj.kalman_filter, argnums=0)(param, my_obj.site_params)
-    _, _, site_params = my_obj.smoothing(param)
-    my_obj.site_params = site_params
+    _, _, my_obj.site_params = my_obj.smoothing(param)
     print(l)
     return opt_update(i, dl, state)
 

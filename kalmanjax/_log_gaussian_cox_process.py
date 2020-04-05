@@ -46,7 +46,8 @@ def gradient_step(i, state):
     params = get_params(state)
     sde_gp_model.prior.hyp = params[0]
     sde_gp_model.likelihood.hyp = params[1]
-    neg_log_marg_lik, gradients = sde_gp_model.neg_log_marg_lik()
+    # neg_log_marg_lik, gradients = sde_gp_model.neg_log_marg_lik()
+    neg_log_marg_lik, gradients = sde_gp_model.expectation_propagation()
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))
     return opt_update(i, gradients, state)
@@ -62,7 +63,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, _ = sde_gp_model.predict()
+posterior_mean, posterior_var, _ = sde_gp_model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 
@@ -72,11 +73,11 @@ x_pred = sde_gp_model.t_all
 test_id = sde_gp_model.test_id
 link_fn = sde_gp_model.likelihood.link_fn
 
-print('sampling from the posterior ...')
-t0 = time.time()
-posterior_samp = sde_gp_model.posterior_sample(20)
-t1 = time.time()
-print('sampling time: %2.2f secs' % (t1-t0))
+# print('sampling from the posterior ...')
+# t0 = time.time()
+# posterior_samp = sde_gp_model.posterior_sample(20)
+# t1 = time.time()
+# print('sampling time: %2.2f secs' % (t1-t0))
 
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
@@ -84,7 +85,7 @@ plt.clf()
 plt.plot(disaster_timings, 0*disaster_timings, 'k+', label='observations', clip_on=False)
 plt.plot(x_pred, link_fn(posterior_mean), 'g', label='posterior mean')
 plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='g', alpha=0.05, label='95% confidence')
-plt.plot(x_test, link_fn(posterior_samp[test_id, 0, :]), 'g', alpha=0.15)
+# plt.plot(x_test, link_fn(posterior_samp[test_id, 0, :]), 'g', alpha=0.15)
 plt.xlim(x_test[0], x_test[-1])
 plt.ylim(0.0)
 plt.legend()
