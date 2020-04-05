@@ -83,8 +83,7 @@ class SDEGP(object):
         filter_mean, filter_cov, site_params_kf = self.kalman_filter(y, dt, params, True, mask, site_params)
         if site_params is None:
             site_params = site_params_kf
-        posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
-                                                                             dt, site_params, y)
+        posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt, y)
         return posterior_mean, posterior_var, site_params
 
     def expectation_propagation(self):
@@ -101,7 +100,7 @@ class SDEGP(object):
                                                                        True, None, self.site_params)
         # run the smoother and update the EP sites
         post_mean, post_var, self.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
-                                                                                  self.dt, self.site_params, self.y)
+                                                                                  self.dt, self.y, self.site_params)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params,
                                                                               False, None, self.site_params)
@@ -181,7 +180,7 @@ class SDEGP(object):
         return s.neg_log_marg_lik
 
     @partial(jit, static_argnums=0)
-    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, site_params, y):
+    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
         """
         run the RTS smoother to get p(fₖ|y₁,...,yₙ)
         """
@@ -193,7 +192,8 @@ class SDEGP(object):
             s.m, s.P = m_filtered[-1, ...], P_filtered[-1, ...]
             s.smoothed_mean = jnp.zeros([N, self.obs_dim])
             s.smoothed_var = jnp.zeros([N, self.obs_dim])
-            s.site_mean, s.site_var = site_params
+            if site_params is not None:
+                s.site_mean, s.site_var = site_params
             for k in s.range(N-1, -1, -1):
                 A = self.prior.expm(dt[k], theta_prior)  # closed form integration of transition matrix
                 m_predicted = A @ m_filtered[k, ...]
@@ -210,19 +210,22 @@ class SDEGP(object):
                 s.smoothed_mean = index_update(s.smoothed_mean, index[k, ...], jnp.squeeze((self.H @ s.m).T))
                 s.smoothed_var = index_update(s.smoothed_var, index[k, ...],
                                               jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
-                # extract mean and var from state (we discard cross-covariance for now):
-                mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
-                # remove local likelihood approximation to obtain the marginal cavity distribution:
-                var_cav = 1.0 / (1.0 / var - 1.0 / s.site_var[k])  # cavity variance
-                mu_cav = var_cav * (mu / var - s.site_mean[k] / s.site_var[k])  # cavity mean
-                # calculate the log-normaliser of the tilted distribution and its derivatives w.r.t. mu_cav (d1, d2)
-                # lZ = log E_{N(f|m,P)} [p(y|f)] = log int p(y|f) N(f|m,P) df
-                _, d1, d2 = self.likelihood.moment_match(y[k], mu_cav, var_cav, theta_lik, True)
-                m_site = mu_cav - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
-                P_site = -var_cav - 1 / d2  # approximate likelihood (site) variance
-                s.site_mean = index_update(s.site_mean, index[k, ...], jnp.squeeze(m_site.T))
-                s.site_var = index_update(s.site_var, index[k, ...], jnp.squeeze(P_site.T))
-        return s.smoothed_mean, s.smoothed_var, (s.site_mean, s.site_var)
+                if site_params is not None:
+                    # extract mean and var from state (we discard cross-covariance for now):
+                    mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
+                    # remove local likelihood approximation to obtain the marginal cavity distribution:
+                    var_cav = 1.0 / (1.0 / var - 1.0 / s.site_var[k])  # cavity variance
+                    mu_cav = var_cav * (mu / var - s.site_mean[k] / s.site_var[k])  # cavity mean
+                    # calculate the log-normaliser of the tilted distribution and its derivatives w.r.t. mu_cav (d1, d2)
+                    # lZ = log E_{N(f|m,P)} [p(y|f)] = log int p(y|f) N(f|m,P) df
+                    _, d1, d2 = self.likelihood.moment_match(y[k], mu_cav, var_cav, theta_lik, True)
+                    m_site = mu_cav - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
+                    P_site = -var_cav - 1 / d2  # approximate likelihood (site) variance
+                    s.site_mean = index_update(s.site_mean, index[k, ...], jnp.squeeze(m_site.T))
+                    s.site_var = index_update(s.site_var, index[k, ...], jnp.squeeze(P_site.T))
+        if site_params is not None:
+            site_params = (s.site_mean, s.site_var)
+        return s.smoothed_mean, s.smoothed_var, site_params
 
     def prior_sample(self, num_samps, x=None):
         """
