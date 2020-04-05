@@ -23,19 +23,20 @@ y = np.sign(y_)
 
 x_test = np.sort(x)  # np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
 
-var_f = softplus_inv(1.0)  # GP variance
-len_f = softplus_inv(5.0)  # GP lengthscale
+var_f = 1.0  # GP variance
+len_f = 5.0  # GP lengthscale
 
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array([])
 
-prior_ = prior(softplus(theta_prior))
-lik_ = lik(softplus(theta_lik))
+prior_ = prior(theta_prior)
+lik_ = lik(theta_lik)
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
-opt_state = opt_init([theta_prior, theta_lik])  # parameters should be a 2-element list [param_prior, param_likelihood]
+# parameters should be a 2-element list [param_prior, param_likelihood]
+opt_state = opt_init(softplus_inv([theta_prior, theta_lik]))
 
 
 def gradient_step(i, state):

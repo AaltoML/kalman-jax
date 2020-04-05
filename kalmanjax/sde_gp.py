@@ -85,13 +85,13 @@ class SDEGP(object):
     def expectation_propagation(self):
         """
         a single iteration of expectation propagation - to be fed to a gradient-based optimiser.
-         - we first update the site parameters (mean and variance)
+         - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
         """
         # fetch the model parameters from the prior and the likelihood
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        # run the forward filter to calculate the filtering distribution
-        # on the first pass (when self.site_params = None), this initialises the sites too
+        # run the forward filter to calculate the filtering distribution.
+        # on the first pass (when self.site_params = None) this initialises the sites too
         filter_mean, filter_cov, self.site_params = self.kalman_filter(self.y, self.dt, params,
                                                                        True, self.mask, self.site_params)
         # run the smoother and update the EP sites

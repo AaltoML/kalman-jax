@@ -5,9 +5,15 @@ pi = 3.141592653589793
 
 def softplus_inv(x_):
     """
-    inverse of the softplus positiviy mapping, used for transforming parameters
+    Inverse of the softplus positiviy mapping, used for transforming parameters.
+    Loop over the elements of the paramter list so we can handle the special case
+    where an element is empty
     """
-    return np.log(np.exp(x_) - 1)
+    y_ = x_
+    for i in range(len(x_)):
+        if x_[i] is not []:
+            y_[i] = np.log(np.exp(x_[i]) - 1)
+    return y_
 
 
 def logphi(z):
