@@ -74,7 +74,12 @@ class SDEGP(object):
         dt = self.dt_all if dt is None else dt
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        site_params = self.site_params if site_params is None else site_params
+        # site_params = self.site_params if site_params is None else site_params
+        if site_params is not None:
+            site_mean, site_var = jnp.zeros(dt.shape[0]), jnp.zeros(dt.shape[0])
+            site_mean = index_update(site_mean, index[self.train_id], site_params[0])
+            site_var = index_update(site_var, index[self.train_id], site_params[0])
+            site_params = (site_mean, site_var)
         filter_mean, filter_cov, site_params_kf = self.kalman_filter(y, dt, params, True, mask, site_params)
         if site_params is None:
             site_params = site_params_kf
@@ -93,13 +98,13 @@ class SDEGP(object):
         # run the forward filter to calculate the filtering distribution.
         # on the first pass (when self.site_params = None) this initialises the sites too
         filter_mean, filter_cov, self.site_params = self.kalman_filter(self.y, self.dt, params,
-                                                                       True, self.mask, self.site_params)
+                                                                       True, None, self.site_params)
         # run the smoother and update the EP sites
         post_mean, post_var, self.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
                                                                                   self.dt, self.site_params, self.y)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params,
-                                                                              False, self.mask, self.site_params)
+                                                                              False, None, self.site_params)
         return neg_log_marg_lik, dlZ
 
     def update_model(self, theta_prior=None):

@@ -21,7 +21,7 @@ f = 6 * np.sin(pi * x / 10.0) / (pi * x / 10.0 + 1)
 y_ = f + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
 y = np.sign(y_)
 
-x_test = np.sort(x)  # np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
+x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
 
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
@@ -82,8 +82,8 @@ plt.clf()
 plt.plot(x, y, 'b+', label='observations')
 plt.plot(x_pred, link_fn(posterior_mean), 'm', label='posterior mean')
 plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='m', alpha=0.05, label='95% confidence')
-# plt.plot(x_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
-plt.xlim(x_test[0], x_test[-1])
+# plt.plot(sde_gp_model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
+plt.xlim(sde_gp_model.t_test[0], sde_gp_model.t_test[-1])
 plt.legend()
 plt.title('GP classification via Kalman smoothing')
 plt.xlabel('time - $t$')

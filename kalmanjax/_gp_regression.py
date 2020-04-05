@@ -26,7 +26,7 @@ N = 1000
 # x = np.linspace(-25.0, 75.0, num=N)  # evenly spaced
 x = np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N))  # unevenly spaced
 y = wiggly_time_series(x)
-x_test = np.sort(x)  # np.linspace(np.min(x)-15.0, np.max(x)+15.0, num=500)
+x_test = np.linspace(np.min(x)-15.0, np.max(x)+15.0, num=500)
 
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
@@ -87,8 +87,8 @@ plt.clf()
 plt.plot(x, y, 'k.', label='observations')
 plt.plot(x_pred, posterior_mean, 'b', label='posterior mean')
 plt.fill_between(x_pred, lb, ub, color='b', alpha=0.05, label='95% confidence')
-# plt.plot(x_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
-plt.xlim([x_test[0], x_test[-1]])
+# plt.plot(sde_gp_model.t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
+plt.xlim([sde_gp_model.t_test[0], sde_gp_model.t_test[-1]])
 plt.legend()
 plt.title('GP regression via Kalman smoothing')
 plt.xlabel('time - $t$')
