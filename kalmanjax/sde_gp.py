@@ -248,35 +248,30 @@ class SDEGP(object):
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
-                    log_marg_lik_n, d1, d2 = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True, 1.0)
-                    m_site = mu - d1 / d2
-                    P_site = -var - 1 / d2
+                    log_lik_n, site_mu, site_var = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True, 1.0)
                 else:
                     if site_params is None:  # are we computing new sites?
                         # likelihood-specific moment matching function:
-                        log_marg_lik_n, d1, d2 = self.likelihood.moment_match(y_n, mu, var, theta_lik, True, 1.0)
-                        m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
-                        P_site = -var - 1 / d2  # approximate likelihood (site) variance
+                        log_lik_n, site_mu, site_var = self.likelihood.moment_match(y_n, mu, var, theta_lik, True, 1.0)
                     else:  # are we using supplied sites?
-                        log_marg_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False, 1.0)  # lml
-                        m_site = s.site_mean[n]  # use supplied site parameters
-                        P_site = s.site_var[n]
+                        log_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False, 1.0)  # lml
+                        site_mu, site_var = s.site_mean[n], s.site_var[n]  # use supplied site parameters
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
-                S = var + P_site
+                S = var + site_var
                 L, low = cho_factor(S)
                 K = (cho_solve((L, low), self.H @ P_)).T
-                s.m = m_ + K @ (m_site - mu)
+                s.m = m_ + K @ (site_mu - mu)
                 s.P = P_ - K @ S @ K.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     s.m = jnp.where(mask[n], m_, s.m)
                     s.P = jnp.where(mask[n], P_, s.P)
-                    log_marg_lik_n = jnp.where(mask[n][..., 0, 0], jnp.zeros_like(log_marg_lik_n), log_marg_lik_n)
-                s.neg_log_marg_lik -= jnp.sum(log_marg_lik_n)
+                    log_lik_n = jnp.where(mask[n][..., 0, 0], jnp.zeros_like(log_lik_n), log_lik_n)
+                s.neg_log_marg_lik -= jnp.sum(log_lik_n)
                 if store:
                     s.filtered_mean = index_update(s.filtered_mean, index[n, ...], s.m)
                     s.filtered_cov = index_update(s.filtered_cov, index[n, ...], s.P)
-                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(m_site.T))
-                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(P_site.T))
+                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
+                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if store:
             return s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var)
         return s.neg_log_marg_lik
@@ -333,14 +328,11 @@ class SDEGP(object):
                     # remove local likelihood approximation to obtain the marginal cavity distribution:
                     var_cav = 1.0 / (1.0 / var - self.ep_fraction / s.site_var[n])  # cavity variance
                     mu_cav = var_cav * (mu / var - self.ep_fraction * s.site_mean[n] / s.site_var[n])  # cavity mean
-                    # calculate the log-normaliser of the tilted distribution and its derivatives w.r.t. mu_cav (d1, d2)
-                    # lZ = log E_{N(f|m,P)} [p(y|f)] = log int p(y|f) N(f|m,P) df
-                    _, d1, d2 = self.likelihood.moment_match(y[n], mu_cav, var_cav, theta_lik,
-                                                             True, self.ep_fraction)
-                    m_site = mu_cav - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
-                    P_site = -self.ep_fraction * (var_cav + 1 / d2)  # approximate likelihood (site) variance
-                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(m_site.T))
-                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(P_site.T))
+                    # calculate the new sites via moment matching
+                    _, site_mu, site_var = self.likelihood.moment_match(y[n], mu_cav, var_cav, theta_lik,
+                                                                        True, self.ep_fraction)
+                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
+                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:
             site_params = (s.site_mean, s.site_var)
         return s.smoothed_mean, s.smoothed_var, site_params
