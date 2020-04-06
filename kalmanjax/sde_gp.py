@@ -42,6 +42,17 @@ class SDEGP(object):
     def input_admin(t_train, t_test, y):
         """
         order the inputs, remove duplicates, and index the train and test input locations
+        :param t_train: training inputs [N, 1]
+        :param t_test: testing inputs [N*, 1]
+        :param y: observations at the training inputs [N, 1]
+        :return:
+            t: the combined and sorted training and test inputs [N + N*, 1]
+            test_id: an array of indices corresponding to the test inputs [N*, 1]
+            train_id: an array of indices corresponding to the training inputs [N, 1]
+            y_all: an array observations y augmented with nans at test locations [N + N*, 1]
+            mask: boolean array to signify training locations [N + N*, 1]
+            dt: training step sizes, Δtₖ = tₖ - tₖ₋₁ [N, 1]
+            dt_all: combined training and test step sizes, Δtₖ = tₖ - tₖ₋₁ [N + N*, 1]
         """
         # here we use non-JAX numpy to sort out indexing of these static arrays
         t, x_ind = np.unique(np.concatenate([t_test, t_train]), return_inverse=True)
