@@ -20,9 +20,9 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [ ] EKS - extended Kalman smoothing
  - [ ] UKS - unscented Kalman smoothing
  - [ ] GHKS - Gauss-Hermite Kalman smoothing
- - [ ] EK-EP - Extended Kalman EP (new)
- - [ ] UK-EP - Unscented Kalman EP (new)
- - [ ] GHK-EP - Gauss-Hermite Kalman EP (new)
+ - [ ] EK-EP - Extended Kalman EP
+ - [ ] UK-EP - Unscented Kalman EP
+ - [x] GHK-EP - Gauss-Hermite Kalman EP
  - [ ] PL - posterior linearisation
  - [ ] CL - cavity linearisation (new)
  - [ ] VI - variational inference
