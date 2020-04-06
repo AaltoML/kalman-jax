@@ -30,10 +30,10 @@ class Likelihood(object):
 
     @partial(jit, static_argnums=(0, 5, 6, 7))
     def site_update(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0, inf='EP'):
-        if inf is 'EP':
+        if inf is 'EP' or inf is 'ADF':
             outputs = self.moment_match(y, m, v, hyp, site_update, ep_fraction)
         elif inf is 'PL':
-            outputs = self.moment_match(y, m, v, hyp, site_update, ep_fraction)
+            outputs = self.statistical_linear_regression(y, m, v, hyp, site_update, ep_fraction)
         else:
             raise NotImplementedError('inference method not implemented')
         return outputs

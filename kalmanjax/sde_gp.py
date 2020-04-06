@@ -197,7 +197,7 @@ class SDEGP(object):
             iii) running the smoothing operation in posterior sampling
         If store is True then we compute and return the intermediate filtering distributions
         p(fₙ|y₁,...,yₖ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
-        return the energy / negative log-marginal likelihood, -log p(y)
+        return the energy / negative log-marginal likelihood, -log p(y).
         :param y: observed data [N, obs_dim]
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
