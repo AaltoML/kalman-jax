@@ -378,13 +378,13 @@ class SDEGP(object):
     def posterior_sample(self, num_samps):
         """
         Sample from the posterior at the test locations.
-        Posterior sampling works by smoothin samples from the prior using the approximate Gaussian likelihood
+        Posterior sampling works by smoothing samples from the prior using the approximate Gaussian likelihood
         model given by the sites computed during inference in the true model (e.g. via EP):
          - compute the approximate likelihood terms, sites (𝓝(f|μ*,σ²*))
          - draw samples (f*) from the prior
          - add Gaussian noise to the prior samples using auxillary model p(y*|f*) = 𝓝(y*|f*,σ²*)
          - smooth the samples by computing the posterior p(f*|y*), i.e. the posterior samples
-        See Arnaud Doucet's note "A Note on Efficient Conditional Simulation of Gaussian Distributions" for details
+        See Arnaud Doucet's note "A Note on Efficient Conditional Simulation of Gaussian Distributions" for details.
         :param num_samps: the number of samples to draw [scalar]
         :return:
             the posterior samples [N_test, num_samps]
