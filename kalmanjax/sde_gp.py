@@ -26,10 +26,10 @@ class SDEGP(object):
     """
     def __init__(self, prior, likelihood, x, y, x_test=None):
         """
-        :param prior: the model prior / kernel object which constructs the required state space model matrices.
-        :param likelihood: the likelihood model object which performs moment matching and evaluates the likelihood.
-        :param x: training inouts
-        :param y: training data / observation
+        :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
+        :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
+        :param x: training inputs
+        :param y: training data / observations
         :param x_test: test inputs
         """
         assert x.shape[0] == y.shape[0]
