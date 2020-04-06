@@ -81,23 +81,47 @@ class SDEGP(object):
 
     def neg_log_marg_lik(self, params=None):
         """
-        a single assumed density filtering step - to be fed to a gradient-based optimiser.
-         - calculates the negative log-marginal likelihood and its gradients by running
-           the Kalman filter across training locations
+        calculates the negative log-marginal likelihood and its gradients by running
+        the Kalman filter across training locations
+        :param params: the model parameters. If not supplied then defaults to the model's
+                       assigned parameters [num_params]
+        :return:
+            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
+            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
         """
         if params is None:
+            # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, False)
         return neg_log_marg_lik, dlZ
 
-    def expectation_propagation(self):
+    def assumed_density_filtering(self, params=None):
+        """
+        a single assumed density filtering step - to be fed to a gradient-based optimiser.
+         - calculates the negative log-marginal likelihood and its gradients by running
+           the Kalman filter across training locations
+        :param params: the model parameters. If not supplied then defaults to the model's
+                       assigned parameters [num_params]
+        :return:
+            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
+            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
+        """
+        return self.neg_log_marg_lik(params=params)
+
+    def expectation_propagation(self, params=None):
         """
         a single expectation propagation step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
+        :param params: the model parameters. If not supplied then defaults to the model's
+                       assigned parameters [num_params]
+        :return:
+            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
+            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
         """
-        # fetch the model parameters from the prior and the likelihood
-        params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
+        if params is None:
+            # fetch the model parameters from the prior and the likelihood
+            params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         # run the forward filter to calculate the filtering distribution.
         # on the first pass (when self.site_params = None) this initialises the sites too
         filter_mean, filter_cov, self.site_params = self.kalman_filter(self.y, self.dt, params,
@@ -113,6 +137,9 @@ class SDEGP(object):
     def update_model(self, theta_prior=None):
         """
         re-construct the SDE-GP model with latest parameters
+        :param theta_prior: the hyperparameters of the GP prior
+        return:
+            computes the model matrices F, L, Qc, H, Pinf. See the prior class for details
         """
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
 
@@ -238,6 +265,10 @@ class SDEGP(object):
     def prior_sample(self, num_samps, x=None):
         """
         sample from the prior
+        :param num_samps: the number of samples to draw [scalar]
+        :param x: the input locations at which to sample (defaults to test set) [N_samp, 1]
+        :return:
+            f_sample: the prior samples [S, N_samp]
         """
         self.update_model(softplus(self.prior.hyp))
         # TODO: sort out prior sampling - currently very unstable
@@ -264,8 +295,11 @@ class SDEGP(object):
     def posterior_sample(self, num_samps):
         """
         sample from the posterior at the test locations
+        :param num_samps: the number of samples to draw [scalar]
+        :return:
+            the posterior samples [N_test, num_samps]
         """
-        post_mean, _, (site_mean, site_var) = self.predict()
+        post_mean, _, (site_mean, site_var) = self.predict(site_params=self.site_params)
         prior_samp = self.prior_sample(num_samps, x=self.t_all)
         prior_samp_y = self.likelihood.sample_noise(prior_samp, site_var)
         with loops.Scope() as ss:
