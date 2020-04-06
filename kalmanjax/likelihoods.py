@@ -14,7 +14,7 @@ class Likelihood(object):
         logZₙ = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[p(yₙ|fₙ)]
     If no custom moment matching method is provided, Gauss-Hermite quadrature is used by default.
     The requirement for quadrature is simply a method called evaluate_likelihood(), which computes
-    the likelihood model p(yₙ|fₙ) for given data and function values
+    the likelihood model p(yₙ|fₙ) for given data and function values.
     """
     def __init__(self, hyp=None):
         """
@@ -31,7 +31,7 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 5))
     def moment_match_quadrature(self, y, m, v, hyp=None, derivatives=True, ep_fraction=1, num_quad_points=20):
         """
-        Perform moment matching via Gauss-Hermite quadrature
+        Perform moment matching via Gauss-Hermite quadrature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
             logZₙ = log ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         with EP power a.
@@ -94,7 +94,7 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 5))
     def moment_match(self, y, m, v, hyp=None, derivatives=True, ep_fraction=1):
         """
-        If no custom moment matching method is provided, we use Gauss-Hermite quadrature
+        If no custom moment matching method is provided, we use Gauss-Hermite quadrature.
         """
         return self.moment_match_quadrature(y, m, v, hyp, derivatives, ep_fraction=ep_fraction)
 
@@ -130,8 +130,8 @@ class Gaussian(Likelihood):
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
         """
-        Evaluate the Gaussian function 𝓝(yₙ|fₙ,σ²)
-        Can be used to evaluate Q quadrature points
+        Evaluate the Gaussian function 𝓝(yₙ|fₙ,σ²).
+        Can be used to evaluate Q quadrature points.
         :param y: observed data yₙ [scalar]
         :param f: mean, i.e. the latent function value fₙ [Q, 1]
         :param hyp: likelihood variance σ² [scalar]
@@ -145,8 +145,8 @@ class Gaussian(Likelihood):
     @partial(jit, static_argnums=0)
     def evaluate_log_likelihood(self, y, f, hyp=None):
         """
-        Evaluate the log-Gaussian function log𝓝(yₙ|fₙ,σ²)
-        Can be used to evaluate Q quadrature points
+        Evaluate the log-Gaussian function log𝓝(yₙ|fₙ,σ²).
+        Can be used to evaluate Q quadrature points.
         :param y: observed data yₙ [scalar]
         :param f: mean, i.e. the latent function value fₙ [Q, 1]
         :param hyp: likelihood variance σ² [scalar]
@@ -202,14 +202,14 @@ class Probit(Likelihood):
     i.e. the Gaussian (Normal) cumulative density function:
         p(yₙ|fₙ) = Φ(yₙfₙ)
                  = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙyₙ],
-    and where we force the data to be +/-1: yₙ ϵ {-1, +1}
+    and where we force the data to be +/-1: yₙ ϵ {-1, +1}.
     The Normal CDF is calulcated using the error function:
         Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
     for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
     """
     def __init__(self, hyp):
         """
-        :param hyp: None. This likelihood model has no hyperparameters
+        :param hyp: None. This likelihood model has no hyperparameters.
         """
         super().__init__(hyp=hyp)
         self.name = 'Probit'
@@ -221,7 +221,7 @@ class Probit(Likelihood):
 
     def eval(self, mu, var):
         """
-        ported from GPML toolbox - not used
+        ported from GPML toolbox - not used.
         """
         lp, _, _ = self.moment_match(1, mu, var)
         p = np.exp(lp)
@@ -235,7 +235,7 @@ class Probit(Likelihood):
         Evaluate the Gaussian CDF likelihood model,
             Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
         for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
-        Can be used to evaluate Q quadrature points when performing moment matching
+        Can be used to evaluate Q quadrature points when performing moment matching.
         :param y: observed data yₙ ϵ {-1, +1} [scalar]
         :param f: latent function value fₙ [Q, 1]
         :param hyp: dummy input, Probit has no hyperparameters
@@ -249,8 +249,8 @@ class Probit(Likelihood):
         """
         Evaluate the Gaussian CDF log-likelihood,
             log Φ(yₙfₙ) = log[(1 + erf(yₙfₙ / √2)) / 2]
-        for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
-        Can be used to evaluate Q quadrature points when performing moment matching
+        for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z].
+        Can be used to evaluate Q quadrature points when performing moment matching.
         :param y: observed data yₙ ϵ {-1, +1} [scalar]
         :param f: latent function value fₙ [Q, 1]
         :param hyp: dummy input, Probit has no hyperparameters
@@ -269,7 +269,7 @@ class Probit(Likelihood):
         If the EP fraction a = 1, we get
                   = log Φ(yₙzₙ), where zₙ = mₙ / √(1 + vₙ)   [see Rasmussen & Williams p74]
         otherwise we must use quadrature to compute the log partition and its derivatives.
-        Note: we enforce yₙ ϵ {-1, +1}
+        Note: we enforce yₙ ϵ {-1, +1}.
         :param y: observed data (yₙ) [scalar]
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
@@ -319,7 +319,7 @@ class Poisson(Likelihood):
     The larger the intensity μ, the stronger the likelihood resembles a Gaussian
     since skewness = 1/sqrt(μ) and kurtosis = 1/μ.
     Two possible link functions:
-    'exp':      link(fₙ) = exp(fₙ),         we have p(yₙ|fₙ) = exp(fₙyₙ-exp(fₙ))            / Zy.
+    'exp':      link(fₙ) = exp(fₙ),         we have p(yₙ|fₙ) = exp(fₙyₙ-exp(fₙ))           / Zy.
     'logistic': link(fₙ) = log(1+exp(fₙ))), we have p(yₙ|fₙ) = logʸ(1+exp(fₙ)))(1+exp(fₙ)) / Zy.
     """
     def __init__(self, hyp=None, link='exp'):
@@ -341,9 +341,9 @@ class Poisson(Likelihood):
         """
         Evaluate the Poisson likelihood:
             p(yₙ|fₙ) = Poisson(fₙ) = μʸ exp(-μ) / yₙ!
-        for μ = g(fₙ), where g() is the link function (exponential or logisitc)
-        We use the gamma function to evaluate yₙ! = gamma(yₙ + 1)
-        Can be used to evaluate Q quadrature points when performing moment matching
+        for μ = g(fₙ), where g() is the link function (exponential or logistic).
+        We use the gamma function to evaluate yₙ! = gamma(yₙ + 1).
+        Can be used to evaluate Q quadrature points when performing moment matching.
         :param y: observed data (yₙ) [scalar]
         :param f: latent function value (fₙ) [Q, 1]
         :param hyp: dummy variable (Poisson has no hyperparameters)
@@ -358,9 +358,9 @@ class Poisson(Likelihood):
         """
         Evaluate the Poisson log-likelihood:
             log p(yₙ|fₙ) = log Poisson(fₙ) = log(μʸ exp(-μ) / yₙ!)
-        for μ = g(fₙ), where g() is the link function (exponential or logisitc)
-        We use the gamma function to evaluate yₙ! = gamma(yₙ + 1)
-        Can be used to evaluate Q quadrature points when performing moment matching
+        for μ = g(fₙ), where g() is the link function (exponential or logistic).
+        We use the gamma function to evaluate yₙ! = gamma(yₙ + 1).
+        Can be used to evaluate Q quadrature points when performing moment matching.
         :param y: observed data (yₙ) [scalar]
         :param f: latent function value (fₙ) [Q, 1]
         :param hyp: dummy variable (Poisson has no hyperparameters)

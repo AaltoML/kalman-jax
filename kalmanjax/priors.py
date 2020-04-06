@@ -27,7 +27,7 @@ class Prior(object):
 
 class Exponential(Prior):
     """
-    Exponential, i.e. Matern-1/2 kernel in SDE form
+    Exponential, i.e. Matern-1/2 kernel in SDE form.
     Hyperparameters:
         variance, σ²
         lengthscale, l
@@ -61,7 +61,7 @@ class Exponential(Prior):
     @partial(jit, static_argnums=0)
     def expm(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the exponential prior
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the exponential prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [1, 1]
@@ -79,7 +79,7 @@ class Matern12(Exponential):
 
 class Matern32(Prior):
     """
-    Matern-3/2 kernel in SDE form
+    Matern-3/2 kernel in SDE form.
     Hyperparameters:
         variance, σ²
         lengthscale, l
@@ -121,7 +121,7 @@ class Matern32(Prior):
     @partial(jit, static_argnums=0)
     def expm(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-3/2 prior
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-3/2 prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [2, 2]
@@ -136,7 +136,7 @@ class Matern32(Prior):
 
 class Matern52(Prior):
     """
-    Matern-5/2 kernel in SDE form
+    Matern-5/2 kernel in SDE form.
     Hyperparameters:
         variance, σ²
         lengthscale, l
@@ -190,7 +190,7 @@ class Matern52(Prior):
     @partial(jit, static_argnums=0)
     def expm(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [3, 3]
@@ -210,7 +210,7 @@ class Matern52(Prior):
 
 class Matern72(Prior):
     """
-    Matern-7/2 kernel in SDE form
+    Matern-7/2 kernel in SDE form.
     Hyperparameters:
         variance, σ²
         lengthscale, l
@@ -267,7 +267,7 @@ class Matern72(Prior):
     @partial(jit, static_argnums=0)
     def expm(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-7/2 prior
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-7/2 prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [4, 4]
