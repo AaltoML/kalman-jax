@@ -11,7 +11,7 @@ pi = 3.141592653589793
 
 class SDEGP(object):
     """
-    The stochastic differential equation (SDE) form of a Gaussian process (GP) model
+    The stochastic differential equation (SDE) form of a Gaussian process (GP) model.
     Implements methods for inference and learning in models with GP priors of the form
         f(t) ~ GP(0,k(t,t'))
     using state space methods, i.e. Kalman filtering and smoothing.
@@ -60,7 +60,7 @@ class SDEGP(object):
     @staticmethod
     def input_admin(t_train, t_test, y):
         """
-        Order the inputs, remove duplicates, and index the train and test input locations
+        Order the inputs, remove duplicates, and index the train and test input locations.
         :param t_train: training inputs [N, 1]
         :param t_test: testing inputs [N*, 1]
         :param y: observations at the training inputs [N, 1]
@@ -123,7 +123,7 @@ class SDEGP(object):
     def neg_log_marg_lik(self, params=None):
         """
         Calculates the negative log-marginal likelihood and its gradients by running
-        the Kalman filter across training locations
+        the Kalman filter across training locations.
         :param params: the model parameters. If not supplied then defaults to the model's
                        assigned parameters [num_params]
         :return:
@@ -180,7 +180,7 @@ class SDEGP(object):
 
     def update_model(self, theta_prior=None):
         """
-        Re-construct the SDE-GP model with latest parameters
+        Re-construct the SDE-GP model with latest parameters.
         :param theta_prior: the hyperparameters of the GP prior
         return:
             computes the model matrices F, L, Qc, H, Pinf. See the prior class for details
@@ -190,7 +190,7 @@ class SDEGP(object):
     @partial(jit, static_argnums=(0, 4, 5))
     def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
         """
-        Run the Kalman filter to get p(fₙ|y₁,...,yₙ)
+        Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
         The Kalman update step invloves some control flow to work out whether we are
             i) initialising the EP sites / running ADF
             ii) using supplied sites (e.g. in EP)
@@ -345,7 +345,7 @@ class SDEGP(object):
 
     def prior_sample(self, num_samps, x=None):
         """
-        Sample from the model prior f~N(0,K) multiple times using a nested loop
+        Sample from the model prior f~N(0,K) multiple times using a nested loop.
         :param num_samps: the number of samples to draw [scalar]
         :param x: the input locations at which to sample (defaults to train+test set) [N_samp, 1]
         :return:
@@ -375,7 +375,7 @@ class SDEGP(object):
 
     def posterior_sample(self, num_samps):
         """
-        Sample from the posterior at the test locations
+        Sample from the posterior at the test locations.
         Posterior sampling works by smoothin samples from the prior using the approximate Gaussian likelihood
         model given by the sites computed during inference in the true model (e.g. via EP):
          - compute the approximate likelihood terms, sites (𝓝(f|μ*,σ²*))
