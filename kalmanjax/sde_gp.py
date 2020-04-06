@@ -17,7 +17,7 @@ class SDEGP(object):
     using state space methods, i.e. Kalman filtering and smoothing.
     Constructs a linear time-invariant (LTI) stochastic differential equation (SDE) of the following form:
         dx(t)/dt = F x(t) + L w(t)
-              yₖ ~ p(yₖ | f(tₖ)=H x(tₖ))
+              yₙ ~ p(yₙ | f(tₙ)=H x(tₙ))
     where w(t) is a white noise process and where the state x(t) is Gaussian distributed with initial
     state distribution x(t)~𝓝(0,Pinf).
     Currently implemented inference methods:
@@ -69,8 +69,8 @@ class SDEGP(object):
             train_id: an array of indices corresponding to the training inputs [N, 1]
             y_all: an array observations y augmented with nans at test locations [N + N*, 1]
             mask: boolean array to signify training locations [N + N*, 1]
-            dt: training step sizes, Δtₖ = tₖ - tₖ₋₁ [N, 1]
-            dt_all: combined training and test step sizes, Δtₖ = tₖ - tₖ₋₁ [N + N*, 1]
+            dt: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
+            dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         """
         # here we use non-JAX numpy to sort out indexing of these static arrays
         t, x_ind = np.unique(np.concatenate([t_test, t_train]), return_inverse=True)
@@ -88,10 +88,11 @@ class SDEGP(object):
 
     def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False):
         """
-        Calculate posterior predictive distribution by filtering and smoothing across the training & test locations.
+        Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
+        training & test locations.
         This function is also used during posterior sampling to smooth the auxillary data sampled from the prior.
         :param y: observations (nans at test locations) [M, 1]
-        :param dt: step sizes Δtₖ = tₖ - tₖ₋₁ [M, 1]
+        :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [M, 1]
         :param mask: a boolean array signifying which elements are observed and which are nan [M, 1]
         :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
         :param sampling: notify whether we are running posterior sampling
@@ -185,16 +186,16 @@ class SDEGP(object):
     @partial(jit, static_argnums=(0, 4, 5))
     def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
         """
-        Run the Kalman filter to get p(fₖ|y₁,...,yₖ)
+        Run the Kalman filter to get p(fₙ|y₁,...,yₙ)
         The Kalman update step invloves some control flow to work out whether we are
             i) initialising the EP sites / running ADF
             ii) using supplied sites (e.g. in EP)
             iii) running the smoothing operation in posterior sampling
         If store is True then we compute and return the intermediate filtering distributions
-        p(fₖ|y₁,...,yₖ) and sites sₖ(fₖ), otherwise we do not store the intermediates and simply
+        p(fₙ|y₁,...,yₖ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
         return the energy / negative log-marginal likelihood, -log p(y)
         :param y: observed data [N, obs_dim]
-        :param dt: step sizes Δtₖ = tₖ - tₖ₋₁ [N, 1]
+        :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
         :param store: flag to notify whether to store the intermediates
         :param sampling: flag to notify whether we are running the posterior sampling operation
@@ -227,12 +228,12 @@ class SDEGP(object):
                 if store:
                     s.site_mean = jnp.zeros([N, self.obs_dim])
                     s.site_var = jnp.zeros([N, self.obs_dim])
-            for k in s.range(N):
-                y_k = y[k]
+            for n in s.range(N):
+                y_n = y[n]
                 # -- KALMAN PREDICT --
                 #  mₖ⁻ = Aₖ mₖ₋₁
                 #  Pₖ⁻ = Aₖ Pₖ₋₁ Aₖ' + Qₖ, where Qₖ = Pinf - Aₖ Pinf Aₖ'
-                A = self.prior.expm(dt[k], theta_prior)
+                A = self.prior.expm(dt[n], theta_prior)
                 m_ = A @ s.m
                 P_ = A @ (s.P - self.Pinf) @ A.T + self.Pinf
                 # --- KALMAN UPDATE ---
@@ -241,21 +242,21 @@ class SDEGP(object):
                 mu = self.H @ m_
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    y_k = jnp.where(mask[k], mu, y_k)  # fill in masked obs with prior expectation to prevent NaN grads
+                    y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
-                    log_marg_lik_k, d1, d2 = Gaussian.moment_match([], y_k, mu, var, s.site_var[k], True)
+                    log_marg_lik_n, d1, d2 = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True)
                     m_site = mu - d1 / d2
                     P_site = -var - 1 / d2
                 else:
                     if site_params is None:  # are we computing new sites?
                         # likelihood-specific moment matching function:
-                        log_marg_lik_k, d1, d2 = self.likelihood.moment_match(y_k, mu, var, theta_lik, True)
+                        log_marg_lik_n, d1, d2 = self.likelihood.moment_match(y_n, mu, var, theta_lik, True)
                         m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
                         P_site = -var - 1 / d2  # approximate likelihood (site) variance
                     else:  # are we using supplied sites?
-                        log_marg_lik_k = self.likelihood.moment_match(y_k, mu, var, theta_lik, False)  # compute lml
-                        m_site = s.site_mean[k]  # use supplied site parameters
-                        P_site = s.site_var[k]
+                        log_marg_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False)  # compute lml
+                        m_site = s.site_mean[n]  # use supplied site parameters
+                        P_site = s.site_var[n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + P_site
                 L, low = cho_factor(S)
@@ -263,15 +264,15 @@ class SDEGP(object):
                 s.m = m_ + K @ (m_site - mu)
                 s.P = P_ - K @ S @ K.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    s.m = jnp.where(mask[k], m_, s.m)
-                    s.P = jnp.where(mask[k], P_, s.P)
-                    log_marg_lik_k = jnp.where(mask[k][..., 0, 0], jnp.zeros_like(log_marg_lik_k), log_marg_lik_k)
-                s.neg_log_marg_lik -= jnp.sum(log_marg_lik_k)
+                    s.m = jnp.where(mask[n], m_, s.m)
+                    s.P = jnp.where(mask[n], P_, s.P)
+                    log_marg_lik_n = jnp.where(mask[n][..., 0, 0], jnp.zeros_like(log_marg_lik_n), log_marg_lik_n)
+                s.neg_log_marg_lik -= jnp.sum(log_marg_lik_n)
                 if store:
-                    s.filtered_mean = index_update(s.filtered_mean, index[k, ...], s.m)
-                    s.filtered_cov = index_update(s.filtered_cov, index[k, ...], s.P)
-                    s.site_mean = index_update(s.site_mean, index[k, ...], jnp.squeeze(m_site.T))
-                    s.site_var = index_update(s.site_var, index[k, ...], jnp.squeeze(P_site.T))
+                    s.filtered_mean = index_update(s.filtered_mean, index[n, ...], s.m)
+                    s.filtered_cov = index_update(s.filtered_cov, index[n, ...], s.P)
+                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(m_site.T))
+                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(P_site.T))
         if store:
             return s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var)
         return s.neg_log_marg_lik
@@ -279,14 +280,14 @@ class SDEGP(object):
     @partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
         """
-        Run the RTS smoother to get p(fₖ|y₁,...,yₙ),
-        i.e. compute p(f)∏ₖsₖ(fₖ) where sₖ(fₖ) are the sites (approx. likelihoods).
+        Run the RTS smoother to get p(fₙ|y₁,...,y_N),
+        i.e. compute p(f)∏ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
         If sites are provided, then it is assumed we are running EP, and we compute
         new sites by first computing the cavity distribution and then performing moment matching.
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
         :param m_filtered: the intermediate distribution means computed during filtering [N, state_dim, 1]
         :param P_filtered: the intermediate distribution covariances computed during filtering [N, state_dim, state_dim]
-        :param dt: step sizes Δtₖ = tₖ - tₖ₋₁ [N, 1]
+        :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param y: observed data [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
         :return:
@@ -304,35 +305,35 @@ class SDEGP(object):
             s.smoothed_var = jnp.zeros([N, self.obs_dim])
             if site_params is not None:
                 s.site_mean, s.site_var = site_params
-            for k in s.range(N-1, -1, -1):
-                A = self.prior.expm(dt[k], theta_prior)  # closed form integration of transition matrix
-                m_predicted = A @ m_filtered[k, ...]
-                tmp_gain_cov = A @ P_filtered[k, ...]
-                P_predicted = A @ (P_filtered[k, ...] - self.Pinf) @ A.T + self.Pinf
+            for n in s.range(N-1, -1, -1):
+                A = self.prior.expm(dt[n], theta_prior)  # closed form integration of transition matrix
+                m_predicted = A @ m_filtered[n, ...]
+                tmp_gain_cov = A @ P_filtered[n, ...]
+                P_predicted = A @ (P_filtered[n, ...] - self.Pinf) @ A.T + self.Pinf
                 # backward Kalman gain:
                 # G = F * A' * P^{-1}
                 # since both F(iltered) and P(redictive) are cov matrices, thus self-adjoint, we can take the transpose:
                 #   = (P^{-1} * A * F)'
                 P_predicted_chol, low = cho_factor(P_predicted)
                 G_transpose = cho_solve((P_predicted_chol, low), tmp_gain_cov)
-                s.m = m_filtered[k, ...] + G_transpose.T @ (s.m - m_predicted)
-                s.P = P_filtered[k, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
-                s.smoothed_mean = index_update(s.smoothed_mean, index[k, ...], jnp.squeeze((self.H @ s.m).T))
-                s.smoothed_var = index_update(s.smoothed_var, index[k, ...],
+                s.m = m_filtered[n, ...] + G_transpose.T @ (s.m - m_predicted)
+                s.P = P_filtered[n, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
+                s.smoothed_mean = index_update(s.smoothed_mean, index[n, ...], jnp.squeeze((self.H @ s.m).T))
+                s.smoothed_var = index_update(s.smoothed_var, index[n, ...],
                                               jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
                     mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
                     # remove local likelihood approximation to obtain the marginal cavity distribution:
-                    var_cav = 1.0 / (1.0 / var - 1.0 / s.site_var[k])  # cavity variance
-                    mu_cav = var_cav * (mu / var - s.site_mean[k] / s.site_var[k])  # cavity mean
+                    var_cav = 1.0 / (1.0 / var - 1.0 / s.site_var[n])  # cavity variance
+                    mu_cav = var_cav * (mu / var - s.site_mean[n] / s.site_var[n])  # cavity mean
                     # calculate the log-normaliser of the tilted distribution and its derivatives w.r.t. mu_cav (d1, d2)
                     # lZ = log E_{N(f|m,P)} [p(y|f)] = log int p(y|f) N(f|m,P) df
-                    _, d1, d2 = self.likelihood.moment_match(y[k], mu_cav, var_cav, theta_lik, True)
+                    _, d1, d2 = self.likelihood.moment_match(y[n], mu_cav, var_cav, theta_lik, True)
                     m_site = mu_cav - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
                     P_site = -var_cav - 1 / d2  # approximate likelihood (site) variance
-                    s.site_mean = index_update(s.site_mean, index[k, ...], jnp.squeeze(m_site.T))
-                    s.site_var = index_update(s.site_var, index[k, ...], jnp.squeeze(P_site.T))
+                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(m_site.T))
+                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(P_site.T))
         if site_params is not None:
             site_params = (s.site_mean, s.site_var)
         return s.smoothed_mean, s.smoothed_var, site_params
