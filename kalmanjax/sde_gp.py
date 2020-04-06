@@ -41,7 +41,7 @@ class SDEGP(object):
     @staticmethod
     def input_admin(t_train, t_test, y):
         """
-        order the inputs, remove duplicates, and index the train and test input locations
+        Order the inputs, remove duplicates, and index the train and test input locations
         :param t_train: training inputs [N, 1]
         :param t_test: testing inputs [N*, 1]
         :param y: observations at the training inputs [N, 1]
@@ -70,7 +70,7 @@ class SDEGP(object):
 
     def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False):
         """
-        calculate posterior predictive distribution by filtering and smoothing across the training & test locations
+        Calculate posterior predictive distribution by filtering and smoothing across the training & test locations
         """
         y = self.y_all if y is None else y
         dt = self.dt_all if dt is None else dt
@@ -92,7 +92,7 @@ class SDEGP(object):
 
     def neg_log_marg_lik(self, params=None):
         """
-        calculates the negative log-marginal likelihood and its gradients by running
+        Calculates the negative log-marginal likelihood and its gradients by running
         the Kalman filter across training locations
         :param params: the model parameters. If not supplied then defaults to the model's
                        assigned parameters [num_params]
@@ -108,7 +108,7 @@ class SDEGP(object):
 
     def assumed_density_filtering(self, params=None):
         """
-        a single assumed density filtering step - to be fed to a gradient-based optimiser.
+        A single assumed density filtering step - to be fed to a gradient-based optimiser.
          - calculates the negative log-marginal likelihood and its gradients by running
            the Kalman filter across training locations
         :param params: the model parameters. If not supplied then defaults to the model's
@@ -121,7 +121,7 @@ class SDEGP(object):
 
     def expectation_propagation(self, params=None):
         """
-        a single expectation propagation step - to be fed to a gradient-based optimiser.
+        A single expectation propagation step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
         :param params: the model parameters. If not supplied then defaults to the model's
@@ -147,7 +147,7 @@ class SDEGP(object):
 
     def update_model(self, theta_prior=None):
         """
-        re-construct the SDE-GP model with latest parameters
+        Re-construct the SDE-GP model with latest parameters
         :param theta_prior: the hyperparameters of the GP prior
         return:
             computes the model matrices F, L, Qc, H, Pinf. See the prior class for details
@@ -157,7 +157,7 @@ class SDEGP(object):
     @partial(jit, static_argnums=(0, 4, 5))
     def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
         """
-        run the Kalman filter to get p(fₖ|y₁,...,yₖ)
+        Run the Kalman filter to get p(fₖ|y₁,...,yₖ)
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be reset inside the function
@@ -228,7 +228,7 @@ class SDEGP(object):
     @partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
         """
-        run the RTS smoother to get p(fₖ|y₁,...,yₙ)
+        Run the RTS smoother to get p(fₖ|y₁,...,yₙ)
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be reset inside the function
@@ -275,9 +275,9 @@ class SDEGP(object):
 
     def prior_sample(self, num_samps, x=None):
         """
-        sample from the prior
+        Sample from the model prior f~N(0,K) multiple times using a nested loop
         :param num_samps: the number of samples to draw [scalar]
-        :param x: the input locations at which to sample (defaults to test set) [N_samp, 1]
+        :param x: the input locations at which to sample (defaults to train+test set) [N_samp, 1]
         :return:
             f_sample: the prior samples [S, N_samp]
         """
@@ -305,7 +305,14 @@ class SDEGP(object):
 
     def posterior_sample(self, num_samps):
         """
-        sample from the posterior at the test locations
+        Sample from the posterior at the test locations
+        Posterior sampling works by smoothin samples from the prior using the approximate Gaussian likelihood
+        model given by the sites computed during inference in the true model (e.g. via EP):
+         - compute the approximate likelihood terms, sites (𝓝(f|μ*,σ²*))
+         - draw samples (f*) from the prior
+         - add Gaussian noise to the prior samples using auxillary model p(y*|f*) = 𝓝(y*|f*,σ²*)
+         - smooth the samples by computing the posterior p(f*|y*), i.e. the posterior samples
+        See Arnaud Doucet's note "A Note on Efficient Conditional Simulation of Gaussian Distributions" for details
         :param num_samps: the number of samples to draw [scalar]
         :return:
             the posterior samples [N_test, num_samps]
