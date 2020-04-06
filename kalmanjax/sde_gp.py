@@ -153,21 +153,18 @@ class SDEGP(object):
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_k = jnp.where(mask[k], mu, y_k)  # fill in masked obs with prior expectation to prevent NaN grads
-                if sampling:
+                if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
                     log_marg_lik_k, d1, d2 = Gaussian.moment_match([], y_k, mu, var, s.site_var[k], True)
-                    m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
-                    P_site = -var - 1 / d2  # approximate likelihood (site) variance
+                    m_site = mu - d1 / d2
+                    P_site = -var - 1 / d2
                 else:
-                    if site_params is None:
+                    if site_params is None:  # are we computing new sites?
                         # likelihood-specific moment matching function:
                         log_marg_lik_k, d1, d2 = self.likelihood.moment_match(y_k, mu, var, theta_lik, True)
                         m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
                         P_site = -var - 1 / d2  # approximate likelihood (site) variance
-                    else:
-                        # use supplied site variance (for the smoothing operation in posterior sampling)
-                        # log_marg_lik_k, d1, d2 = Gaussian.moment_match([], y_k, mu, var, s.site_var[k], True)
-                        # _, d1, d2 = Gaussian.moment_match([], s.site_mean[k], mu, var, s.site_var[k], True)
-                        log_marg_lik_k = self.likelihood.moment_match(y_k, mu, var, theta_lik, False)
+                    else:  # are we using supplied sites?
+                        log_marg_lik_k = self.likelihood.moment_match(y_k, mu, var, theta_lik, False)  # compute lml
                         m_site = s.site_mean[k]  # use supplied site parameters
                         P_site = s.site_var[k]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
