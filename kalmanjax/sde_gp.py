@@ -12,9 +12,27 @@ pi = 3.141592653589793
 class SDEGP(object):
     """
     The stochastic differential equation (SDE) form of a Gaussian process (GP) model
+    Implements methods for inference and learning in models with GP priors of the form
+        f(t) ~ GP(0,k(t,t'))
+    using state space methods, i.e. Kalman filtering and smoothing.
+    Constructs a linear time-invariant (LTI) stochastic differential equation (SDE) of the following form:
+        dx(t)/dt = F x(t) + L w(t)
+              yₖ ~ p(yₖ | f(tₖ)=H x(tₖ))
+    where w(t) is a white noise process and where the state x(t) is Gaussian distributed with initial
+    state distribution x(t)~𝓝(0,Pinf).
+    Currently implemented inference methods:
+        - Assumed density filtering (ADF, single sweep EP)
+        - Expectation propagation (EP)
     """
     def __init__(self, prior, likelihood, x, y, x_test=None):
-        # TODO: implement lookup table for A
+        """
+        :param prior: the model prior / kernel object which constructs the required state space model matrices.
+        :param likelihood: the likelihood model object which performs moment matching and evaluates the likelihood.
+        :param x: training inouts
+        :param y: training data / observation
+        :param x_test: test inputs
+        """
+        assert x.shape[0] == y.shape[0]
         x, ind = np.unique(x, return_index=True)
         if y.ndim < 2:
             y = np.expand_dims(y, 1)  # make 2D
@@ -70,7 +88,17 @@ class SDEGP(object):
 
     def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False):
         """
-        Calculate posterior predictive distribution by filtering and smoothing across the training & test locations
+        Calculate posterior predictive distribution by filtering and smoothing across the training & test locations.
+        This function is also used during posterior sampling to smooth the auxillary data sampled from the prior.
+        :param y: observations (nans at test locations) [M, 1]
+        :param dt: step sizes Δtₖ = tₖ - tₖ₋₁ [M, 1]
+        :param mask: a boolean array signifying which elements are observed and which are nan [M, 1]
+        :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
+        :param sampling: notify whether we are running posterior sampling
+        :return:
+            posterior_mean: the posterior predictive mean [M, obs_dim]
+            posterior_var: the posterior predictive variance [M, obs_dim]
+            site_params: the site parameters. If none are provided then new sites are computed [2, M, obs_dim]
         """
         y = self.y_all if y is None else y
         dt = self.dt_all if dt is None else dt
@@ -79,7 +107,7 @@ class SDEGP(object):
         # construct a vector of site parameters that is the full size of the test data
         if site_params is not None and not sampling:
             # test site parameters are 𝓝(0,∞), and will not be used
-            site_mean, site_var = jnp.zeros(dt.shape[0]), 1e5*jnp.ones(dt.shape[0])
+            site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
             # replace parameters at training locations with the supplied sites
             site_mean = index_update(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
@@ -158,6 +186,29 @@ class SDEGP(object):
     def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₖ|y₁,...,yₖ)
+        The Kalman update step invloves some control flow to work out whether we are
+            i) initialising the EP sites / running ADF
+            ii) using supplied sites (e.g. in EP)
+            iii) running the smoothing operation in posterior sampling
+        If store is True then we compute and return the intermediate filtering distributions
+        p(fₖ|y₁,...,yₖ) and sites sₖ(fₖ), otherwise we do not store the intermediates and simply
+        return the energy / negative log-marginal likelihood, -log p(y)
+        :param y: observed data [N, obs_dim]
+        :param dt: step sizes Δtₖ = tₖ - tₖ₋₁ [N, 1]
+        :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
+        :param store: flag to notify whether to store the intermediates
+        :param sampling: flag to notify whether we are running the posterior sampling operation
+        :param mask: boolean array signifying which elements of y are observed [N, obs_dim]
+        :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
+        :return:
+            if store is True:
+                filtered_mean: intermediate filtering means [N, state_dim, 1]
+                filtered_cov: intermediate filtering covariances [N, state_dim, state_dim]
+                site_mean: mean of the approximate likelihood sₖ(fₖ) [N, obs_dim]
+                site_var: variance of the approximate likelihood sₖ(fₖ) [N, obs_dim]
+            otherwise:
+                neg_log_marg_lik: the filter energy, i.e. negative log-marginal likelihood -log p(y),
+                                  used for hyperparameter optimisation (learning) [scalar]
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be reset inside the function
@@ -228,7 +279,20 @@ class SDEGP(object):
     @partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
         """
-        Run the RTS smoother to get p(fₖ|y₁,...,yₙ)
+        Run the RTS smoother to get p(fₖ|y₁,...,yₙ),
+        i.e. compute p(f)∏ₖsₖ(fₖ) where sₖ(fₖ) are the sites (approx. likelihoods).
+        If sites are provided, then it is assumed we are running EP, and we compute
+        new sites by first computing the cavity distribution and then performing moment matching.
+        :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
+        :param m_filtered: the intermediate distribution means computed during filtering [N, state_dim, 1]
+        :param P_filtered: the intermediate distribution covariances computed during filtering [N, state_dim, state_dim]
+        :param dt: step sizes Δtₖ = tₖ - tₖ₋₁ [N, 1]
+        :param y: observed data [N, obs_dim]
+        :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
+        :return:
+            smoothed_mean: the posterior marginal means [N, obs_dim]
+            smoothed_var: the posterior marginal variances [N, obs_dim]
+            site_params: the updated EP sites [2, N, obs_dim]
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be reset inside the function
@@ -282,7 +346,7 @@ class SDEGP(object):
             f_sample: the prior samples [S, N_samp]
         """
         self.update_model(softplus(self.prior.hyp))
-        # TODO: sort out prior sampling - currently very unstable
+        # TODO: sort out prior sampling - currently a bit unstable
         if x is None:
             dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(self.t_all)])
         else:
