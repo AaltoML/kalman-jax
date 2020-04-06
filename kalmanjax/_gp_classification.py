@@ -70,11 +70,11 @@ x_pred = sde_gp_model.t_all
 test_id = sde_gp_model.test_id
 link_fn = sde_gp_model.likelihood.link_fn
 
-# print('sampling from the posterior ...')
-# t0 = time.time()
-# posterior_samp = sde_gp_model.posterior_sample(20)
-# t1 = time.time()
-# print('sampling time: %2.2f secs' % (t1-t0))
+print('sampling from the posterior ...')
+t0 = time.time()
+posterior_samp = sde_gp_model.posterior_sample(20)
+t1 = time.time()
+print('sampling time: %2.2f secs' % (t1-t0))
 
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
@@ -82,7 +82,7 @@ plt.clf()
 plt.plot(x, y, 'b+', label='observations')
 plt.plot(x_pred, link_fn(posterior_mean), 'm', label='posterior mean')
 plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='m', alpha=0.05, label='95% confidence')
-# plt.plot(sde_gp_model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
+plt.plot(sde_gp_model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
 plt.xlim(sde_gp_model.t_test[0], sde_gp_model.t_test[-1])
 plt.legend()
 plt.title('GP classification via Kalman smoothing')
