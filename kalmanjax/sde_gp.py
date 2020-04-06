@@ -22,7 +22,7 @@ class SDEGP(object):
     state distribution x(t)~𝓝(0,Pinf).
     Currently implemented inference methods:
         - Assumed density filtering (ADF, single sweep EP)
-        - Expectation propagation (EP)
+        - Power expectation propagation (PEP)
     """
     def __init__(self, prior, likelihood, x, y, x_test=None):
         """
@@ -35,7 +35,7 @@ class SDEGP(object):
         assert x.shape[0] == y.shape[0]
         x, ind = np.unique(x, return_index=True)
         if y.ndim < 2:
-            y = np.expand_dims(y, 1)  # make 2D
+            y = np.expand_dims(y, 1)  # make 2-D
         y = y[ind, :]
         self.t_train = x
         self.y = jnp.array(y)
