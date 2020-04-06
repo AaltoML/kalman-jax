@@ -31,3 +31,6 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [ ] S2EP - doubly-sparse expectation propagation (new)
  - [ ] STVI - spatio-temporal variational inference (new)
  - [ ] STEP - spatio-temporal expectation propagation (new)
+
+### TODO:
+implement a new class called Site(Likelihood) or Site(Probit) or ProbitSite(Probit)
