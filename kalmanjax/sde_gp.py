@@ -188,7 +188,7 @@ class SDEGP(object):
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
 
     @partial(jit, static_argnums=(0, 4, 5))
-    def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
+    def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None, inf='EP'):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
         The Kalman update step invloves some control flow to work out whether we are
@@ -205,6 +205,7 @@ class SDEGP(object):
         :param sampling: flag to notify whether we are running the posterior sampling operation
         :param mask: boolean array signifying which elements of y are observed [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
+        :param inf: the inference method used to calculate the approx. likelihoods [string]
         :return:
             if store is True:
                 filtered_mean: intermediate filtering means [N, state_dim, 1]
@@ -252,9 +253,10 @@ class SDEGP(object):
                 else:
                     if site_params is None:  # are we computing new sites?
                         # likelihood-specific moment matching function:
-                        log_lik_n, site_mu, site_var = self.likelihood.moment_match(y_n, mu, var, theta_lik, True, 1.0)
+                        log_lik_n, site_mu, site_var = self.likelihood.site_update(y_n, mu, var, theta_lik,
+                                                                                   True, 1.0, inf)
                     else:  # are we using supplied sites?
-                        log_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False, 1.0)  # lml
+                        log_lik_n = self.likelihood.site_update(y_n, mu, var, theta_lik, False, 1.0, inf)  # lml
                         site_mu, site_var = s.site_mean[n], s.site_var[n]  # use supplied site parameters
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + site_var
@@ -277,7 +279,7 @@ class SDEGP(object):
         return s.neg_log_marg_lik
 
     @partial(jit, static_argnums=0)
-    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
+    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None, inf='EP'):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
         i.e. compute p(f)∏ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
@@ -289,6 +291,7 @@ class SDEGP(object):
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param y: observed data [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
+        :param inf: the inference method used to calculate the approx. likelihoods [string]
         :return:
             smoothed_mean: the posterior marginal means [N, obs_dim]
             smoothed_var: the posterior marginal variances [N, obs_dim]
@@ -329,8 +332,8 @@ class SDEGP(object):
                     var_cav = 1.0 / (1.0 / var - self.ep_fraction / s.site_var[n])  # cavity variance
                     mu_cav = var_cav * (mu / var - self.ep_fraction * s.site_mean[n] / s.site_var[n])  # cavity mean
                     # calculate the new sites via moment matching
-                    _, site_mu, site_var = self.likelihood.moment_match(y[n], mu_cav, var_cav, theta_lik,
-                                                                        True, self.ep_fraction)
+                    _, site_mu, site_var = self.likelihood.site_update(y[n], mu_cav, var_cav, theta_lik,
+                                                                       True, self.ep_fraction, inf)
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:

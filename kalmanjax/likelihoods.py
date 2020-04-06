@@ -28,10 +28,15 @@ class Likelihood(object):
     def evaluate_log_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this log-likelihood is not implemented')
 
-    @partial(jit, static_argnums=(0, 5, 6))
-    def perform_update(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
-        lZ, site_mean, site_var = self.moment_match(y, m, v, hyp, site_update, ep_fraction)
-        return lZ, site_mean, site_var
+    @partial(jit, static_argnums=(0, 5, 6, 7))
+    def site_update(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0, inf='EP'):
+        if inf is 'EP':
+            outputs = self.moment_match(y, m, v, hyp, site_update, ep_fraction)
+        elif inf is 'PL':
+            outputs = self.moment_match(y, m, v, hyp, site_update, ep_fraction)
+        else:
+            raise NotImplementedError('inference method not implemented')
+        return outputs
 
     @partial(jit, static_argnums=(0, 5))
     def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0, num_quad_points=20):
