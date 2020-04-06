@@ -310,6 +310,7 @@ class SDEGP(object):
             if site_params is not None:
                 s.site_mean, s.site_var = site_params
             for n in s.range(N-1, -1, -1):
+                # --- First compute the smoothing distribution: ---
                 A = self.prior.expm(dt[n], theta_prior)  # closed form integration of transition matrix
                 m_predicted = A @ m_filtered[n, ...]
                 tmp_gain_cov = A @ P_filtered[n, ...]
@@ -325,6 +326,7 @@ class SDEGP(object):
                 s.smoothed_mean = index_update(s.smoothed_mean, index[n, ...], jnp.squeeze((self.H @ s.m).T))
                 s.smoothed_var = index_update(s.smoothed_var, index[n, ...],
                                               jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
+                # --- Now update the site parameters: ---
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
                     mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
