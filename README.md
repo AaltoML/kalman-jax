@@ -12,7 +12,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 
 ### Approximate inference algorithms
  - [x] ADF - assumed density filtering (single-sweep EP)
- - [ ] PEP - power expectation propagation
+ - [x] PEP - power expectation propagation
  - [ ] EKF - extended Kalman filtering
  - [ ] UKF - unscented Kalman filtering
  - [ ] GHKF - Gauss-Hermite Kalman filtering
@@ -20,6 +20,9 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [ ] EKS - extended Kalman smoothing
  - [ ] UKS - unscented Kalman smoothing
  - [ ] GHKS - Gauss-Hermite Kalman smoothing
+ - [ ] EK-EP - Extended Kalman EP (new)
+ - [ ] UK-EP - Unscented Kalman EP (new)
+ - [ ] GHK-EP - Gauss-Hermite Kalman EP (new)
  - [ ] PL - posterior linearisation
  - [ ] CL - cavity linearisation (new)
  - [ ] VI - variational inference

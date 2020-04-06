@@ -50,7 +50,7 @@ def gradient_step(i, state):
     sde_gp_model.prior.hyp = params[0]
     sde_gp_model.likelihood.hyp = params[1]
     # neg_log_marg_lik, gradients = sde_gp_model.assumed_density_filtering()  # ADF (faster / less accurate)
-    neg_log_marg_lik, gradients = sde_gp_model.expectation_propagation()  # EP (slower / more accurate)
+    neg_log_marg_lik, gradients = sde_gp_model.expectation_propagation(ep_fraction=0.5)  # EP (slower / more accurate)
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), softplus(params[1]), neg_log_marg_lik))
     return opt_update(i, gradients, state)

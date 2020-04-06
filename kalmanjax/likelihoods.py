@@ -158,17 +158,18 @@ class Gaussian(Likelihood):
         return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
 
     @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, derivatives=True):
+    def moment_match(self, y, m, v, hyp=None, derivatives=True, ep_fraction=1):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:
-            logZₙ = log ∫ 𝓝(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[𝓝(yₙ|fₙ,σ²)]
+            logZₙ = log ∫ 𝓝ᵃ(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[𝓝(yₙ|fₙ,σ²)]
         and its derivatives w.r.t. mₙ, which are required for moment matching.
         :param y: observed data (yₙ) [scalar]
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: observation noise variance (σ²) [scalar]
         :param derivatives: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
+        :param ep_fraction: EP power / fraction (a) [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -177,17 +178,19 @@ class Gaussian(Likelihood):
         if hyp is None:
             hyp = softplus(self.hyp)
         # log partition function, lZ:
-        # logZₙ = log ∫ 𝓝(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       = log 𝓝(yₙ|mₙ,σ²+vₙ)
+        # logZₙ = log ∫ 𝓝ᵃ(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       = log √(2πσ²)¹⁻ᵃ ∫ 𝓝(yₙ|fₙ,σ²/a) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       = (1-a)/2 log 2πσ² + log 𝓝(yₙ|mₙ,σ²/a+vₙ)
         lZ = (
-                - (y - m) ** 2 / (hyp + v) / 2
-                - np.log(np.maximum(2 * pi * (hyp + v), 1e-10)) / 2
+                (1 - ep_fraction) / 2 * np.log(2 * pi * hyp)
+                - (y - m) ** 2 / (hyp / ep_fraction + v) / 2
+                - np.log(np.maximum(2 * pi * (hyp / ep_fraction + v), 1e-10)) / 2
         )
         if derivatives:
-            # dlogZₙ/dmₙ = (yₙ - mₙ)(σ² + vₙ)⁻¹
-            dlZ = (y - m) / (hyp + v)  # 1st derivative w.r.t. mean
-            # d²logZₙ/dmₙ² = -(σ² + vₙ)⁻¹
-            d2lZ = -1 / (hyp + v)  # 2nd derivative w.r.t. mean
+            # dlogZₙ/dmₙ = (yₙ - mₙ)(σ²/a + vₙ)⁻¹
+            dlZ = (y - m) / (hyp / ep_fraction + v)  # 1st derivative w.r.t. mean
+            # d²logZₙ/dmₙ² = -(σ²/a + vₙ)⁻¹
+            d2lZ = -1 / (hyp / ep_fraction + v)  # 2nd derivative w.r.t. mean
             return lZ, dlZ, d2lZ
         else:
             return lZ
@@ -256,20 +259,23 @@ class Probit(Likelihood):
         """
         return np.log(1.0 + erf(y * f / np.sqrt(2.0)) + 1e-10) - np.log(2)  # logΦ(z)
 
-    @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, derivatives=True):
+    @partial(jit, static_argnums=(0, 5, 6))
+    def moment_match(self, y, m, v, hyp=None, derivatives=True, ep_fraction=1):
         """
         Probit likelihood moment matching.
         Calculates the log partition function of the EP tilted distribution:
-            logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-                  = log Φ(yₙzₙ), where zₙ = mₙ / √(1 + vₙ)   [see Rasmussen & Williams p74]
+            logZₙ = log ∫ Φᵃ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         and its derivatives w.r.t. mₙ, which are required for moment matching.
+        If the EP fraction a = 1, we get
+                  = log Φ(yₙzₙ), where zₙ = mₙ / √(1 + vₙ)   [see Rasmussen & Williams p74]
+        otherwise we must use quadrature to compute the log partition and its derivatives.
         Note: we enforce yₙ ϵ {-1, +1}
         :param y: observed data (yₙ) [scalar]
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: dummy variable (Probit has no hyperparameters)
         :param derivatives: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
+        :param ep_fraction: EP power / fraction (a) [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -278,19 +284,23 @@ class Probit(Likelihood):
         y = np.sign(y)  # only allow values of +/-1
         # y[np.where(y == 0)] = -1  # set zeros to -1
         y = np.sign(y - 0.01)  # set zeros to -1
-        z = m / np.sqrt(1.0 + v)
-        z = z * y  # zₙ = yₙmₙ / √(1 + vₙ)
-        # logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       = log Φ(yₙmₙ/√(1 + vₙ))  [see Rasmussen & Williams p74]
-        lZ, dlp = logphi(z)
-        if derivatives:
-            # dlogZₙ/dmₙ = yₙ dlogΦ(zₙ)/dmₙ / √(1 + vₙ)
-            dlZ = y * dlp / np.sqrt(1.0 + v)  # first derivative w.r.t mₙ
-            # d²logZₙ/dmₙ² = -dlogΦ(zₙ)/dmₙ (zₙ + dlogΦ(zₙ)/dmₙ) / √(1 + vₙ)
-            d2lZ = -dlp * (z + dlp) / (1.0 + v)  # second derivative w.r.t mₙ
-            return lZ, dlZ, d2lZ
+        if ep_fraction == 1:  # if a = 1, we can calculate the moments in closed form
+            z = m / np.sqrt(1.0 + v)
+            z = z * y  # zₙ = yₙmₙ / √(1 + vₙ)
+            # logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+            #       = log Φ(yₙmₙ/√(1 + vₙ))  [see Rasmussen & Williams p74]
+            lZ, dlp = logphi(z)
+            if derivatives:
+                # dlogZₙ/dmₙ = yₙ dlogΦ(zₙ)/dmₙ / √(1 + vₙ)
+                dlZ = y * dlp / np.sqrt(1.0 + v)  # first derivative w.r.t mₙ
+                # d²logZₙ/dmₙ² = -dlogΦ(zₙ)/dmₙ (zₙ + dlogΦ(zₙ)/dmₙ) / √(1 + vₙ)
+                d2lZ = -dlp * (z + dlp) / (1.0 + v)  # second derivative w.r.t mₙ
+                return lZ, dlZ, d2lZ
+            else:
+                return lZ
         else:
-            return lZ
+            # if a is not 1, we can calculate the moments via quadrature
+            return self.moment_match_quadrature(y, m, v, None, derivatives, ep_fraction)
 
 
 class Erf(Probit):

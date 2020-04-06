@@ -55,6 +55,7 @@ class SDEGP(object):
         self.obs_dim = self.y.shape[1]
         self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
         self.site_params = None
+        self.ep_fraction = 1.0
 
     @staticmethod
     def input_admin(t_train, t_test, y):
@@ -148,13 +149,14 @@ class SDEGP(object):
         """
         return self.neg_log_marg_lik(params=params)
 
-    def expectation_propagation(self, params=None):
+    def expectation_propagation(self, params=None, ep_fraction=None):
         """
         A single expectation propagation step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
         :param params: the model parameters. If not supplied then defaults to the model's
                        assigned parameters [num_params]
+        :param ep_fraction: the EP power / fraction [scalar]
         :return:
             neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
             dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
@@ -162,6 +164,8 @@ class SDEGP(object):
         if params is None:
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
+        if ep_fraction is not None:
+            self.ep_fraction = ep_fraction
         # run the forward filter to calculate the filtering distribution.
         # on the first pass (when self.site_params = None) this initialises the sites too
         filter_mean, filter_cov, self.site_params = self.kalman_filter(self.y, self.dt, params,
@@ -205,14 +209,14 @@ class SDEGP(object):
             if store is True:
                 filtered_mean: intermediate filtering means [N, state_dim, 1]
                 filtered_cov: intermediate filtering covariances [N, state_dim, state_dim]
-                site_mean: mean of the approximate likelihood sₖ(fₖ) [N, obs_dim]
-                site_var: variance of the approximate likelihood sₖ(fₖ) [N, obs_dim]
+                site_mean: mean of the approximate likelihood sₙ(fₙ) [N, obs_dim]
+                site_var: variance of the approximate likelihood sₙ(fₙ) [N, obs_dim]
             otherwise:
                 neg_log_marg_lik: the filter energy, i.e. negative log-marginal likelihood -log p(y),
                                   used for hyperparameter optimisation (learning) [scalar]
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
-        self.update_model(theta_prior)  # all model components that are not static must be reset inside the function
+        self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         if mask is not None:
             mask = mask[..., jnp.newaxis, jnp.newaxis]  # align mask.shape with y.shape
         N = dt.shape[0]
@@ -231,30 +235,30 @@ class SDEGP(object):
             for n in s.range(N):
                 y_n = y[n]
                 # -- KALMAN PREDICT --
-                #  mₖ⁻ = Aₖ mₖ₋₁
-                #  Pₖ⁻ = Aₖ Pₖ₋₁ Aₖ' + Qₖ, where Qₖ = Pinf - Aₖ Pinf Aₖ'
+                #  mₙ⁻ = Aₙ mₙ₋₁
+                #  Pₙ⁻ = Aₙ Pₙ₋₁ Aₙ' + Qₙ, where Qₙ = Pinf - Aₙ Pinf Aₙ'
                 A = self.prior.expm(dt[n], theta_prior)
                 m_ = A @ s.m
                 P_ = A @ (s.P - self.Pinf) @ A.T + self.Pinf
                 # --- KALMAN UPDATE ---
-                # Given previous predicted mean mₖ⁻ and cov Pₖ⁻, incorporate yₖ to get filtered mean mₖ &
-                # cov Pₖ and compute the marginal likelihood p(yₖ|y₁,...,yₖ₋₁)
+                # Given previous predicted mean mₙ⁻ and cov Pₙ⁻, incorporate yₙ to get filtered mean mₙ &
+                # cov Pₙ and compute the marginal likelihood p(yₙ|y₁,...,yₙ₋₁)
                 mu = self.H @ m_
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
-                    log_marg_lik_n, d1, d2 = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True)
+                    log_marg_lik_n, d1, d2 = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True, 1.0)
                     m_site = mu - d1 / d2
                     P_site = -var - 1 / d2
                 else:
                     if site_params is None:  # are we computing new sites?
                         # likelihood-specific moment matching function:
-                        log_marg_lik_n, d1, d2 = self.likelihood.moment_match(y_n, mu, var, theta_lik, True)
+                        log_marg_lik_n, d1, d2 = self.likelihood.moment_match(y_n, mu, var, theta_lik, True, 1.0)
                         m_site = mu - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
                         P_site = -var - 1 / d2  # approximate likelihood (site) variance
                     else:  # are we using supplied sites?
-                        log_marg_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False)  # compute lml
+                        log_marg_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False, 1.0)  # lml
                         m_site = s.site_mean[n]  # use supplied site parameters
                         P_site = s.site_var[n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
@@ -296,7 +300,7 @@ class SDEGP(object):
             site_params: the updated EP sites [2, N, obs_dim]
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
-        self.update_model(theta_prior)  # all model components that are not static must be reset inside the function
+        self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         N = dt.shape[0]
         dt = jnp.concatenate([dt[1:], jnp.array([0.0])], axis=0)
         with loops.Scope() as s:
@@ -325,13 +329,14 @@ class SDEGP(object):
                     # extract mean and var from state (we discard cross-covariance for now):
                     mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
                     # remove local likelihood approximation to obtain the marginal cavity distribution:
-                    var_cav = 1.0 / (1.0 / var - 1.0 / s.site_var[n])  # cavity variance
-                    mu_cav = var_cav * (mu / var - s.site_mean[n] / s.site_var[n])  # cavity mean
+                    var_cav = 1.0 / (1.0 / var - self.ep_fraction / s.site_var[n])  # cavity variance
+                    mu_cav = var_cav * (mu / var - self.ep_fraction * s.site_mean[n] / s.site_var[n])  # cavity mean
                     # calculate the log-normaliser of the tilted distribution and its derivatives w.r.t. mu_cav (d1, d2)
                     # lZ = log E_{N(f|m,P)} [p(y|f)] = log int p(y|f) N(f|m,P) df
-                    _, d1, d2 = self.likelihood.moment_match(y[n], mu_cav, var_cav, theta_lik, True)
+                    _, d1, d2 = self.likelihood.moment_match(y[n], mu_cav, var_cav, theta_lik,
+                                                             True, self.ep_fraction)
                     m_site = mu_cav - d1 / d2  # approximate likelihood (site) mean (see Rasmussen & Williams p75)
-                    P_site = -var_cav - 1 / d2  # approximate likelihood (site) variance
+                    P_site = -self.ep_fraction * (var_cav + 1 / d2)  # approximate likelihood (site) variance
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(m_site.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(P_site.T))
         if site_params is not None:
