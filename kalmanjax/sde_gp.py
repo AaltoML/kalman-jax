@@ -4,8 +4,8 @@ from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
+from utils import gaussian_moment_match
 import numpy as np
-from likelihoods import Gaussian
 from approximate_inference import EP
 pi = 3.141592653589793
 
@@ -108,18 +108,17 @@ class SDEGP(object):
         dt = self.dt_all if dt is None else dt
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        # construct a vector of site parameters that is the full size of the test data
-        if site_params is not None and not sampling:
+        site_params = self.site_params if site_params is None else site_params
+        if not sampling:
+            # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
             site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
             # replace parameters at training locations with the supplied sites
             site_mean = index_update(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
-        filter_mean, filter_cov, site_params_kf = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
-        if site_params is None:
-            site_params = site_params_kf
-        posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt, y)
+        filter_mean, filter_cov, _ = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
+        posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
         return posterior_mean, posterior_var, site_params
 
     def neg_log_marg_lik(self, params=None):
@@ -234,7 +233,7 @@ class SDEGP(object):
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
-                    log_lik_n, site_mu, site_var = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True)
+                    log_lik_n, site_mu, site_var = gaussian_moment_match(y_n, mu, var, s.site_var[n], True)
                 else:
                     if site_params is None:  # are we computing new sites? then run model-specific update
                         log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik,
@@ -263,7 +262,7 @@ class SDEGP(object):
         return s.neg_log_marg_lik
 
     @partial(jit, static_argnums=0)
-    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
+    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y=None, site_params=None):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
         i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).

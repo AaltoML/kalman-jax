@@ -3,7 +3,7 @@ from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
 from jax import jit, partial, random
 from numpy.polynomial.hermite import hermgauss
-from utils import logphi
+from utils import logphi, gaussian_moment_match
 pi = 3.141592653589793
 
 
@@ -27,16 +27,6 @@ class Likelihood(object):
 
     def evaluate_log_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this log-likelihood is not implemented')
-
-    # @partial(jit, static_argnums=(0, 5, 6, 7))
-    # def site_update(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
-    #     if inf is 'EP' or inf is 'ADF':
-    #         outputs = self.moment_match(y, m, v, hyp, site_update, ep_fraction)
-    #     elif inf is 'PL':
-    #         outputs = self.statistical_linear_regression(y, m, v, hyp, site_update, ep_fraction)
-    #     else:
-    #         raise NotImplementedError('inference method not implemented')
-    #     return outputs
 
     @partial(jit, static_argnums=(0, 5))
     def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0, num_quad_points=20):
@@ -189,25 +179,7 @@ class Gaussian(Likelihood):
         """
         if hyp is None:
             hyp = softplus(self.hyp)
-        # log partition function, lZ:
-        # logZₙ = log ∫ 𝓝ᵃ(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       = log √(2πσ²)¹⁻ᵃ ∫ 𝓝(yₙ|fₙ,σ²/a) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       = (1-a)/2 log 2πσ² + log 𝓝(yₙ|mₙ,σ²/a+vₙ)
-        lZ = (
-                (1 - ep_fraction) / 2 * np.log(2 * pi * hyp)
-                - (y - m) ** 2 / (hyp / ep_fraction + v) / 2
-                - np.log(np.maximum(2 * pi * (hyp / ep_fraction + v), 1e-10)) / 2
-        )
-        if site_update:
-            # dlogZₙ/dmₙ = (yₙ - mₙ)(σ²/a + vₙ)⁻¹
-            dlZ = (y - m) / (hyp / ep_fraction + v)  # 1st derivative w.r.t. mean
-            # d²logZₙ/dmₙ² = -(σ²/a + vₙ)⁻¹
-            d2lZ = -1 / (hyp / ep_fraction + v)  # 2nd derivative w.r.t. mean
-            site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-            site_var = -ep_fraction * (v + 1 / d2lZ)  # approx. likelihood (site) variance
-            return lZ, site_mean, site_var
-        else:
-            return lZ
+        return gaussian_moment_match(y, m, v, hyp, site_update, ep_fraction)
 
 
 class Probit(Likelihood):

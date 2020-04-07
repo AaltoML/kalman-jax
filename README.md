@@ -41,5 +41,6 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [ ] Latent force models (linear)
 
 ### TODO:
-- implement a new class called Site(Likelihood) or Site(Probit) or ProbitSite(Probit)
+- check that prediction is working properly
+- check the different algorithms are actually giving different results
 - allow user to feed in test locations during prediction
