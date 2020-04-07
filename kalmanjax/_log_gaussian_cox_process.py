@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import time
 import pandas as pd
 from sde_gp import SDEGP
+from approximate_inference import EP, GHKS, PL
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -35,8 +36,9 @@ theta_lik = jnp.array([])
 
 prior_ = prior(theta_prior)
 lik_ = lik(theta_lik)
+approx_inf_ = EP(ep_fraction=0.5)
 
-sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test)
+sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -47,8 +49,7 @@ def gradient_step(i, state):
     params = get_params(state)
     sde_gp_model.prior.hyp = params[0]
     sde_gp_model.likelihood.hyp = params[1]
-    # neg_log_marg_lik, gradients = sde_gp_model.assumed_density_filtering()  # ADF (faster / less accurate)
-    neg_log_marg_lik, gradients = sde_gp_model.expectation_propagation(ep_fraction=0.5)  # EP (slower / more accurate)
+    neg_log_marg_lik, gradients = sde_gp_model.run_model()
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))
     return opt_update(i, gradients, state)

@@ -6,6 +6,7 @@ from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
 import numpy as np
 from likelihoods import Gaussian
+from approximate_inference import EP
 pi = 3.141592653589793
 
 
@@ -24,13 +25,14 @@ class SDEGP(object):
         - Assumed density filtering (ADF, single sweep EP)
         - Power expectation propagation (PEP)
     """
-    def __init__(self, prior, likelihood, x, y, x_test=None):
+    def __init__(self, prior, likelihood, x, y, x_test=None, approx_inf=None):
         """
         :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
         :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
         :param x: training inputs
         :param y: training data / observations
         :param x_test: test inputs
+        :param approx_inf: the approximate inference algorithm for computing the sites (EP, GHKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
         x, ind = np.unique(x, return_index=True)
@@ -55,7 +57,7 @@ class SDEGP(object):
         self.obs_dim = self.y.shape[1]
         self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
         self.site_params = None
-        self.ep_fraction = 1.0
+        self.sites = EP() if approx_inf is None else approx_inf
 
     @staticmethod
     def input_admin(t_train, t_test, y):
@@ -136,27 +138,13 @@ class SDEGP(object):
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, False)
         return neg_log_marg_lik, dlZ
 
-    def assumed_density_filtering(self, params=None):
+    def run_model(self, params=None):
         """
-        A single assumed density filtering step - to be fed to a gradient-based optimiser.
-         - calculates the negative log-marginal likelihood and its gradients by running
-           the Kalman filter across training locations
-        :param params: the model parameters. If not supplied then defaults to the model's
-                       assigned parameters [num_params]
-        :return:
-            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
-            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
-        """
-        return self.neg_log_marg_lik(params=params)
-
-    def expectation_propagation(self, params=None, ep_fraction=None):
-        """
-        A single expectation propagation step - to be fed to a gradient-based optimiser.
+        A single parameter update step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
         :param params: the model parameters. If not supplied then defaults to the model's
                        assigned parameters [num_params]
-        :param ep_fraction: the EP power / fraction [scalar]
         :return:
             neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
             dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
@@ -164,9 +152,7 @@ class SDEGP(object):
         if params is None:
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        if ep_fraction is not None:
-            self.ep_fraction = ep_fraction
-        # run the forward filter to calculate the filtering distribution.
+        # run the forward filter to calculate the filtering distribution
         # on the first pass (when self.site_params = None) this initialises the sites too
         filter_mean, filter_cov, self.site_params = self.kalman_filter(self.y, self.dt, params,
                                                                        True, False, None, self.site_params)
@@ -188,7 +174,7 @@ class SDEGP(object):
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
 
     @partial(jit, static_argnums=(0, 4, 5))
-    def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None, inf='EP'):
+    def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
         The Kalman update step invloves some control flow to work out whether we are
@@ -205,7 +191,6 @@ class SDEGP(object):
         :param sampling: flag to notify whether we are running the posterior sampling operation
         :param mask: boolean array signifying which elements of y are observed [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
-        :param inf: the inference method used to calculate the approx. likelihoods [string]
         :return:
             if store is True:
                 filtered_mean: intermediate filtering means [N, state_dim, 1]
@@ -249,14 +234,13 @@ class SDEGP(object):
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
-                    log_lik_n, site_mu, site_var = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True, 1.0)
+                    log_lik_n, site_mu, site_var = Gaussian.moment_match([], y_n, mu, var, s.site_var[n], True)
                 else:
-                    if site_params is None:  # are we computing new sites?
-                        # likelihood-specific moment matching function:
-                        log_lik_n, site_mu, site_var = self.likelihood.site_update(y_n, mu, var, theta_lik,
-                                                                                   True, 1.0, inf)
-                    else:  # are we using supplied sites?
-                        log_lik_n = self.likelihood.site_update(y_n, mu, var, theta_lik, False, 1.0, inf)  # lml
+                    if site_params is None:  # are we computing new sites? then run model-specific update
+                        log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik,
+                                                                         True, None)
+                    else:  # are we using supplied sites? then just compute the log-marginal likelihood
+                        log_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False, 1.0)  # lml
                         site_mu, site_var = s.site_mean[n], s.site_var[n]  # use supplied site parameters
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + site_var
@@ -279,7 +263,7 @@ class SDEGP(object):
         return s.neg_log_marg_lik
 
     @partial(jit, static_argnums=0)
-    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None, inf='EP'):
+    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
         i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
@@ -291,7 +275,6 @@ class SDEGP(object):
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param y: observed data [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
-        :param inf: the inference method used to calculate the approx. likelihoods [string]
         :return:
             smoothed_mean: the posterior marginal means [N, obs_dim]
             smoothed_var: the posterior marginal variances [N, obs_dim]
@@ -328,12 +311,9 @@ class SDEGP(object):
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
                     mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
-                    # remove local likelihood approximation to obtain the marginal cavity distribution:
-                    var_cav = 1.0 / (1.0 / var - self.ep_fraction / s.site_var[n])  # cavity variance
-                    mu_cav = var_cav * (mu / var - self.ep_fraction * s.site_mean[n] / s.site_var[n])  # cavity mean
-                    # calculate the new sites via moment matching
-                    _, site_mu, site_var = self.likelihood.site_update(y[n], mu_cav, var_cav, theta_lik,
-                                                                       True, self.ep_fraction, inf)
+                    # calculate the new sites
+                    _, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
+                                                             True, (s.site_mean[n], s.site_var[n]))
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:
