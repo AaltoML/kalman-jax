@@ -282,9 +282,9 @@ class SDEGP(object):
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y, site_params=None, inf='EP'):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
-        i.e. compute p(f)∏ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
+        i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
         If sites are provided, then it is assumed we are running EP, and we compute
-        new sites by first computing the cavity distribution and then performing moment matching.
+        new sites by first calculating the cavity distribution and then performing moment matching.
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
         :param m_filtered: the intermediate distribution means computed during filtering [N, state_dim, 1]
         :param P_filtered: the intermediate distribution covariances computed during filtering [N, state_dim, state_dim]

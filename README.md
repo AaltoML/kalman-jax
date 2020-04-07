@@ -32,5 +32,14 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [ ] STVI - spatio-temporal variational inference (new)
  - [ ] STEP - spatio-temporal expectation propagation (new)
 
+### Models / Priors
+- [x] Matern class
+- [ ] RBF
+- [ ] Periodic
+- [ ] Cosine
+- [ ] Quasi-periodic
+- [ ] Latent force models (linear)
+
 ### TODO:
-implement a new class called Site(Likelihood) or Site(Probit) or ProbitSite(Probit)
+- implement a new class called Site(Likelihood) or Site(Probit) or ProbitSite(Probit)
+- allow user to feed in test locations during prediction
