@@ -109,7 +109,7 @@ class SDEGP(object):
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         site_params = self.site_params if site_params is None else site_params
-        if not sampling:
+        if site_params is not None and not sampling:
             # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
             site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
@@ -117,7 +117,7 @@ class SDEGP(object):
             site_mean = index_update(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
-        filter_mean, filter_cov, _ = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
+        filter_mean, filter_cov, site_params = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
         posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
         return posterior_mean, posterior_var, site_params
 
