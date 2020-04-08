@@ -119,7 +119,7 @@ class Likelihood(object):
         return gaussian_sample
 
     @partial(jit, static_argnums=0)
-    def statistical_linear_regression_quadrature(self, y, m, v, hyp=None, num_quad_points=20):
+    def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
         x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
         w = w / np.sqrt(pi)  # scale weights by 1/√π
         sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
@@ -146,17 +146,14 @@ class Likelihood(object):
         A = C * v**-1  # the scale
         b = z - A * m  # the offset
         omega = S - A * v * A  # the linearisation error
-        # convert to a Gaussian in fₙ: 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
-        site_mean = A**-1 * (y - b)  # approx. likelihood (site) mean
-        site_var = A**-0.5 * (omega + self.likelihood_variance(m, hyp))  # approx. likelihood (site) variance
-        return site_mean, site_var
+        return A, b, omega
 
     @partial(jit, static_argnums=0)
-    def statistical_linear_regression(self, y, m, v, hyp=None):
+    def statistical_linear_regression(self, m, v, hyp=None):
         """
         If no custom SLR method is provided, we use Gauss-Hermite quadrature.
         """
-        return self.statistical_linear_regression_quadrature(y, m, v, hyp)
+        return self.statistical_linear_regression_quadrature(m, v, hyp)
 
 
 class Gaussian(Likelihood):

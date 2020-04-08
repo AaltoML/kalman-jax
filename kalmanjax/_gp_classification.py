@@ -6,7 +6,7 @@ from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
-from approximate_inference import EP, PL
+from approximate_inference import EP, PL, CL, IKS
 import priors
 import likelihoods
 pi = 3.141592653589793
