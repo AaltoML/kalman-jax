@@ -19,7 +19,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [x] SLF - statistical linearisation filter
  - [ ] EKS - extended Kalman smoothing
  - [ ] UKS - unscented Kalman smoothing
- - [ ] GHKS - Gauss-Hermite Kalman smoothing
+ - [x] GHKS - Gauss-Hermite Kalman smoothing
  - [ ] EK-EP - Extended Kalman EP
  - [ ] UK-EP - Unscented Kalman EP
  - [x] GHK-EP - Gauss-Hermite Kalman EP
@@ -41,7 +41,5 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [ ] Latent force models (linear)
 
 ### TODO:
-- check that prediction is working properly
-- check the different algorithms are actually giving different results
+- come up with difficult example to check that the different algorithms are actually giving different results
 - allow user to feed in test locations during prediction
-- sort out the log_marg_lik calculation in PL/CL. Just compute with moment_match?

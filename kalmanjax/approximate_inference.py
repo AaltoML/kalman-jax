@@ -2,7 +2,7 @@
 
 class EP(object):
     """
-    Expectation propagation
+    Expectation propagation (EP)
     """
     def __init__(self, site_params=None, power=1.0):
         self.site_params = site_params
@@ -27,7 +27,10 @@ class EP(object):
 
 class IKS(object):
     """
-    Iterated Kalman smoother
+    Iterated Kalman smoother (IKS). This uses statistical linearisation to perform the updates.
+    A single forward pass using this approximation is called the statistical linearisation filter (SLF),
+    which itself is equivalent to the Unscented/Gauss-Hermite filter (UKF/GHKF), depending on the
+    quadrature method used.
     """
     def __init__(self, site_params=None):
         self.site_params = site_params
@@ -37,6 +40,7 @@ class IKS(object):
         The update function takes a likelihood as input, and uses statistical linearisation
         to update the site parameters
         """
+        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Var[yₙ|fₙ])
             A, b, omega = likelihood.statistical_linear_regression(m, v, hyp)
@@ -45,14 +49,30 @@ class IKS(object):
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,Var[yₙ|fₙ]/√A)
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
             site_var = A ** -0.5 * likelihood.likelihood_variance(m, hyp)  # approx. likelihood variance
-            return 0., site_mean, site_var
+            return log_marg_lik, site_mean, site_var
         else:
-            return 0.
+            return log_marg_lik
+
+
+class SLF(IKS):
+    """
+    Statistical linearisation filter (SLF)
+    A single forward pass of the IKS is called the statistical linearisation filter.
+    """
+    pass
+
+
+class GHKF(IKS):
+    """
+    Gauss-Hermite Kalman filter (GHKF)
+    When Gauss-Hermite is used, the statistical linearisation filter (SLF) is equivalent to the GHKF
+    """
+    pass
 
 
 class PL(object):
     """
-    Posterior linearisation
+    Posterior linearisation (PL)
     """
     def __init__(self, site_params=None):
         self.site_params = site_params
@@ -62,21 +82,29 @@ class PL(object):
         The update function takes a likelihood as input, and uses statistical linear
         regression (SLR) to update the site parameters
         """
+        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
             A, b, omega = likelihood.statistical_linear_regression(m, v, hyp)
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
             site_var = A ** -0.5 * (omega + likelihood.likelihood_variance(m, hyp))  # approx. likelihood variance
-            return 0., site_mean, site_var
+            return log_marg_lik, site_mean, site_var
         else:
-            return 0.
+            return log_marg_lik
+
+
+class PrL(PL):
+    """
+    A single forward pass of the PL filter is called the prior linearisation (PrL) filter
+    """
+    pass
 
 
 class CL(object):
     """
-    Cavity linearisation - a version of posterior linearisation that linearises w.r.t. a cavity distribution
-    rather than the posterior. Reduces to PL when power=0
+    Cavity linearisation (CL) - a version of posterior linearisation that linearises w.r.t. the
+    cavity distribution rather than the posterior. Reduces to PL when power=0.
     """
     def __init__(self, site_params=None, power=1.0):
         self.site_params = site_params
@@ -87,6 +115,7 @@ class CL(object):
         The update function takes a likelihood as input, and uses statistical linear
         regression (SLR) w.r.t. the cavity distribution to update the site parameters
         """
+        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
             if site_params is None:
                 mu_cav, var_cav = m, v
@@ -101,6 +130,6 @@ class CL(object):
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
             site_var = A ** -0.5 * (omega + likelihood.likelihood_variance(mu_cav, hyp))  # approx. likelihood var.
-            return 0., site_mean, site_var
+            return log_marg_lik, site_mean, site_var
         else:
-            return 0.
+            return log_marg_lik

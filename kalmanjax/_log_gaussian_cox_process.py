@@ -38,8 +38,8 @@ prior_ = prior(theta_prior)
 lik_ = lik(theta_lik)
 # approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
-# approx_inf_ = CL(power=0.5)
-approx_inf_ = IKS()
+approx_inf_ = CL(power=0.5)
+# approx_inf_ = IKS()
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
