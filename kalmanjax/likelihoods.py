@@ -35,7 +35,7 @@ class Likelihood(object):
         raise NotImplementedError('conditional variance of this likelihood is not implemented')
 
     @partial(jit, static_argnums=(0, 5))
-    def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0, num_quad_points=20):
+    def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, power=1.0, num_quad_points=20):
         """
         Perform moment matching via Gauss-Hermite quadrature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
@@ -46,7 +46,7 @@ class Likelihood(object):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: likelihood hyperparameter [scalar]
         :param site_update: if True, return the updated site parameters [bool]
-        :param ep_fraction: EP power / fraction (a) [scalar]
+        :param power: EP power / fraction (a) [scalar]
         :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
         :return:
             lZ: the log partition function, logZₙ  [scalar]
@@ -57,12 +57,12 @@ class Likelihood(object):
         w = w / np.sqrt(pi)  # scale weights by 1/√π
         sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
         # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
-        weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** ep_fraction
+        weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
         # a different approach, based on the log-likelihood, which can be more stable:
         # ll = self.evaluate_log_likelihood(y, sigma_points)
         # lmax = np.max(ll)
-        # weighted_likelihood_eval = np.exp(lmax * ep_fraction) * w * np.exp(ep_fraction * (ll - lmax))
+        # weighted_likelihood_eval = np.exp(lmax * power) * w * np.exp(power * (ll - lmax))
 
         # Compute partition function via quadrature:
         # Zₙ = ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -94,17 +94,17 @@ class Likelihood(object):
             #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
             d2lZ = -dlZ ** 2 + Zinv * d2Z
             site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-            site_var = -ep_fraction * (v + 1 / d2lZ)  # approx. likelihood (site) variance
+            site_var = -power * (v + 1 / d2lZ)  # approx. likelihood (site) variance
             return lZ, site_mean, site_var
         else:
             return lZ
 
     @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
+    def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
         """
         If no custom moment matching method is provided, we use Gauss-Hermite quadrature.
         """
-        return self.moment_match_quadrature(y, m, v, hyp, site_update, ep_fraction=ep_fraction)
+        return self.moment_match_quadrature(y, m, v, hyp, site_update, power=power)
 
     @staticmethod
     def link_fn(latent_mean):
@@ -212,7 +212,7 @@ class Gaussian(Likelihood):
         return hyp
 
     @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
+    def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -223,7 +223,7 @@ class Gaussian(Likelihood):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: observation noise variance (σ²) [scalar]
         :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
-        :param ep_fraction: EP power / fraction (a) [scalar]
+        :param power: EP power / fraction (a) [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -231,7 +231,7 @@ class Gaussian(Likelihood):
         """
         if hyp is None:
             hyp = softplus(self.hyp)
-        return gaussian_moment_match(y, m, v, hyp, site_update, ep_fraction)
+        return gaussian_moment_match(y, m, v, hyp, site_update, power)
 
 
 class Probit(Likelihood):
@@ -298,7 +298,7 @@ class Probit(Likelihood):
         return np.log(1.0 + erf(y * f / np.sqrt(2.0)) + 1e-10) - np.log(2)  # logΦ(z)
 
     @partial(jit, static_argnums=(0, 5, 6))
-    def moment_match(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
+    def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
         """
         Probit likelihood moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -313,7 +313,7 @@ class Probit(Likelihood):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: dummy variable (Probit has no hyperparameters)
         :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
-        :param ep_fraction: EP power / fraction (a) [scalar]
+        :param power: EP power / fraction (a) [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -322,7 +322,7 @@ class Probit(Likelihood):
         y = np.sign(y)  # only allow values of +/-1
         # y[np.where(y == 0)] = -1  # set zeros to -1
         y = np.sign(y - 0.01)  # set zeros to -1
-        if ep_fraction == 1:  # if a = 1, we can calculate the moments in closed form
+        if power == 1:  # if a = 1, we can calculate the moments in closed form
             z = m / np.sqrt(1.0 + v)
             z = z * y  # zₙ = yₙmₙ / √(1 + vₙ)
             # logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -340,7 +340,7 @@ class Probit(Likelihood):
                 return lZ
         else:
             # if a is not 1, we can calculate the moments via quadrature
-            return self.moment_match_quadrature(y, m, v, None, site_update, ep_fraction)
+            return self.moment_match_quadrature(y, m, v, None, site_update, power)
 
 
 class Erf(Probit):

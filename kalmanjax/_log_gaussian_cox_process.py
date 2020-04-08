@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import time
 import pandas as pd
 from sde_gp import SDEGP
-from approximate_inference import EP, PL
+from approximate_inference import EP, PL, CL
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -36,8 +36,9 @@ theta_lik = jnp.array([])
 
 prior_ = prior(theta_prior)
 lik_ = lik(theta_lik)
-# approx_inf_ = EP(ep_fraction=0.5)
-approx_inf_ = PL()
+# approx_inf_ = EP(power=0.5)
+# approx_inf_ = PL()
+approx_inf_ = CL(power=0.5)
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
@@ -58,7 +59,7 @@ def gradient_step(i, state, model):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(200):
+for j in range(20):
     opt_state = gradient_step(j, opt_state, sde_gp_model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
