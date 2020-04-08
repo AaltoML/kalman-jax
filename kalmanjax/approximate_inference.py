@@ -4,7 +4,8 @@ class EP(object):
     """
     Expectation propagation
     """
-    def __init__(self, ep_fraction=1.0):
+    def __init__(self, site_params=None, ep_fraction=1.0):
+        self.site_params = site_params
         self.ep_fraction = ep_fraction
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
@@ -30,6 +31,9 @@ class GHKS(object):
     """
     Iterated Kalman smoother (using Gauss-Hermite quadrature if necessary)
     """
+    def __init__(self, site_params=None):
+        self.site_params = site_params
+
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
         The update function takes a likelihood as input, and uses moment matching to update the site parameters
@@ -41,6 +45,9 @@ class PL(object):
     """
     Posterior linearisation
     """
+    def __init__(self, site_params=None):
+        self.site_params = site_params
+
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
         The update function takes a likelihood as input, and uses SLR to update the site parameters

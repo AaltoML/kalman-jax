@@ -56,7 +56,6 @@ class SDEGP(object):
         self.state_dim = self.F.shape[0]
         self.obs_dim = self.y.shape[1]
         self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
-        self.site_params = None
         self.sites = EP() if approx_inf is None else approx_inf
 
     @staticmethod
@@ -108,7 +107,7 @@ class SDEGP(object):
         dt = self.dt_all if dt is None else dt
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        site_params = self.site_params if site_params is None else site_params
+        site_params = self.sites.site_params if site_params is None else site_params
         if site_params is not None and not sampling:
             # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
@@ -152,15 +151,16 @@ class SDEGP(object):
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         # run the forward filter to calculate the filtering distribution
-        # on the first pass (when self.site_params = None) this initialises the sites too
-        filter_mean, filter_cov, self.site_params = self.kalman_filter(self.y, self.dt, params,
-                                                                       True, False, None, self.site_params)
+        # on the first pass (when self.sites.site_params = None) this initialises the sites too
+        filter_mean, filter_cov, self.sites.site_params = self.kalman_filter(self.y, self.dt, params, True,
+                                                                             False, None, self.sites.site_params)
         # run the smoother and update the EP sites
-        post_mean, post_var, self.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
-                                                                                  self.dt, self.y, self.site_params)
+        post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
+                                                                                        self.dt, self.y,
+                                                                                        self.sites.site_params)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params,
-                                                                              False, False, None, self.site_params)
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
+                                                                              False, None, self.sites.site_params)
         return neg_log_marg_lik, dlZ
 
     def update_model(self, theta_prior=None):
@@ -363,7 +363,7 @@ class SDEGP(object):
         :return:
             the posterior samples [N_test, num_samps]
         """
-        post_mean, _, (site_mean, site_var) = self.predict(site_params=self.site_params)
+        post_mean, _, (site_mean, site_var) = self.predict(site_params=self.sites.site_params)
         prior_samp = self.prior_sample(num_samps, x=self.t_all)
         prior_samp_y = self.likelihood.sample_noise(prior_samp, site_var)
         with loops.Scope() as ss:
