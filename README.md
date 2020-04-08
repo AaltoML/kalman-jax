@@ -46,3 +46,4 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 ### TODO:
 - come up with difficult (bimodal) example to compare the different algorithms
 - allow user to feed in test locations during prediction
+- extend to multi-output/multi-dimensional case
