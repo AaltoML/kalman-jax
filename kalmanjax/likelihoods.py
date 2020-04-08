@@ -146,7 +146,7 @@ class Likelihood(object):
         b = z - A * m  # eq. (10)
         omega = S - A * v * A  # eq. (11)
         site_mean = A**-1 * (y - b)  # approx. likelihood (site) mean
-        site_var = np.sqrt(A) * (omega + self.likelihood_variance(m, hyp))  # approx. likelihood (site) variance
+        site_var = A**-0.5 * (omega + self.likelihood_variance(m, hyp))  # approx. likelihood (site) variance
         return site_mean, site_var
 
     @partial(jit, static_argnums=0)
