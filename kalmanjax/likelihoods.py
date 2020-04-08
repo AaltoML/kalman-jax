@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
-from jax import jit, partial, random
+from jax import jit, partial, random, jacfwd
 from numpy.polynomial.hermite import hermgauss
 from utils import logphi, gaussian_moment_match
 pi = 3.141592653589793
@@ -154,6 +154,28 @@ class Likelihood(object):
         If no custom SLR method is provided, we use Gauss-Hermite quadrature.
         """
         return self.statistical_linear_regression_quadrature(m, v, hyp)
+
+    @partial(jit, static_argnums=0)
+    def observation_model(self, f, r, hyp=None):
+        """
+        The implicit observation model is:
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Var[yₙ|fₙ] rₙ
+        """
+        obs_model = self.likelihood_expectation(f, hyp) + np.sqrt(self.likelihood_variance(f, hyp)) * r
+        return np.squeeze(obs_model)
+
+    @partial(jit, static_argnums=0)
+    def analytical_linearisation(self, m, hyp=None):
+        """
+        Compute the Jacobian of the state space observation model w.r.t. the
+        function fₙ and the noise term rₙ.
+        The implicit observation model is:
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Var[yₙ|fₙ] rₙ
+        The Jacobians are evaluated at the means, fₙ=m, rₙ=0, to be used during
+        extended Kalman filtering and extended Kalman EP.
+        """
+        Jf, Jr = jacfwd(self.observation_model, argnums=(0, 1))(m, 0.0, hyp)
+        return Jf, Jr
 
 
 class Gaussian(Likelihood):

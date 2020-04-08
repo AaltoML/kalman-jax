@@ -20,6 +20,7 @@ class EP(ApproxInf):
     def __init__(self, site_params=None, power=1.0):
         self.power = power
         super().__init__(site_params=site_params)
+        self.name = 'expectation propagation (EP)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -38,6 +39,73 @@ class EP(ApproxInf):
             return likelihood.moment_match(y, mu_cav, var_cav, hyp, site_update, self.power)
 
 
+class EKEP(ApproxInf):
+    """
+    Extended Kalman expectation propagation (EK-EP)
+    """
+    def __init__(self, site_params=None, power=1.0):
+        self.power = power
+        super().__init__(site_params=site_params)
+        self.name = 'extended Kalman expectation propagation (EK-EP)'
+
+    def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
+        """
+        The update function takes a likelihood as input, and uses analytical linearisation
+        to update the site parameters
+        """
+        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
+        if site_update:
+            if site_params is None:
+                mu_cav, var_cav = m, v
+            else:
+                site_mean, site_var = site_params
+                # --- Compute the cavity distribution ---
+                # remove local likelihood approximation to obtain the marginal cavity distribution:
+                var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
+                mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
+            Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)
+            site_var = (Jf * (Jr * 1 * Jr)**-1 * Jf)**-1  # observation noise scale is w.l.o.g. 1
+            residual = y - likelihood.likelihood_expectation(mu_cav, hyp)
+            sigma = Jr * 1 * Jr + Jf * var_cav * Jf
+            site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
+            return log_marg_lik, site_mean, site_var
+        else:
+            return log_marg_lik
+
+
+class EKS(ApproxInf):
+    """
+    Extended Kalman smoother (EKS)
+    """
+    def __init__(self, site_params=None):
+        super().__init__(site_params=site_params)
+        self.name = 'extended Kalman smoother (EKS)'
+
+    def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
+        """
+        The update function takes a likelihood as input, and uses analytical linearisation
+        to update the site parameters
+        """
+        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
+        if site_update:
+            Jf, Jr = likelihood.analytical_linearisation(m, hyp)
+            site_var = (Jf * (Jr * 1 * Jr)**-1 * Jf)**-1  # observation noise scale is w.l.o.g. 1
+            residual = y - likelihood.likelihood_expectation(m, hyp)
+            sigma = Jr * 1 * Jr + Jf * v * Jf
+            site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
+            return log_marg_lik, site_mean, site_var
+        else:
+            return log_marg_lik
+
+
+class EKF(EKS):
+    """
+    Extended Kalman filter (EKF)
+    A single forward pass of the EKS.
+    """
+    pass
+
+
 class IKS(ApproxInf):
     """
     Iterated Kalman smoother (IKS). This uses statistical linearisation to perform the updates.
@@ -47,6 +115,7 @@ class IKS(ApproxInf):
     """
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params)
+        self.name = 'iterated Kalman smoother (IKS)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -91,6 +160,7 @@ class PL(ApproxInf):
     """
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params)
+        self.name = 'posterior linearisation (PL)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -102,6 +172,7 @@ class PL(ApproxInf):
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
             A, b, omega = likelihood.statistical_linear_regression(m, v, hyp)
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
+            # TODO: what happens if A is not invertable?
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
             site_var = A ** -0.5 * (omega + likelihood.likelihood_variance(m, hyp))  # approx. likelihood variance
             return log_marg_lik, site_mean, site_var
@@ -117,6 +188,7 @@ class CL(ApproxInf):
     def __init__(self, site_params=None, power=1.0):
         self.power = power
         super().__init__(site_params=site_params)
+        self.name = 'cavity linearisation (CL)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -136,6 +208,7 @@ class CL(ApproxInf):
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
             A, b, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp)
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
+            # TODO: what happens if A is not invertable?
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
             site_var = A ** -0.5 * (omega + likelihood.likelihood_variance(mu_cav, hyp))  # approx. likelihood var.
             return log_marg_lik, site_mean, site_var

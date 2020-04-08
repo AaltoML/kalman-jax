@@ -57,6 +57,7 @@ class SDEGP(object):
         self.obs_dim = self.y.shape[1]
         self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
         self.sites = EP() if approx_inf is None else approx_inf
+        print('inference algorithm is', self.sites.name)
 
     @staticmethod
     def input_admin(t_train, t_test, y):
