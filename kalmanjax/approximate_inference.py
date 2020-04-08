@@ -1,12 +1,25 @@
 
 
-class EP(object):
+class ApproxInf(object):
+    """
+    The approximate inference class.
+    Each approximate inference scheme implements an 'update' method which is called during
+    filtering and smoothing in order to update the likelihood approximation (the sites).
+    """
+    def __init__(self, site_params=None):
+        self.site_params = site_params
+
+    def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
+        raise NotImplementedError('the update function for this approximate inference method is not implemented')
+
+
+class EP(ApproxInf):
     """
     Expectation propagation (EP)
     """
     def __init__(self, site_params=None, power=1.0):
-        self.site_params = site_params
         self.power = power
+        super().__init__(site_params=site_params)
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -25,7 +38,7 @@ class EP(object):
             return likelihood.moment_match(y, mu_cav, var_cav, hyp, site_update, self.power)
 
 
-class IKS(object):
+class IKS(ApproxInf):
     """
     Iterated Kalman smoother (IKS). This uses statistical linearisation to perform the updates.
     A single forward pass using this approximation is called the statistical linearisation filter (SLF),
@@ -33,7 +46,7 @@ class IKS(object):
     quadrature method used.
     """
     def __init__(self, site_params=None):
-        self.site_params = site_params
+        super().__init__(site_params=site_params)
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -70,12 +83,14 @@ class GHKF(IKS):
     pass
 
 
-class PL(object):
+class PL(ApproxInf):
     """
     Posterior linearisation (PL)
+    An iterated smoothing algorithm based on statistical linear regression w.r.t. the approximate posterior.
+    This is a special case of cavity linearisation, where power = 0.
     """
     def __init__(self, site_params=None):
-        self.site_params = site_params
+        super().__init__(site_params=site_params)
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
@@ -94,26 +109,19 @@ class PL(object):
             return log_marg_lik
 
 
-class PrL(PL):
-    """
-    A single forward pass of the PL filter is called the prior linearisation (PrL) filter
-    """
-    pass
-
-
-class CL(object):
+class CL(ApproxInf):
     """
     Cavity linearisation (CL) - a version of posterior linearisation that linearises w.r.t. the
-    cavity distribution rather than the posterior. Reduces to PL when power=0.
+    cavity distribution rather than the posterior. Reduces to PL when power = 0.
     """
     def __init__(self, site_params=None, power=1.0):
-        self.site_params = site_params
         self.power = power
+        super().__init__(site_params=site_params)
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
         The update function takes a likelihood as input, and uses statistical linear
-        regression (SLR) w.r.t. the cavity distribution to update the site parameters
+        regression (SLR) w.r.t. the cavity distribution to update the site parameters.
         """
         log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
@@ -133,3 +141,19 @@ class CL(object):
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
+
+
+# class PL(CL):
+#     """
+#     Posterior linearisation (PL)
+#     This is a special case of cavity linearisation, where the power = 0.
+#     """
+#     def __init__(self, site_params=None):
+#         super().__init__(site_params=site_params, power=0.0)
+
+
+class PrL(PL):
+    """
+    A single forward pass of the PL filter is called the prior linearisation (PrL) filter
+    """
+    pass
