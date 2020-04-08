@@ -142,9 +142,11 @@ class Likelihood(object):
         C = np.sum(
             w * (sigma_points - m) * (lik_expectation - z)
         )
-        A = C * v**-1  # eq. (9)
-        b = z - A * m  # eq. (10)
-        omega = S - A * v * A  # eq. (11)
+        # compute likelihood approximation 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
+        A = C * v**-1  # the scale
+        b = z - A * m  # the offset
+        omega = S - A * v * A  # the linearisation error
+        # convert to a Gaussian in fₙ: 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
         site_mean = A**-1 * (y - b)  # approx. likelihood (site) mean
         site_var = A**-0.5 * (omega + self.likelihood_variance(m, hyp))  # approx. likelihood (site) variance
         return site_mean, site_var

@@ -6,7 +6,7 @@ from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
-from approximate_inference import EP, GHKS, PL
+from approximate_inference import EP, PL
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -48,11 +48,11 @@ opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 opt_state = opt_init(softplus_inv([theta_prior, theta_lik]))
 
 
-def gradient_step(i, state):
+def gradient_step(i, state, model):
     params = get_params(state)
     sde_gp_model.prior.hyp = params[0]
     sde_gp_model.likelihood.hyp = params[1]
-    neg_log_marg_lik, gradients = sde_gp_model.run_model()
+    neg_log_marg_lik, gradients = model.run_model()
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), softplus(params[1]), neg_log_marg_lik))
     return opt_update(i, gradients, state)
@@ -61,7 +61,7 @@ def gradient_step(i, state):
 print('optimising the hyperparameters ...')
 t0 = time.time()
 for j in range(20):
-    opt_state = gradient_step(j, opt_state)
+    opt_state = gradient_step(j, opt_state, sde_gp_model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
