@@ -114,7 +114,6 @@ class Likelihood(object):
     @jit
     def sample_noise(latent_mean, likelihood_var):
         lik_std = np.sqrt(likelihood_var)
-        # gaussian_sample = latent_mean + lik_std[..., np.newaxis] * nprandom.normal(size=latent_mean.shape)
         gaussian_sample = latent_mean + lik_std[..., np.newaxis] * random.normal(random.PRNGKey(123),
                                                                                  shape=latent_mean.shape)
         return gaussian_sample
@@ -125,13 +124,11 @@ class Likelihood(object):
         w = w / np.sqrt(pi)  # scale weights by 1/√π
         sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
         lik_expectation = self.likelihood_expectation(sigma_points, hyp)
-        # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
-        weighted_likelihood_expectation = w * lik_expectation
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|xᵢ√(2vₙ) + mₙ]
         z = np.sum(
-            weighted_likelihood_expectation
+            w * lik_expectation
         )
         # Compute variance S via quadrature:
         # S = ∫ (E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -145,10 +142,10 @@ class Likelihood(object):
         C = np.sum(
             w * (sigma_points - m) * (lik_expectation - z)
         )
-        A = C * v ** -1  # eq. (9)
+        A = C * v**-1  # eq. (9)
         b = z - A * m  # eq. (10)
         omega = S - A * v * A  # eq. (11)
-        site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
+        site_mean = A**-1 * (y - b)  # approx. likelihood (site) mean
         site_var = np.sqrt(A) * (omega + self.likelihood_variance(m, hyp))  # approx. likelihood (site) variance
         return site_mean, site_var
 
