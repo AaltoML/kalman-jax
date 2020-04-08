@@ -11,16 +11,19 @@ class EP(object):
         """
         The update function takes a likelihood as input, and uses moment matching to update the site parameters
         """
-        if site_params is not None:
+        if site_params is None:
+            # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
+            mu_cav, var_cav = m, v
+            # calculate the new sites via moment matching
+            return likelihood.moment_match(y, mu_cav, var_cav, hyp, site_update, 1.0)
+        else:
             site_mean, site_var = site_params
             # --- Compute the cavity distribution ---
             # remove local likelihood approximation to obtain the marginal cavity distribution:
             var_cav = 1.0 / (1.0 / v - self.ep_fraction / site_var)  # cavity variance
             mu_cav = var_cav * (m / v - self.ep_fraction * site_mean / site_var)  # cav. mean
             # calculate the new sites via moment matching
-        else:
-            mu_cav, var_cav = m, v
-        return likelihood.moment_match(y, mu_cav, var_cav, hyp, site_update, self.ep_fraction)
+            return likelihood.moment_match(y, mu_cav, var_cav, hyp, site_update, self.ep_fraction)
 
 
 class GHKS(object):
