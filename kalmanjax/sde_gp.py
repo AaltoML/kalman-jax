@@ -6,7 +6,7 @@ from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
 from utils import gaussian_moment_match
 import numpy as np
-from approximate_inference import EP, PL
+from approximate_inference import EP
 pi = 3.141592653589793
 
 
