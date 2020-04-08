@@ -65,7 +65,7 @@ class EKEP(ApproxInf):
                 mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
             Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)
             site_var = (Jf * (Jr * 1 * Jr)**-1 * Jf)**-1  # observation noise scale is w.l.o.g. 1
-            residual = y - likelihood.likelihood_expectation(mu_cav, hyp)
+            residual = y - likelihood.conditional_expectation(mu_cav, hyp)
             sigma = Jr * 1 * Jr + Jf * var_cav * Jf
             site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
             return log_marg_lik, site_mean, site_var
@@ -90,7 +90,7 @@ class EKS(ApproxInf):
         if site_update:
             Jf, Jr = likelihood.analytical_linearisation(m, hyp)
             site_var = (Jf * (Jr * 1 * Jr)**-1 * Jf)**-1  # observation noise scale is w.l.o.g. 1
-            residual = y - likelihood.likelihood_expectation(m, hyp)
+            residual = y - likelihood.conditional_expectation(m, hyp)
             sigma = Jr * 1 * Jr + Jf * v * Jf
             site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
             return log_marg_lik, site_mean, site_var
@@ -130,7 +130,7 @@ class IKS(ApproxInf):
             # do not utilise the linearisation error Ω, distinguishing them from posterior linearisation.
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,Var[yₙ|fₙ]/√A)
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-            site_var = A ** -0.5 * likelihood.likelihood_variance(m, hyp)  # approx. likelihood variance
+            site_var = A ** -0.5 * likelihood.conditional_variance(m, hyp)  # approx. likelihood variance
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
@@ -174,7 +174,7 @@ class PL(ApproxInf):
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
             # TODO: what happens if A is not invertable?
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-            site_var = A ** -0.5 * (omega + likelihood.likelihood_variance(m, hyp))  # approx. likelihood variance
+            site_var = A ** -0.5 * (omega + likelihood.conditional_variance(m, hyp))  # approx. likelihood variance
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
@@ -210,7 +210,7 @@ class CL(ApproxInf):
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
             # TODO: what happens if A is not invertable?
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-            site_var = A ** -0.5 * (omega + likelihood.likelihood_variance(mu_cav, hyp))  # approx. likelihood var.
+            site_var = A ** -0.5 * (omega + likelihood.conditional_variance(mu_cav, hyp))  # approx. likelihood var.
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
