@@ -28,6 +28,9 @@ class Likelihood(object):
     def evaluate_log_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this log-likelihood is not implemented')
 
+    def likelihood_expectation(self, f, hyp=None):
+        raise NotImplementedError('conditional expectation of this likelihood is not implemented')
+
     @partial(jit, static_argnums=(0, 5))
     def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0, num_quad_points=20):
         """
@@ -113,6 +116,52 @@ class Likelihood(object):
                                                                                  shape=latent_mean.shape)
         return gaussian_sample
 
+    # def likelihood_variance(self, f, z, hyp=None):
+    #     lik_error = self.likelihood_expectation(f, hyp) - z
+    #     return lik_error * lik_error
+
+    # def likelihood_cross_covariance(self, f, m, z, hyp=None):
+    #     return (f - m) * (self.likelihood_expectation(f, hyp) - z)
+
+    @partial(jit, static_argnums=0)
+    def statistical_linear_regression_quadrature(self, y, m, v, hyp=None, obs_noise=0., num_quad_points=20):
+        x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
+        w = w / np.sqrt(pi)  # scale weights by 1/√π
+        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        weighted_likelihood_expectation = w * self.likelihood_expectation(sigma_points, hyp)
+        # Compute zₙ via quadrature:
+        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #    ≈ ∑ᵢ wᵢ E[yₙ|xᵢ√(2vₙ) + mₙ]
+        z = np.sum(
+            weighted_likelihood_expectation
+        )
+        # Compute variance S via quadrature:
+        # S = ∫ (E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
+        S = np.sum(
+            (weighted_likelihood_expectation - z) * (weighted_likelihood_expectation - z)
+        )
+        # Compute cross covariance C via quadrature:
+        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ (fₙ-mₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
+        C = np.sum(
+            (sigma_points - m) * (weighted_likelihood_expectation - z)
+        )
+        A = C * v ** -1  # eq. (9)
+        b = z - A * m  # eq. (10)
+        omega = S - A * v * A  # eq. (11)
+        site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
+        site_var = omega + obs_noise  # approx. likelihood (site) variance
+        return site_mean, site_var
+
+    @partial(jit, static_argnums=0)
+    def statistical_linear_regression(self, y, m, v, hyp=None, obs_noise=0.):
+        """
+        If no custom SLR method is provided, we use Gauss-Hermite quadrature.
+        """
+        return self.statistical_linear_regression_quadrature(y, m, v, hyp, obs_noise)
+
 
 class Gaussian(Likelihood):
     """
@@ -158,6 +207,9 @@ class Gaussian(Likelihood):
         if hyp is None:
             hyp = softplus(self.hyp)
         return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
+
+    def likelihood_expectation(self, f, hyp=None):
+        return f
 
     @partial(jit, static_argnums=(0, 5))
     def moment_match(self, y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
@@ -357,3 +409,6 @@ class Poisson(Likelihood):
         """
         mu = self.link_fn(f)
         return y * np.log(mu) - mu - gammaln(y + 1)
+
+    def likelihood_expectation(self, f, hyp=None):
+        return self.link_fn(f)

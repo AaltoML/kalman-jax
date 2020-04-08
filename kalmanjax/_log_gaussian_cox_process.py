@@ -36,7 +36,8 @@ theta_lik = jnp.array([])
 
 prior_ = prior(theta_prior)
 lik_ = lik(theta_lik)
-approx_inf_ = EP(ep_fraction=0.5)
+# approx_inf_ = EP(ep_fraction=0.5)
+approx_inf_ = PL()
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
