@@ -120,6 +120,10 @@ class Likelihood(object):
 
     @partial(jit, static_argnums=0)
     def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
+        """
+        Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
+        We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
+        """
         x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
         w = w / np.sqrt(pi)  # scale weights by 1/√π
         sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
