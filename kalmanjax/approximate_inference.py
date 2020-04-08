@@ -52,5 +52,5 @@ class PL(object):
         """
         The update function takes a likelihood as input, and uses SLR to update the site parameters
         """
-        site_mean, site_var = likelihood.statistical_linear_regression(y, m, v, hyp, site_update)
+        site_mean, site_var = likelihood.statistical_linear_regression(y, m, v, hyp)
         return 0., site_mean, site_var
