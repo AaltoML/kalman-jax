@@ -34,7 +34,8 @@ class IKS(object):
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
-        The update function takes a likelihood as input, and uses SLR to update the site parameters
+        The update function takes a likelihood as input, and uses statistical linearisation
+        to update the site parameters
         """
         if site_update:
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Var[yₙ|fₙ])
@@ -58,7 +59,8 @@ class PL(object):
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
-        The update function takes a likelihood as input, and uses SLR to update the site parameters
+        The update function takes a likelihood as input, and uses statistical linear
+        regression (SLR) to update the site parameters
         """
         if site_update:
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
@@ -82,7 +84,8 @@ class CL(object):
 
     def update(self, likelihood, y, m, v, hyp=None, site_update=True, site_params=None):
         """
-        The update function takes a likelihood as input, and uses SLR to update the site parameters
+        The update function takes a likelihood as input, and uses statistical linear
+        regression (SLR) w.r.t. the cavity distribution to update the site parameters
         """
         if site_update:
             if site_params is None:

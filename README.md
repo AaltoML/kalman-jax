@@ -15,16 +15,16 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [x] PEP - power expectation propagation
  - [ ] EKF - extended Kalman filtering
  - [ ] UKF - unscented Kalman filtering
- - [ ] GHKF - Gauss-Hermite Kalman filtering
- - [ ] SLF - statistical linearisation filter
+ - [x] GHKF - Gauss-Hermite Kalman filtering
+ - [x] SLF - statistical linearisation filter
  - [ ] EKS - extended Kalman smoothing
  - [ ] UKS - unscented Kalman smoothing
  - [ ] GHKS - Gauss-Hermite Kalman smoothing
  - [ ] EK-EP - Extended Kalman EP
  - [ ] UK-EP - Unscented Kalman EP
  - [x] GHK-EP - Gauss-Hermite Kalman EP
- - [ ] PL - posterior linearisation
- - [ ] CL - cavity linearisation (new)
+ - [x] PL - posterior linearisation
+ - [x] CL - cavity linearisation (new)
  - [ ] VI - variational inference
  - [ ] CVI - conjugate-computation variational inference
  - [ ] S2VI - doubly-sparse variational inference
@@ -44,3 +44,4 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - check that prediction is working properly
 - check the different algorithms are actually giving different results
 - allow user to feed in test locations during prediction
+- sort out the log_marg_lik calculation in PL/CL. Just compute with moment_match?
