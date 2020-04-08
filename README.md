@@ -13,26 +13,29 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 ### Approximate inference algorithms
  - [x] ADF - assumed density filtering (single-sweep EP)
  - [x] PEP - power expectation propagation
- - [ ] EKF - extended Kalman filtering
+ - [x] EKF - extended Kalman filtering
  - [ ] UKF - unscented Kalman filtering
  - [x] GHKF - Gauss-Hermite Kalman filtering
  - [x] SLF - statistical linearisation filter
- - [ ] EKS - extended Kalman smoothing
+ - [x] EKS - extended Kalman smoothing
  - [ ] UKS - unscented Kalman smoothing
  - [x] GHKS - Gauss-Hermite Kalman smoothing
- - [ ] EK-EP - Extended Kalman EP
+ - [x] EK-EP - Extended Kalman EP
  - [ ] UK-EP - Unscented Kalman EP
  - [x] GHK-EP - Gauss-Hermite Kalman EP
  - [x] PL - posterior linearisation
- - [x] CL - cavity linearisation (new)
- - [ ] VI - variational inference
+ - [x] CL - cavity linearisation
  - [ ] CVI - conjugate-computation variational inference
- - [ ] S2VI - doubly-sparse variational inference
- - [ ] S2EP - doubly-sparse expectation propagation (new)
- - [ ] STVI - spatio-temporal variational inference (new)
- - [ ] STEP - spatio-temporal expectation propagation (new)
+ - [ ] STVI - spatio-temporal variational inference
+ - [ ] STEP - spatio-temporal expectation propagation
 
-### Models / Priors
+### Likelihoods
+- [x] Gaussian
+- [x] Probit
+- [x] Poisson
+- [ ] Logit
+
+### Priors
 - [x] Matern class
 - [ ] RBF
 - [ ] Periodic
@@ -41,5 +44,5 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [ ] Latent force models (linear)
 
 ### TODO:
-- come up with difficult example to check that the different algorithms are actually giving different results
+- come up with difficult (bimodal) example to compare the different algorithms
 - allow user to feed in test locations during prediction
