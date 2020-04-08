@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
-from jax import jit, partial, random, jacfwd
+from jax import jit, partial, random, jacrev
 from numpy.polynomial.hermite import hermgauss
 from utils import logphi, gaussian_moment_match
 pi = 3.141592653589793
@@ -178,7 +178,7 @@ class Likelihood(object):
         The Jacobians are evaluated at the means, fₙ=m, rₙ=0, to be used during
         extended Kalman filtering and extended Kalman EP.
         """
-        Jf, Jr = jacfwd(self.observation_model, argnums=(0, 1))(m, 0.0, hyp)
+        Jf, Jr = jacrev(self.observation_model, argnums=(0, 1))(m, 0.0, hyp)
         return Jf, Jr
 
 
