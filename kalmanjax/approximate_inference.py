@@ -4,7 +4,7 @@ class ApproxInf(object):
     """
     The approximate inference class.
     Each approximate inference scheme implements an 'update' method which is called during
-    filtering and smoothing in order to update the likelihood approximation (the sites).
+    filtering and smoothing in order to update the local likelihood approximation (the sites).
     """
     def __init__(self, site_params=None):
         self.site_params = site_params
@@ -86,7 +86,7 @@ class GHKF(IKS):
 class PL(ApproxInf):
     """
     Posterior linearisation (PL)
-    An iterated smoothing algorithm based on statistical linear regression w.r.t. the approximate posterior.
+    An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the approximate posterior.
     This is a special case of cavity linearisation, where power = 0.
     """
     def __init__(self, site_params=None):
