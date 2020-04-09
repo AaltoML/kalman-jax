@@ -247,7 +247,7 @@ class Gaussian(Likelihood):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: observation noise variance (σ²) [scalar]
         :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
-        :param power: EP power / fraction (a) [scalar]
+        :param power: EP power / fraction (a) - this is never required for the Gaussian likelihood [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -255,7 +255,7 @@ class Gaussian(Likelihood):
         """
         if hyp is None:
             hyp = softplus(self.hyp)
-        return gaussian_moment_match(y, m, v, hyp, site_update, power)
+        return gaussian_moment_match(y, m, v, hyp, site_update)
 
 
 class Probit(Likelihood):

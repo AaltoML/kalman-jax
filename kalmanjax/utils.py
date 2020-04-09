@@ -37,31 +37,28 @@ def logphi(z):
 
 
 @partial(jit, static_argnums=4)
-def gaussian_moment_match(y, m, v, hyp=None, site_update=True, power=1.0):
+def gaussian_moment_match(y, m, v, hyp=None, site_update=True):
     """
     Closed form Gaussian moment matching.
     Calculates the log partition function of the EP tilted distribution:
-        logZₙ = log ∫ 𝓝ᵃ(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[𝓝(yₙ|fₙ,σ²)]
+        logZₙ = log ∫ 𝓝(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[𝓝(yₙ|fₙ,σ²)]
     and its derivatives w.r.t. mₙ, which are required for moment matching.
     :param y: observed data (yₙ) [scalar]
     :param m: cavity mean (mₙ) [scalar]
     :param v: cavity variance (vₙ) [scalar]
     :param hyp: observation noise variance (σ²) [scalar]
     :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
-    :param power: EP power / fraction (a) [scalar]
     :return:
         lZ: the log partition function, logZₙ [scalar]
         dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
     """
     # log partition function, lZ:
-    # logZₙ = log ∫ 𝓝ᵃ(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
-    #       = log √(2πσ²)¹⁻ᵃ ∫ 𝓝(yₙ|fₙ,σ²/a) 𝓝(fₙ|mₙ,vₙ) dfₙ
-    #       = (1-a)/2 log 2πσ² + log 𝓝(yₙ|mₙ,σ²/a+vₙ)
+    # logZₙ = log ∫ 𝓝(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
+    #       = log 𝓝(yₙ|mₙ,σ²+vₙ)
     lZ = (
-            (1 - power) / 2 * np.log(2 * pi * hyp)
-            - (y - m) ** 2 / (hyp / power + v) / 2
-            - np.log(np.maximum(2 * pi * (hyp / power + v), 1e-10)) / 2
+            - (y - m) ** 2 / (hyp + v) / 2
+            - np.log(np.maximum(2 * pi * (hyp + v), 1e-10)) / 2
     )
     if site_update:
         # 𝓝(yₙ|fₙ,σ²) = 𝓝(fₙ|yₙ,σ²)
