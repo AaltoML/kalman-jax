@@ -156,7 +156,7 @@ class Likelihood(object):
             h(fₙ,rₙ) = E[yₙ|fₙ] + √Var[yₙ|fₙ] rₙ
         """
         conditional_expectation, conditional_variance = self.conditional_moments(f, hyp)
-        obs_model = conditional_expectation + np.sqrt(conditional_variance) * r
+        obs_model = conditional_expectation + cholesky(conditional_variance) * r
         return np.squeeze(obs_model)
 
     @partial(jit, static_argnums=0)
