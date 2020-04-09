@@ -23,7 +23,7 @@ def wiggly_time_series(x_):
 
 print('generating some data ...')
 np.random.seed(12345)
-N = 1000
+N = 10000
 # x = np.linspace(-25.0, 75.0, num=N)  # evenly spaced
 x = np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N))  # unevenly spaced
 y = wiggly_time_series(x)
@@ -38,11 +38,11 @@ theta_lik = jnp.array(var_y)
 
 prior_ = prior(theta_prior)
 lik_ = lik(theta_lik)
-# approx_inf_ = EP(power=0.5)
+approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)
 # approx_inf_ = IKS()
-approx_inf_ = EKEP()
+# approx_inf_ = EKEP()
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 

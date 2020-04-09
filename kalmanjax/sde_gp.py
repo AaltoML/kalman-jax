@@ -329,7 +329,6 @@ class SDEGP(object):
             f_sample: the prior samples [S, N_samp]
         """
         self.update_model(softplus(self.prior.hyp))
-        # TODO: sort out prior sampling - currently a bit unstable
         if x is None:
             dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(self.t_all)])
         else:
@@ -343,7 +342,7 @@ class SDEGP(object):
                 for k in s.range(N):
                     A = self.prior.expm(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
-                    C = jnp.linalg.cholesky(Q + 1e-5 * jnp.eye(self.state_dim))  # <--- unstable
+                    C = jnp.linalg.cholesky(Q + 1e-10 * jnp.eye(self.state_dim))  # <--- can be a bit unstable
                     # we need to provide a different PRNG seed every time:
                     s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
                     f = (self.H @ s.m).T

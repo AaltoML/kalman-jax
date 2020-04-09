@@ -225,6 +225,7 @@ class Gaussian(Likelihood):
             hyp = softplus(self.hyp)
         return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
 
+    @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
         """
         The first two conditional moments of a Gaussian are the mean and variance:
@@ -280,6 +281,7 @@ class Probit(Likelihood):
     def link_fn(latent_mean):
         return erfc(-latent_mean / np.sqrt(2.0)) - 1.0
 
+    @partial(jit, static_argnums=0)
     def eval(self, mu, var):
         """
         ported from GPML toolbox - not used.
@@ -319,6 +321,21 @@ class Probit(Likelihood):
             log Φ(yₙfₙ) [Q, 1]
         """
         return np.log(1.0 + erf(y * f / np.sqrt(2.0)) + 1e-10) - np.log(2)  # logΦ(z)
+
+    @partial(jit, static_argnums=0)
+    def conditional_moments(self, f, hyp=None):
+        """
+        The first two conditional moments of a Probit likelihood are:
+            E[yₙ|fₙ] = Φ(fₙ)
+            Var[yₙ|fₙ] = Φ(fₙ) (1 - Φ(fₙ))
+            where Φ(fₙ) = (1 + erf(fₙ / √2)) / 2
+        """
+        # TODO: not working
+        # phi = (1.0 + erf(f / np.sqrt(2.0))) / 2.0
+        # phi = self.link_fn(f)
+        # phi = erfc(f / np.sqrt(2.0)) - 1.0
+        phi = self.evaluate_likelihood(1.0, f)
+        return phi, phi * (1.0 - phi)
 
     @partial(jit, static_argnums=(0, 5, 6))
     def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
@@ -433,10 +450,11 @@ class Poisson(Likelihood):
         mu = self.link_fn(f)
         return y * np.log(mu) - mu - gammaln(y + 1)
 
+    @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
         """
         The first two conditional moments of a Poisson distribution are equal to the intensity:
-            E[y|f] = link(f)
-            Var[y|f] = link(f)
+            E[yₙ|fₙ] = link(fₙ)
+            Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
