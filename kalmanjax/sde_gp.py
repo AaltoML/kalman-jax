@@ -310,7 +310,7 @@ class SDEGP(object):
                 # --- Now update the site parameters: ---
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
-                    mu, var = jnp.squeeze(self.H @ s.m), jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T))
+                    mu, var = self.H @ s.m, jnp.diag(self.H @ s.P @ self.H.T)
                     # calculate the new sites
                     _, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
                                                              True, (s.site_mean[n], s.site_var[n]))

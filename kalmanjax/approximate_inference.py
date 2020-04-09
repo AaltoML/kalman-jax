@@ -1,3 +1,6 @@
+import jax.numpy as np
+from jax.scipy.linalg import cholesky
+pi = 3.141592653589793
 
 
 class ApproxInf(object):
@@ -53,25 +56,30 @@ class EKEP(ApproxInf):
         The update function takes a likelihood as input, and uses analytical linearisation
         to update the site parameters
         """
-        # TODO: implement EKF / EK-EP specific marginal likelihood calculation
-        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
+        if site_params is None:
+            mu_cav, var_cav = m, v
+        else:
+            site_mean, site_var = site_params
+            # --- Compute the cavity distribution ---
+            # remove local likelihood approximation to obtain the marginal cavity distribution:
+            var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
+            mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
+        # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
+        Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)  # evaluated at the mean
+        var_obs = 1.0  # observation noise scale is w.l.o.g. 1
+        likelihood_expectation, _ = likelihood.conditional_moments(mu_cav, hyp)
+        residual = y - likelihood_expectation  # residual, yₙ-h(mₙ,0)
+        sigma = Jr * var_obs * Jr + Jf * var_cav * Jf
+        site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
+        site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
+        # now compute the marginal likelihood approx.
+        chol_site_var = cholesky(site_var, lower=True)
+        log_marg_lik = -1 * (
+                .5 * site_var.shape[0] * np.log(2 * pi)
+                + np.sum(np.log(np.diag(chol_site_var)))
+                + .5 * (residual * site_var**-1 * residual)
+        )
         if site_update:
-            if site_params is None:
-                mu_cav, var_cav = m, v
-            else:
-                site_mean, site_var = site_params
-                # --- Compute the cavity distribution ---
-                # remove local likelihood approximation to obtain the marginal cavity distribution:
-                var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
-                mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
-            # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
-            Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)  # evaluated at the mean
-            var_obs = 1.0  # observation noise scale is w.l.o.g. 1
-            site_var = (Jf * (Jr * var_obs * Jr)**-1 * Jf)**-1
-            likelihood_expectation, _ = likelihood.conditional_moments(mu_cav, hyp)
-            residual = y - likelihood_expectation  # residual, yₙ-h(mₙ,0)
-            sigma = Jr * var_obs * Jr + Jf * var_cav * Jf
-            site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
@@ -90,16 +98,22 @@ class EKS(ApproxInf):
         The update function takes a likelihood as input, and uses analytical linearisation
         to update the site parameters
         """
-        log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
+        # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
+        Jf, Jr = likelihood.analytical_linearisation(m, hyp)  # evaluated at the mean
+        var_obs = 1.0  # observation noise scale is w.l.o.g. 1
+        likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
+        residual = y - likelihood_expectation  # residual, yₙ-h(mₙ,0)
+        sigma = Jr * var_obs * Jr + Jf * v * Jf
+        site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
+        site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
+        # now compute the marginal likelihood approx.
+        chol_site_var = cholesky(site_var, lower=True)
+        log_marg_lik = -1 * (
+                .5 * site_var.shape[0] * np.log(2 * pi)
+                + np.sum(np.log(np.diag(chol_site_var)))
+                + .5 * (residual * site_var ** -1 * residual)  # TODO: use cholesky for inverse in multi-dim case
+        )
         if site_update:
-            # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
-            Jf, Jr = likelihood.analytical_linearisation(m, hyp)  # evaluated at the mean
-            var_obs = 1.0  # observation noise scale is w.l.o.g. 1
-            site_var = (Jf * (Jr * var_obs * Jr)**-1 * Jf)**-1
-            likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
-            residual = y - likelihood_expectation  # residual, yₙ-h(mₙ,0)
-            sigma = Jr * var_obs * Jr + Jf * v * Jf
-            site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
@@ -177,6 +191,7 @@ class PL(ApproxInf):
         The update function takes a likelihood as input, and uses statistical linear
         regression (SLR) to update the site parameters
         """
+        # TODO: implement PL approximate likelihood
         log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
@@ -206,6 +221,7 @@ class CL(ApproxInf):
         The update function takes a likelihood as input, and uses statistical linear
         regression (SLR) w.r.t. the cavity distribution to update the site parameters.
         """
+        # TODO: implement CL approximate likelihood
         log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
             if site_params is None:

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import time
 import pandas as pd
 from sde_gp import SDEGP
-from approximate_inference import EP, PL, CL, IKS, EKEP
+from approximate_inference import EP, PL, CL, IKS, EKS, EKEP
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -40,6 +40,7 @@ lik_ = lik(theta_lik)
 # approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)
 # approx_inf_ = IKS()
+# approx_inf_ = EKS()
 approx_inf_ = EKEP(power=0.5)
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
