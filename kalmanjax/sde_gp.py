@@ -157,7 +157,7 @@ class SDEGP(object):
         # on the first pass (when self.sites.site_params = None) this initialises the sites too
         filter_mean, filter_cov, self.sites.site_params = self.kalman_filter(self.y, self.dt, params, True,
                                                                              False, None, self.sites.site_params)
-        # run the smoother and update the EP sites
+        # run the smoother and update the sites
         post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
                                                                                         self.dt, self.y,
                                                                                         self.sites.site_params)
