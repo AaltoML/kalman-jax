@@ -12,9 +12,6 @@ import priors
 import likelihoods
 pi = 3.141592653589793
 
-prior = priors.Matern52
-lik = likelihoods.Poisson
-
 print('loading coal data ...')
 disaster_timings = pd.read_csv('../data/coal.txt', header=None).values[:, 0]
 
@@ -34,8 +31,8 @@ len_f = 1.0  # GP lengthscale
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array([])
 
-prior_ = prior(theta_prior)
-lik_ = lik(theta_lik)
+prior_ = priors.Matern52(theta_prior)
+lik_ = likelihoods.Poisson(theta_lik)
 # approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)

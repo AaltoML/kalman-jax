@@ -11,9 +11,6 @@ import priors
 import likelihoods
 pi = 3.141592653589793
 
-prior = priors.Matern52
-lik = likelihoods.Probit
-
 print('generating some data ...')
 np.random.seed(99)
 N = 10000  # number of training points
@@ -30,8 +27,8 @@ len_f = 5.0  # GP lengthscale
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array([])
 
-prior_ = prior(theta_prior)
-lik_ = lik(theta_lik)
+prior_ = priors.Matern52(theta_prior)
+lik_ = likelihoods.Probit(theta_lik)
 approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
 # approx_inf_ = EKEP()

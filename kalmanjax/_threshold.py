@@ -11,9 +11,6 @@ import priors
 import likelihoods
 pi = 3.141592653589793
 
-prior = priors.Matern52
-lik = likelihoods.Gaussian
-
 np.random.seed(12345)
 N = 10000
 x = np.sort(np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N)))  # unevenly spaced
@@ -27,8 +24,8 @@ var_y = 0.1  # observation noise
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array(var_y)
 
-prior_ = prior(theta_prior)
-lik_ = lik(theta_lik)
+prior_ = priors.Matern52(theta_prior)
+lik_ = likelihoods.Gaussian(theta_lik)
 approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)
