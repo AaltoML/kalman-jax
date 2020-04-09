@@ -236,12 +236,10 @@ class SDEGP(object):
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
                     log_lik_n, site_mu, site_var = gaussian_moment_match(y_n, mu, var, s.site_var[n], True)
                 else:
-                    if site_params is None:  # are we computing new sites? then run model-specific update
-                        log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik,
-                                                                         True, None)
-                    else:  # are we using supplied sites? then just compute the log-marginal likelihood
-                        log_lik_n = self.likelihood.moment_match(y_n, mu, var, theta_lik, False, 1.0)  # lml
-                        site_mu, site_var = s.site_mean[n], s.site_var[n]  # use supplied site parameters
+                    log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var,
+                                                                     theta_lik, True, None)
+                    if site_params is not None:  # use supplied site parameters to perform the update
+                        site_mu, site_var = s.site_mean[n], s.site_var[n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + site_var
                 L, low = cho_factor(S)
