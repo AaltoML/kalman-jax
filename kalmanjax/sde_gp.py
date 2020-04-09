@@ -286,10 +286,9 @@ class SDEGP(object):
         dt = jnp.concatenate([dt[1:], jnp.array([0.0])], axis=0)
         with loops.Scope() as s:
             s.m, s.P = m_filtered[-1, ...], P_filtered[-1, ...]
-            s.smoothed_mean = jnp.zeros([N, self.obs_dim])
-            s.smoothed_var = jnp.zeros([N, self.obs_dim])
+            s.smoothed_mean, s.smoothed_var = jnp.zeros([N, self.obs_dim]), jnp.zeros([N, self.obs_dim])
             if site_params is not None:
-                s.site_mean, s.site_var = site_params
+                s.site_mean, s.site_var = jnp.zeros([N, self.obs_dim]), jnp.zeros([N, self.obs_dim])
             for n in s.range(N-1, -1, -1):
                 # --- First compute the smoothing distribution: ---
                 A = self.prior.expm(dt[n], theta_prior)  # closed form integration of transition matrix
@@ -313,7 +312,7 @@ class SDEGP(object):
                     mu, var = self.H @ s.m, jnp.diag(self.H @ s.P @ self.H.T)
                     # calculate the new sites
                     _, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
-                                                             True, (s.site_mean[n], s.site_var[n]))
+                                                             True, (site_params[0][n], site_params[1][n]))
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:

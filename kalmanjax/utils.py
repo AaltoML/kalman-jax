@@ -37,7 +37,7 @@ def logphi(z):
 
 
 @partial(jit, static_argnums=4)
-def gaussian_moment_match(y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
+def gaussian_moment_match(y, m, v, hyp=None, site_update=True, power=1.0):
     """
     Closed form Gaussian moment matching.
     Calculates the log partition function of the EP tilted distribution:
@@ -48,7 +48,7 @@ def gaussian_moment_match(y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
     :param v: cavity variance (vₙ) [scalar]
     :param hyp: observation noise variance (σ²) [scalar]
     :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
-    :param ep_fraction: EP power / fraction (a) [scalar]
+    :param power: EP power / fraction (a) [scalar]
     :return:
         lZ: the log partition function, logZₙ [scalar]
         dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -59,17 +59,14 @@ def gaussian_moment_match(y, m, v, hyp=None, site_update=True, ep_fraction=1.0):
     #       = log √(2πσ²)¹⁻ᵃ ∫ 𝓝(yₙ|fₙ,σ²/a) 𝓝(fₙ|mₙ,vₙ) dfₙ
     #       = (1-a)/2 log 2πσ² + log 𝓝(yₙ|mₙ,σ²/a+vₙ)
     lZ = (
-            (1 - ep_fraction) / 2 * np.log(2 * pi * hyp)
-            - (y - m) ** 2 / (hyp / ep_fraction + v) / 2
-            - np.log(np.maximum(2 * pi * (hyp / ep_fraction + v), 1e-10)) / 2
+            (1 - power) / 2 * np.log(2 * pi * hyp)
+            - (y - m) ** 2 / (hyp / power + v) / 2
+            - np.log(np.maximum(2 * pi * (hyp / power + v), 1e-10)) / 2
     )
     if site_update:
-        # dlogZₙ/dmₙ = (yₙ - mₙ)(σ²/a + vₙ)⁻¹
-        dlZ = (y - m) / (hyp / ep_fraction + v)  # 1st derivative w.r.t. mean
-        # d²logZₙ/dmₙ² = -(σ²/a + vₙ)⁻¹
-        d2lZ = -1 / (hyp / ep_fraction + v)  # 2nd derivative w.r.t. mean
-        site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_var = -ep_fraction * (v + 1 / d2lZ)  # approx. likelihood (site) variance
+        # 𝓝(yₙ|fₙ,σ²) = 𝓝(fₙ|yₙ,σ²)
+        site_mean = y
+        site_var = hyp
         return lZ, site_mean, site_var
     else:
         return lZ
