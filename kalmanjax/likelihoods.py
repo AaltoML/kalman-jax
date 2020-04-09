@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
-from jax import jit, partial, random, jacrev
+from jax import jit, partial, jacrev
 from numpy.polynomial.hermite import hermgauss
 from utils import logphi, gaussian_moment_match
 pi = 3.141592653589793
@@ -102,14 +102,6 @@ class Likelihood(object):
     @staticmethod
     def link_fn(latent_mean):
         return latent_mean
-
-    @staticmethod
-    @jit
-    def sample_noise(latent_mean, likelihood_var):
-        lik_std = np.sqrt(likelihood_var)
-        gaussian_sample = latent_mean + lik_std[..., np.newaxis] * random.normal(random.PRNGKey(123),
-                                                                                 shape=latent_mean.shape)
-        return gaussian_sample
 
     @partial(jit, static_argnums=0)
     def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
@@ -449,3 +441,53 @@ class Poisson(Likelihood):
             Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
+
+
+class Threshold(Likelihood):
+    """
+    The threshold likelihood resulting from the spike and slab prior
+        p(yₙ|fₙ) = 𝓝(yₙ|h(fₙ),σ²)
+    """
+    def __init__(self, hyp, rho=1.2, p=0.2):
+        """
+        :param hyp: the noise variance σ² [scalar]
+        """
+        self.rho = rho
+        self.p = p
+        super().__init__(hyp=hyp)
+        if self.hyp is None:
+            print('using default likelihood parameter since none was supplied')
+            self.hyp = -2.25  # softplus(-2.25) ~= 0.1
+        self.name = 'Threshold'
+
+    @partial(jit, static_argnums=0)
+    def link_fn(self, latent_mean):
+        return (1 - self.rho) * latent_mean + self.rho * threshold_func(latent_mean, self.p)
+
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
+        hyp = softplus(self.hyp) if hyp is None else hyp
+        return npdf(y, f, hyp)
+
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
+        hyp = softplus(self.hyp) if hyp is None else hyp
+        return log_npdf(y, f, hyp)
+
+    @partial(jit, static_argnums=0)
+    def conditional_moments(self, f, hyp=None):
+        hyp = softplus(self.hyp) if hyp is None else hyp
+        lik_expectation = self.link_fn(f)
+        return lik_expectation, hyp
+
+
+def npdf(x, m, v):
+    return np.exp(-(x - m) ** 2 / (2 * v)) / np.sqrt(2 * np.pi * v)
+
+
+def log_npdf(x, m, v):
+    return -(x - m) ** 2 / (2 * v) - 0.5 * np.log(2 * np.pi * v)
+
+
+def threshold_func(x, p):
+    return x * p * npdf(x, 0, 11) / ((1 - p) * npdf(x, 0, 1) + p * npdf(x, 0, 11))

@@ -4,7 +4,7 @@ from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
-from utils import gaussian_moment_match
+from utils import gaussian_moment_match, sample_gaussian_noise
 import numpy as np
 from approximate_inference import EP
 from jax.config import config
@@ -330,7 +330,7 @@ class SDEGP(object):
         if x is None:
             dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(self.t_all)])
         else:
-            dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(x)])
+            dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(jnp.sort(x))])
         N = dt.shape[0]
         with loops.Scope() as s:
             s.f_sample = jnp.zeros([N, self.obs_dim, num_samps])
@@ -363,7 +363,7 @@ class SDEGP(object):
         """
         post_mean, _, (site_mean, site_var) = self.predict(site_params=self.sites.site_params)
         prior_samp = self.prior_sample(num_samps, x=self.t_all)
-        prior_samp_y = self.likelihood.sample_noise(prior_samp, site_var)
+        prior_samp_y = sample_gaussian_noise(prior_samp, site_var)
         with loops.Scope() as ss:
             ss.smoothed_sample = jnp.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
