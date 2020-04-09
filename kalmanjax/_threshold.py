@@ -15,14 +15,14 @@ prior = priors.Matern52
 lik = likelihoods.Gaussian
 
 np.random.seed(12345)
-N = 100
-x = np.sort(np.random.permutation(np.linspace(-25.0, 50.0, num=N) + 0.5*np.random.randn(N)))  # unevenly spaced
+N = 10000
+x = np.sort(np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N)))  # unevenly spaced
 x_test = np.linspace(np.min(x)-15.0, np.max(x)+15.0, num=100)
 dummy_y = x
 
 var_f = 1.0  # GP variance
-len_f = 10.0  # GP lengthscale
-var_y = 0.5  # observation noise
+len_f = 50.0  # GP lengthscale
+var_y = 0.1  # observation noise
 
 theta_prior = jnp.array([var_f, len_f])
 theta_lik = jnp.array(var_y)
@@ -39,14 +39,13 @@ sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=dummy_y, x_test=x_tes
 
 print('generating some data by sampling from the prior ...')
 ground_truth = sde_gp_model.prior_sample(1, x=x)
-print(ground_truth)
-true_obs_noise_var = 0.1
-y = sde_gp_model.likelihood.sample_noise(ground_truth, true_obs_noise_var)[:, 0, 0]
+y = sde_gp_model.likelihood.sample(ground_truth)[:, 0, 0]
 
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
 plt.clf()
 plt.plot(x, ground_truth[:, 0, 0])
+plt.plot(x, y, '.')
 plt.show()
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)

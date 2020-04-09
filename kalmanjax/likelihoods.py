@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
-from jax.nn import softplus
-from jax import jit, partial, jacrev
+from jax import jit, partial, jacrev, random
+from jax.scipy.linalg import cholesky
 from numpy.polynomial.hermite import hermgauss
 from utils import logphi, gaussian_moment_match
 pi = 3.141592653589793
@@ -103,6 +103,11 @@ class Likelihood(object):
     def link_fn(latent_mean):
         return latent_mean
 
+    def sample(self, f, rng_key=123):
+        lik_expectation, lik_variance = self.conditional_moments(f)
+        lik_std = cholesky(np.diag(np.expand_dims(lik_variance, 0)))
+        return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
+
     @partial(jit, static_argnums=0)
     def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
         """
@@ -180,7 +185,7 @@ class Gaussian(Likelihood):
         super().__init__(hyp=hyp)
         if self.hyp is None:
             print('using default likelihood parameter since none was supplied')
-            self.hyp = -2.25  # softplus(-2.25) ~= 0.1
+            self.hyp = 0.1
         self.name = 'Gaussian'
 
     @partial(jit, static_argnums=0)
@@ -194,8 +199,7 @@ class Gaussian(Likelihood):
         :return:
             𝓝(yₙ|fₙ,σ²), where σ² is the observation noise [Q, 1]
         """
-        if hyp is None:
-            hyp = softplus(self.hyp)
+        hyp = self.hyp if hyp is None else hyp
         return (2 * pi * hyp) ** -0.5 * np.exp(-0.5 * (y - f) ** 2 / hyp)
 
     @partial(jit, static_argnums=0)
@@ -209,8 +213,7 @@ class Gaussian(Likelihood):
         :return:
             log𝓝(yₙ|fₙ,σ²), where σ² is the observation noise [Q, 1]
         """
-        if hyp is None:
-            hyp = softplus(self.hyp)
+        hyp = self.hyp if hyp is None else hyp
         return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
 
     @partial(jit, static_argnums=0)
@@ -220,7 +223,7 @@ class Gaussian(Likelihood):
             E[y|f] = f
             Var[y|f] = σ²
         """
-        hyp = softplus(self.hyp) if hyp is None else hyp
+        hyp = self.hyp if hyp is None else hyp
         return f, hyp
 
     @partial(jit, static_argnums=0)
@@ -240,8 +243,7 @@ class Gaussian(Likelihood):
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
-        if hyp is None:
-            hyp = softplus(self.hyp)
+        hyp = self.hyp if hyp is None else hyp
         return gaussian_moment_match(y, m, v, hyp)
 
 
@@ -457,7 +459,7 @@ class Threshold(Likelihood):
         super().__init__(hyp=hyp)
         if self.hyp is None:
             print('using default likelihood parameter since none was supplied')
-            self.hyp = -2.25  # softplus(-2.25) ~= 0.1
+            self.hyp = 0.1
         self.name = 'Threshold'
 
     @partial(jit, static_argnums=0)
@@ -466,17 +468,17 @@ class Threshold(Likelihood):
 
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
-        hyp = softplus(self.hyp) if hyp is None else hyp
+        hyp = self.hyp if hyp is None else hyp
         return npdf(y, f, hyp)
 
     @partial(jit, static_argnums=0)
     def evaluate_log_likelihood(self, y, f, hyp=None):
-        hyp = softplus(self.hyp) if hyp is None else hyp
+        hyp = self.hyp if hyp is None else hyp
         return log_npdf(y, f, hyp)
 
     @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
-        hyp = softplus(self.hyp) if hyp is None else hyp
+        hyp = self.hyp if hyp is None else hyp
         lik_expectation = self.link_fn(f)
         return lik_expectation, hyp
 
