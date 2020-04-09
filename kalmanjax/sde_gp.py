@@ -24,8 +24,12 @@ class SDEGP(object):
     where w(t) is a white noise process and where the state x(t) is Gaussian distributed with initial
     state distribution x(t)~𝓝(0,Pinf).
     Currently implemented inference methods:
-        - Assumed density filtering (ADF, single sweep EP)
         - Power expectation propagation (PEP)
+        - Posterior linearisation (PL)
+        - Cavity linearisation (CL)
+        - Iterated Kalman smoother (IKS)
+        - Extended Kalman EP (EKEP)
+        - Extended Kalman smoother (EKS)
     """
     def __init__(self, prior, likelihood, x, y, x_test=None, approx_inf=None):
         """
@@ -34,7 +38,7 @@ class SDEGP(object):
         :param x: training inputs
         :param y: training data / observations
         :param x_test: test inputs
-        :param approx_inf: the approximate inference algorithm for computing the sites (EP, GHKS, PL, ...)
+        :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
         x, ind = np.unique(x, return_index=True)
@@ -180,8 +184,8 @@ class SDEGP(object):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
         The Kalman update step invloves some control flow to work out whether we are
-            i) initialising the EP sites / running ADF
-            ii) using supplied sites (e.g. in EP)
+            i) initialising the sites
+            ii) using supplied sites
             iii) running the smoothing operation in posterior sampling
         If store is True then we compute and return the intermediate filtering distributions
         p(fₙ|y₁,...,yₖ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
@@ -266,8 +270,8 @@ class SDEGP(object):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
         i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
-        If sites are provided, then it is assumed we are running EP, and we compute
-        new sites by first calculating the cavity distribution and then performing moment matching.
+        If sites are provided, then it is assumed they are to be updated, which is done by
+        calling the site-specific update() method.
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
         :param m_filtered: the intermediate distribution means computed during filtering [N, state_dim, 1]
         :param P_filtered: the intermediate distribution covariances computed during filtering [N, state_dim, state_dim]
@@ -277,7 +281,7 @@ class SDEGP(object):
         :return:
             smoothed_mean: the posterior marginal means [N, obs_dim]
             smoothed_var: the posterior marginal variances [N, obs_dim]
-            site_params: the updated EP sites [2, N, obs_dim]
+            site_params: the updated sites [2, N, obs_dim]
         """
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
@@ -351,7 +355,7 @@ class SDEGP(object):
         """
         Sample from the posterior at the test locations.
         Posterior sampling works by smoothing samples from the prior using the approximate Gaussian likelihood
-        model given by the sites computed during inference in the true model (e.g. via EP):
+        model given by the sites computed during inference in the true model:
          - compute the approximate likelihood terms, sites (𝓝(f|μ*,σ²*))
          - draw samples (f*) from the prior
          - add Gaussian noise to the prior samples using auxillary model p(y*|f*) = 𝓝(y*|f*,σ²*)
