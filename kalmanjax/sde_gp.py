@@ -7,6 +7,8 @@ from jax.nn import softplus
 from utils import gaussian_moment_match
 import numpy as np
 from approximate_inference import EP
+from jax.config import config
+config.update("jax_enable_x64", True)
 pi = 3.141592653589793
 
 
