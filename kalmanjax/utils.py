@@ -1,9 +1,10 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
-from jax import partial, jit
+from jax import jit
 pi = 3.141592653589793
 
 
+@jit
 def softplus_inv(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
@@ -17,6 +18,7 @@ def softplus_inv(x_):
     return y_
 
 
+@jit
 def logphi(z):
     """
     Calculate the log Gaussian CDF, used for closed form moment matching when the EP power is 1,
@@ -36,8 +38,8 @@ def logphi(z):
     return lp, dlp
 
 
-@partial(jit, static_argnums=4)
-def gaussian_moment_match(y, m, v, hyp=None, site_update=True):
+@jit
+def gaussian_moment_match(y, m, v, hyp=None):
     """
     Closed form Gaussian moment matching.
     Calculates the log partition function of the EP tilted distribution:
@@ -47,7 +49,6 @@ def gaussian_moment_match(y, m, v, hyp=None, site_update=True):
     :param m: cavity mean (mₙ) [scalar]
     :param v: cavity variance (vₙ) [scalar]
     :param hyp: observation noise variance (σ²) [scalar]
-    :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
     :return:
         lZ: the log partition function, logZₙ [scalar]
         dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -60,10 +61,7 @@ def gaussian_moment_match(y, m, v, hyp=None, site_update=True):
             - (y - m) ** 2 / (hyp + v) / 2
             - np.log(np.maximum(2 * pi * (hyp + v), 1e-10)) / 2
     )
-    if site_update:
-        # 𝓝(yₙ|fₙ,σ²) = 𝓝(fₙ|yₙ,σ²)
-        site_mean = y
-        site_var = hyp
-        return lZ, site_mean, site_var
-    else:
-        return lZ
+    # 𝓝(yₙ|fₙ,σ²) = 𝓝(fₙ|yₙ,σ²)
+    site_mean = y
+    site_var = hyp
+    return lZ, site_mean, site_var

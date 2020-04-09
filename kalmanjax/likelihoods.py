@@ -31,8 +31,8 @@ class Likelihood(object):
     def conditional_moments(self, f, hyp=None):
         raise NotImplementedError('conditional moments of this likelihood are not implemented')
 
-    @partial(jit, static_argnums=(0, 5))
-    def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, power=1.0, num_quad_points=20):
+    @partial(jit, static_argnums=0)
+    def moment_match_quadrature(self, y, m, v, hyp=None, power=1.0, num_quad_points=20):
         """
         Perform moment matching via Gauss-Hermite quadrature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
@@ -42,7 +42,6 @@ class Likelihood(object):
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: likelihood hyperparameter [scalar]
-        :param site_update: if True, return the updated site parameters [bool]
         :param power: EP power / fraction (a) [scalar]
         :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
         :return:
@@ -68,40 +67,37 @@ class Likelihood(object):
             weighted_likelihood_eval
         )
         lZ = np.log(Z)
-        if site_update:
-            Zinv = 1.0 / Z
-            # Compute derivative of partition function via quadrature:
-            # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-            #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
-            dZ = np.sum(
-                (sigma_points - m) / v
-                * weighted_likelihood_eval
-            )
-            # dlogZₙ/dmₙ = (dZₙ/dmₙ) / Zₙ
-            dlZ = Zinv * dZ
-            # Compute second derivative of partition function via quadrature:
-            # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-            #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
-            d2Z = np.sum(
-                ((sigma_points - m) ** 2 / v ** 2 - 1.0 / v)
-                * weighted_likelihood_eval
-            )
-            # d²logZₙ/dmₙ² = d[(dZₙ/dmₙ) / Zₙ]/dmₙ
-            #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
-            #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
-            d2lZ = -dlZ ** 2 + Zinv * d2Z
-            site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-            site_var = -power * (v + 1 / d2lZ)  # approx. likelihood (site) variance
-            return lZ, site_mean, site_var
-        else:
-            return lZ
+        Zinv = 1.0 / Z
+        # Compute derivative of partition function via quadrature:
+        # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        dZ = np.sum(
+            (sigma_points - m) / v
+            * weighted_likelihood_eval
+        )
+        # dlogZₙ/dmₙ = (dZₙ/dmₙ) / Zₙ
+        dlZ = Zinv * dZ
+        # Compute second derivative of partition function via quadrature:
+        # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        d2Z = np.sum(
+            ((sigma_points - m) ** 2 / v ** 2 - 1.0 / v)
+            * weighted_likelihood_eval
+        )
+        # d²logZₙ/dmₙ² = d[(dZₙ/dmₙ) / Zₙ]/dmₙ
+        #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
+        #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
+        d2lZ = -dlZ ** 2 + Zinv * d2Z
+        site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_var = -power * (v + 1 / d2lZ)  # approx. likelihood (site) variance
+        return lZ, site_mean, site_var
 
-    @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
+    @partial(jit, static_argnums=0)
+    def moment_match(self, y, m, v, hyp=None, power=1.0):
         """
         If no custom moment matching method is provided, we use Gauss-Hermite quadrature.
         """
-        return self.moment_match_quadrature(y, m, v, hyp, site_update, power=power)
+        return self.moment_match_quadrature(y, m, v, hyp, power=power)
 
     @staticmethod
     def link_fn(latent_mean):
@@ -235,8 +231,8 @@ class Gaussian(Likelihood):
         hyp = softplus(self.hyp) if hyp is None else hyp
         return f, hyp
 
-    @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
+    @partial(jit, static_argnums=0)
+    def moment_match(self, y, m, v, hyp=None, power=1.0):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -246,7 +242,6 @@ class Gaussian(Likelihood):
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: observation noise variance (σ²) [scalar]
-        :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
         :param power: EP power / fraction (a) - this is never required for the Gaussian likelihood [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
@@ -255,7 +250,7 @@ class Gaussian(Likelihood):
         """
         if hyp is None:
             hyp = softplus(self.hyp)
-        return gaussian_moment_match(y, m, v, hyp, site_update)
+        return gaussian_moment_match(y, m, v, hyp)
 
 
 class Probit(Likelihood):
@@ -337,8 +332,8 @@ class Probit(Likelihood):
         phi = self.evaluate_likelihood(1.0, f)
         return phi, phi * (1.0 - phi)
 
-    @partial(jit, static_argnums=(0, 5, 6))
-    def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
+    @partial(jit, static_argnums=(0, 5))
+    def moment_match(self, y, m, v, hyp=None, power=1.0):
         """
         Probit likelihood moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -352,7 +347,6 @@ class Probit(Likelihood):
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: dummy variable (Probit has no hyperparameters)
-        :param site_update: if True, return the derivatives of the log partition function w.r.t. mₙ [bool]
         :param power: EP power / fraction (a) [scalar]
         :return:
             lZ: the log partition function, logZₙ [scalar]
@@ -368,19 +362,16 @@ class Probit(Likelihood):
             # logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
             #       = log Φ(yₙmₙ/√(1 + vₙ))  [see Rasmussen & Williams p74]
             lZ, dlp = logphi(z)
-            if site_update:
-                # dlogZₙ/dmₙ = yₙ dlogΦ(zₙ)/dmₙ / √(1 + vₙ)
-                dlZ = y * dlp / np.sqrt(1.0 + v)  # first derivative w.r.t mₙ
-                # d²logZₙ/dmₙ² = -dlogΦ(zₙ)/dmₙ (zₙ + dlogΦ(zₙ)/dmₙ) / √(1 + vₙ)
-                d2lZ = -dlp * (z + dlp) / (1.0 + v)  # second derivative w.r.t mₙ
-                site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-                site_var = - (v + 1 / d2lZ)  # approx. likelihood (site) variance
-                return lZ, site_mean, site_var
-            else:
-                return lZ
+            # dlogZₙ/dmₙ = yₙ dlogΦ(zₙ)/dmₙ / √(1 + vₙ)
+            dlZ = y * dlp / np.sqrt(1.0 + v)  # first derivative w.r.t mₙ
+            # d²logZₙ/dmₙ² = -dlogΦ(zₙ)/dmₙ (zₙ + dlogΦ(zₙ)/dmₙ) / √(1 + vₙ)
+            d2lZ = -dlp * (z + dlp) / (1.0 + v)  # second derivative w.r.t mₙ
+            site_mean = m - dlZ / d2lZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+            site_var = - (v + 1 / d2lZ)  # approx. likelihood (site) variance
+            return lZ, site_mean, site_var
         else:
             # if a is not 1, we can calculate the moments via quadrature
-            return self.moment_match_quadrature(y, m, v, None, site_update, power)
+            return self.moment_match_quadrature(y, m, v, None, power)
 
 
 class Erf(Probit):

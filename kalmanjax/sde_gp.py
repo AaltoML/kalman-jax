@@ -236,10 +236,9 @@ class SDEGP(object):
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
-                    log_lik_n, site_mu, site_var = gaussian_moment_match(y_n, mu, var, s.site_var[n], True)
+                    log_lik_n, site_mu, site_var = gaussian_moment_match(y_n, mu, var, s.site_var[n])
                 else:
-                    log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var,
-                                                                     theta_lik, True, None)
+                    log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
                     if site_params is not None:  # use supplied site parameters to perform the update
                         site_mu, site_var = s.site_mean[n], s.site_var[n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
@@ -312,7 +311,7 @@ class SDEGP(object):
                     mu, var = self.H @ s.m, jnp.diag(self.H @ s.P @ self.H.T)
                     # calculate the new sites
                     _, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
-                                                             True, (site_params[0][n], site_params[1][n]))
+                                                             (site_params[0][n], site_params[1][n]))
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:
