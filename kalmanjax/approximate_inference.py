@@ -53,6 +53,7 @@ class EKEP(ApproxInf):
         The update function takes a likelihood as input, and uses analytical linearisation
         to update the site parameters
         """
+        # TODO: implement EKF / EK-EP specific marginal likelihood calculation
         log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
             if site_params is None:
@@ -63,10 +64,13 @@ class EKEP(ApproxInf):
                 # remove local likelihood approximation to obtain the marginal cavity distribution:
                 var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
                 mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
-            Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)
-            site_var = (Jf * (Jr * 1 * Jr)**-1 * Jf)**-1  # observation noise scale is w.l.o.g. 1
-            residual = y - likelihood.conditional_expectation(mu_cav, hyp)
-            sigma = Jr * 1 * Jr + Jf * var_cav * Jf
+            # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
+            Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)  # evaluated at the mean
+            var_obs = 1.0  # observation noise scale is w.l.o.g. 1
+            site_var = (Jf * (Jr * var_obs * Jr)**-1 * Jf)**-1
+            likelihood_expectation, _ = likelihood.conditional_moments(mu_cav, hyp)
+            residual = y - likelihood_expectation  # residual, yₙ-h(mₙ,0)
+            sigma = Jr * var_obs * Jr + Jf * var_cav * Jf
             site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
             return log_marg_lik, site_mean, site_var
         else:
@@ -88,10 +92,13 @@ class EKS(ApproxInf):
         """
         log_marg_lik = likelihood.moment_match(y, m, v, hyp, False, 1.0)
         if site_update:
-            Jf, Jr = likelihood.analytical_linearisation(m, hyp)
-            site_var = (Jf * (Jr * 1 * Jr)**-1 * Jf)**-1  # observation noise scale is w.l.o.g. 1
-            residual = y - likelihood.conditional_expectation(m, hyp)
-            sigma = Jr * 1 * Jr + Jf * v * Jf
+            # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
+            Jf, Jr = likelihood.analytical_linearisation(m, hyp)  # evaluated at the mean
+            var_obs = 1.0  # observation noise scale is w.l.o.g. 1
+            site_var = (Jf * (Jr * var_obs * Jr)**-1 * Jf)**-1
+            likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
+            residual = y - likelihood_expectation  # residual, yₙ-h(mₙ,0)
+            sigma = Jr * var_obs * Jr + Jf * v * Jf
             site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
             return log_marg_lik, site_mean, site_var
         else:
@@ -103,6 +110,7 @@ class EKF(EKS):
     Extended Kalman filter (EKF)
     A single forward pass of the EKS.
     """
+    # TODO: make is so that when EKF/UKF/SLF/GHKF are chosen, model.run_model() only performs filtering.
     pass
 
 
@@ -129,8 +137,10 @@ class IKS(ApproxInf):
             # classical iterated smoothers, which are based on statistical linearisation (as opposed to SLR),
             # do not utilise the linearisation error Ω, distinguishing them from posterior linearisation.
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,Var[yₙ|fₙ]/√A)
+            # TODO: implement case where A is not invertable
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-            site_var = A ** -0.5 * likelihood.conditional_variance(m, hyp)  # approx. likelihood variance
+            _, likelihood_variance = likelihood.conditional_moments(m, hyp)
+            site_var = A ** -0.5 * likelihood_variance  # approx. likelihood variance
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
@@ -172,9 +182,10 @@ class PL(ApproxInf):
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
             A, b, omega = likelihood.statistical_linear_regression(m, v, hyp)
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
-            # TODO: what happens if A is not invertable?
+            # TODO: implement case where A is not invertable
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-            site_var = A ** -0.5 * (omega + likelihood.conditional_variance(m, hyp))  # approx. likelihood variance
+            _, likelihood_variance = likelihood.conditional_moments(m, hyp)
+            site_var = A ** -0.5 * (omega + likelihood_variance)  # approx. likelihood variance
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik
@@ -208,9 +219,10 @@ class CL(ApproxInf):
             # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
             A, b, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp)
             # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
-            # TODO: what happens if A is not invertable?
+            # TODO: implement case where A is not invertable
             site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-            site_var = A ** -0.5 * (omega + likelihood.conditional_variance(mu_cav, hyp))  # approx. likelihood var.
+            _, likelihood_variance = likelihood.conditional_moments(mu_cav, hyp)
+            site_var = A ** -0.5 * (omega + likelihood_variance)  # approx. likelihood var.
             return log_marg_lik, site_mean, site_var
         else:
             return log_marg_lik

@@ -28,11 +28,8 @@ class Likelihood(object):
     def evaluate_log_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this log-likelihood is not implemented')
 
-    def conditional_expectation(self, f, hyp=None):
-        raise NotImplementedError('conditional expectation of this likelihood is not implemented')
-
-    def conditional_variance(self, f, hyp=None):
-        raise NotImplementedError('conditional variance of this likelihood is not implemented')
+    def conditional_moments(self, f, hyp=None):
+        raise NotImplementedError('conditional moments of this likelihood are not implemented')
 
     @partial(jit, static_argnums=(0, 5))
     def moment_match_quadrature(self, y, m, v, hyp=None, site_update=True, power=1.0, num_quad_points=20):
@@ -127,7 +124,7 @@ class Likelihood(object):
         x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
         w = w / np.sqrt(pi)  # scale weights by 1/√π
         sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
-        lik_expectation = self.conditional_expectation(sigma_points, hyp)
+        lik_expectation, _ = self.conditional_moments(sigma_points, hyp)
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|xᵢ√(2vₙ) + mₙ]
@@ -165,7 +162,8 @@ class Likelihood(object):
         The implicit observation model is:
             h(fₙ,rₙ) = E[yₙ|fₙ] + √Var[yₙ|fₙ] rₙ
         """
-        obs_model = self.conditional_expectation(f, hyp) + np.sqrt(self.conditional_variance(f, hyp)) * r
+        conditional_expectation, conditional_variance = self.conditional_moments(f, hyp)
+        obs_model = conditional_expectation + np.sqrt(conditional_variance) * r
         return np.squeeze(obs_model)
 
     @partial(jit, static_argnums=0)
@@ -227,12 +225,14 @@ class Gaussian(Likelihood):
             hyp = softplus(self.hyp)
         return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
 
-    def conditional_expectation(self, f, hyp=None):
-        return f
-
-    def conditional_variance(self, f, hyp=None):
+    def conditional_moments(self, f, hyp=None):
+        """
+        The first two conditional moments of a Gaussian are the mean and variance:
+            E[y|f] = f
+            Var[y|f] = σ²
+        """
         hyp = softplus(self.hyp) if hyp is None else hyp
-        return hyp
+        return f, hyp
 
     @partial(jit, static_argnums=(0, 5))
     def moment_match(self, y, m, v, hyp=None, site_update=True, power=1.0):
@@ -433,8 +433,10 @@ class Poisson(Likelihood):
         mu = self.link_fn(f)
         return y * np.log(mu) - mu - gammaln(y + 1)
 
-    def conditional_expectation(self, f, hyp=None):
-        return self.link_fn(f)
-
-    def conditional_variance(self, f, hyp=None):
-        return self.link_fn(f)
+    def conditional_moments(self, f, hyp=None):
+        """
+        The first two conditional moments of a Poisson distribution are equal to the intensity:
+            E[y|f] = link(f)
+            Var[y|f] = link(f)
+        """
+        return self.link_fn(f), self.link_fn(f)
