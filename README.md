@@ -47,3 +47,5 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - come up with difficult (bimodal) example to compare the different algorithms
 - allow user to feed in test locations during prediction
 - extend to multi-output/multi-dimensional case
+- make predict() method automatically return test NLPD
+- make it so that when a filtering method is chosen, run_model() only runs the forward filter
