@@ -95,7 +95,7 @@ class SDEGP(object):
         return (jnp.array(t), jnp.array(test_id), jnp.array(train_id), jnp.array(y_all),
                 jnp.array(mask), jnp.array(dt), jnp.array(dt_all))
 
-    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False):
+    def predict(self, y=None, dt=None, mask=None, site_params=None, gauss_update=False):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -104,7 +104,7 @@ class SDEGP(object):
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [M, 1]
         :param mask: a boolean array signifying which elements are observed and which are nan [M, 1]
         :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
-        :param sampling: notify whether we are running posterior sampling
+        :param gauss_update: notify whether we are using an auxillary Gaussian model, e.g. during posterior sampling
         :return:
             posterior_mean: the posterior predictive mean [M, obs_dim]
             posterior_var: the posterior predictive variance [M, obs_dim]
@@ -115,7 +115,7 @@ class SDEGP(object):
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         site_params = self.sites.site_params if site_params is None else site_params
-        if site_params is not None and not sampling:
+        if site_params is not None and not gauss_update:
             # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
             site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
@@ -123,7 +123,8 @@ class SDEGP(object):
             site_mean = index_update(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
-        _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
+        _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, gauss_update,
+                                                                       mask, site_params)
         _, posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
         return posterior_mean, posterior_var, site_params
 
@@ -192,13 +193,13 @@ class SDEGP(object):
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
 
     @partial(jit, static_argnums=(0, 4, 5))
-    def kalman_filter(self, y, dt, params, store=False, sampling=False, mask=None, site_params=None):
+    def kalman_filter(self, y, dt, params, store=False, gauss_update=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
         The Kalman update step invloves some control flow to work out whether we are
             i) initialising the sites
             ii) using supplied sites
-            iii) running the smoothing operation in posterior sampling
+            iii) performing a Gaussian update with known parameters (e.g. in posterior sampling)
         If store is True then we compute and return the intermediate filtering distributions
         p(fₙ|y₁,...,yₖ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
         return the energy / negative log-marginal likelihood, -log p(y).
@@ -206,7 +207,7 @@ class SDEGP(object):
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
         :param store: flag to notify whether to store the intermediates
-        :param sampling: flag to notify whether we are running the posterior sampling operation
+        :param gauss_update: flag to notify whether we just want a Gaussian update (e.g. during posterior sampling)
         :param mask: boolean array signifying which elements of y are observed [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
         :return:
@@ -251,7 +252,7 @@ class SDEGP(object):
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
-                if sampling:  # are we computing posterior samples via smoothing in an auxillary model?
+                if gauss_update:  # are we performing inference in an auxillary Gaussian model? e.g. in post. sampling
                     log_lik_n, site_mu, site_var = gaussian_moment_match(y_n, mu, var, s.site_var[n])
                 else:
                     log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
@@ -387,6 +388,6 @@ class SDEGP(object):
             ss.smoothed_sample = jnp.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
                 smoothed_sample_i, _, _ = self.predict(prior_samp_y[..., i], self.dt_all, self.mask,
-                                                       (site_mean, site_var), sampling=True)
+                                                       (site_mean, site_var), gauss_update=True)
                 ss.smoothed_sample = index_update(ss.smoothed_sample, index[..., i], smoothed_sample_i)
         return prior_samp - ss.smoothed_sample + post_mean[..., jnp.newaxis]
