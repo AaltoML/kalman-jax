@@ -143,7 +143,6 @@ class SDEGP(object):
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, False)
         return neg_log_marg_lik, dlZ
 
-    @partial(jit, static_argnums=0)
     def filter_smoother(self, params):
         """
         Run the filter and smoother to compute the NLML/ELBO and the site parameter updates

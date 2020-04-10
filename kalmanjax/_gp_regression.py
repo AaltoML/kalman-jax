@@ -58,7 +58,7 @@ def gradient_step(i, state, model):
 
     # option 2 - grad(Filter + Smoother):
     (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
-    sde_gp_model.sites.site_params = site_params
+    model.sites.site_params = site_params
 
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), softplus(params[1]), neg_log_marg_lik))
