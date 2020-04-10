@@ -5,7 +5,7 @@ pi = 3.141592653589793
 
 
 @jit
-def softplus_inv(x_):
+def softplus_inv_list(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
     Loop over the elements of the paramter list so we can handle the special case
@@ -16,6 +16,14 @@ def softplus_inv(x_):
         if x_[i] is not []:
             y_[i] = np.log(np.exp(x_[i]) - 1)
     return y_
+
+
+@jit
+def softplus_inv(x_):
+    """
+    Inverse of the softplus positiviy mapping, used for transforming parameters.
+    """
+    return np.log(np.exp(x_) - 1)
 
 
 @jit

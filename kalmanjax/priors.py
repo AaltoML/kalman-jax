@@ -1,5 +1,7 @@
 import jax.numpy as np
 from jax import jit, partial
+from jax.nn import softplus
+from utils import softplus_inv
 
 
 class Prior(object):
@@ -21,7 +23,7 @@ class Prior(object):
     Pinf   - Covariance of the stationary process
     """
     def __init__(self, hyp=None):
-        self.hyp = hyp
+        self.hyp = softplus_inv(hyp)
 
 
 class Exponential(Prior):
@@ -47,7 +49,7 @@ class Exponential(Prior):
     @partial(jit, static_argnums=0)
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
         F = np.array([[-1.0 / ell]])
         L = np.array([[1.0]])
@@ -64,7 +66,7 @@ class Exponential(Prior):
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [1, 1]
         """
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
         A = np.broadcast_to(np.exp(-dt / ell), [1, 1])
         return A
@@ -101,7 +103,7 @@ class Matern32(Prior):
     @partial(jit, static_argnums=0)
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
         lam = 3.0 ** 0.5 / ell
         F = np.array([[0.0,       1.0],
@@ -122,7 +124,7 @@ class Matern32(Prior):
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [2, 2]
         """
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
         lam = np.sqrt(3.0) / ell
         A = np.exp(-dt * lam) * (dt * np.array([[lam, 1.0], [-lam**2.0, -lam]]) + np.eye(2))
@@ -163,7 +165,7 @@ class Matern52(Prior):
     @partial(jit, static_argnums=0)
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
         # lam = tf.constant(5.0**0.5 / ell, dtype=floattype)
         lam = 5.0**0.5 / ell
@@ -189,7 +191,7 @@ class Matern52(Prior):
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [3, 3]
         """
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
         lam = np.sqrt(5.0) / ell
         dtlam = dt * lam
@@ -235,7 +237,7 @@ class Matern72(Prior):
     @partial(jit, static_argnums=0)
     def cf_to_ss(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
         lam = 7.0**0.5 / ell
         F = np.array([[0.0,       1.0,           0.0,           0.0],
@@ -264,7 +266,7 @@ class Matern72(Prior):
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
         :return: state transition matrix A [4, 4]
         """
-        hyperparams = self.hyp if hyperparams is None else hyperparams
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
         lam = np.sqrt(7.0) / ell
         lam2 = lam * lam

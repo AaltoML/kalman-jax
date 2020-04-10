@@ -1,7 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
 from jax.nn import softplus
-from utils import softplus_inv
+from jax import value_and_grad
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
@@ -13,7 +13,7 @@ pi = 3.141592653589793
 
 print('generating some data ...')
 np.random.seed(99)
-N = 10000  # number of training points
+N = 1000  # number of training points
 x = 100 * np.random.rand(N)
 f = 6 * np.sin(pi * x / 10.0) / (pi * x / 10.0 + 1)
 y_ = f + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
@@ -31,20 +31,27 @@ prior_ = priors.Matern52(theta_prior)
 lik_ = likelihoods.Probit(theta_lik)
 approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
-# approx_inf_ = EKEP()
+# approx_inf_ = EKEP()  <-- not working
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
-opt_state = opt_init(softplus_inv([theta_prior, theta_lik]))
+opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])  # params mapped through inverse softplus
 
 
 def gradient_step(i, state, model):
     params = get_params(state)
     sde_gp_model.prior.hyp = params[0]
     sde_gp_model.likelihood.hyp = params[1]
-    neg_log_marg_lik, gradients = model.run_model()
+
+    # option 1 - Filter + Smoother + grad(Filter):
+    # neg_log_marg_lik, gradients = model.run_model()
+
+    # option 2 - grad(Filter + Smoother):
+    (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
+    sde_gp_model.sites.site_params = site_params
+
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))
     return opt_update(i, gradients, state)

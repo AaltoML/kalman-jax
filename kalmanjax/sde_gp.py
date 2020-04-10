@@ -60,7 +60,7 @@ class SDEGP(object):
         print('building SDE-GP with', self.prior.name, 'prior and', self.likelihood.name, 'likelihood ...')
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss()
         self.state_dim = self.F.shape[0]
-        self.obs_dim = self.y.shape[1]
+        self.f_dim = self.H.shape[0]
         self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
         self.sites = EP() if approx_inf is None else approx_inf
         print('inference method is', self.sites.name)
@@ -123,8 +123,8 @@ class SDEGP(object):
             site_mean = index_update(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
-        filter_mean, filter_cov, site_params = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
-        posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
+        _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, sampling, mask, site_params)
+        _, posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
         return posterior_mean, posterior_var, site_params
 
     def neg_log_marg_lik(self, params=None):
@@ -143,6 +143,19 @@ class SDEGP(object):
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, False)
         return neg_log_marg_lik, dlZ
 
+    @partial(jit, static_argnums=0)
+    def filter_smoother(self, params):
+        """
+        Run the filter and smoother to compute the NLML/ELBO and the site parameter updates
+        """
+        # if self.sites.site_params=None, then the filter initialises the sites too
+        nlml, (filter_mean, filter_cov, site_params) = self.kalman_filter(self.y, self.dt, params,
+                                                                          True, False, None, self.sites.site_params)
+        # run the smoother and update the sites
+        var_exp, post_mean, post_var, site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
+                                                                                      self.dt, self.y, site_params)
+        return nlml, site_params
+
     def run_model(self, params=None):
         """
         A single parameter update step - to be fed to a gradient-based optimiser.
@@ -158,13 +171,13 @@ class SDEGP(object):
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         # run the forward filter to calculate the filtering distribution
-        # on the first pass (when self.sites.site_params = None) this initialises the sites too
-        filter_mean, filter_cov, self.sites.site_params = self.kalman_filter(self.y, self.dt, params, True,
-                                                                             False, None, self.sites.site_params)
+        # if self.sites.site_params=None then the filter initialises the sites too
+        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
+                                                                                  False, None, self.sites.site_params)
         # run the smoother and update the sites
-        post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
-                                                                                        self.dt, self.y,
-                                                                                        self.sites.site_params)
+        _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
+                                                                                           filter_cov, self.dt, self.y,
+                                                                                           self.sites.site_params)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
                                                                               False, None, self.sites.site_params)
@@ -222,8 +235,8 @@ class SDEGP(object):
                 s.site_mean, s.site_var = site_params
             else:
                 if store:
-                    s.site_mean = jnp.zeros([N, self.obs_dim])
-                    s.site_var = jnp.zeros([N, self.obs_dim])
+                    s.site_mean = jnp.zeros([N, self.f_dim])
+                    s.site_var = jnp.zeros([N, self.f_dim])
             for n in s.range(N):
                 y_n = y[n]
                 # -- KALMAN PREDICT --
@@ -262,7 +275,7 @@ class SDEGP(object):
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if store:
-            return s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var)
+            return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var))
         return s.neg_log_marg_lik
 
     @partial(jit, static_argnums=0)
@@ -279,6 +292,7 @@ class SDEGP(object):
         :param y: observed data [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
         :return:
+            var_exp: the sum of the variational expectations [scalar]
             smoothed_mean: the posterior marginal means [N, obs_dim]
             smoothed_var: the posterior marginal variances [N, obs_dim]
             site_params: the updated sites [2, N, obs_dim]
@@ -288,10 +302,11 @@ class SDEGP(object):
         N = dt.shape[0]
         dt = jnp.concatenate([dt[1:], jnp.array([0.0])], axis=0)
         with loops.Scope() as s:
+            s.var_exp = 0.0  # variational expectations
             s.m, s.P = m_filtered[-1, ...], P_filtered[-1, ...]
-            s.smoothed_mean, s.smoothed_var = jnp.zeros([N, self.obs_dim]), jnp.zeros([N, self.obs_dim])
+            s.smoothed_mean, s.smoothed_var = jnp.zeros([N, self.f_dim]), jnp.zeros([N, self.f_dim])
             if site_params is not None:
-                s.site_mean, s.site_var = jnp.zeros([N, self.obs_dim]), jnp.zeros([N, self.obs_dim])
+                s.site_mean, s.site_var = jnp.zeros([N, self.f_dim]), jnp.zeros([N, self.f_dim])
             for n in s.range(N-1, -1, -1):
                 # --- First compute the smoothing distribution: ---
                 A = self.prior.expm(dt[n], theta_prior)  # closed form integration of transition matrix
@@ -314,13 +329,14 @@ class SDEGP(object):
                     # extract mean and var from state (we discard cross-covariance for now):
                     mu, var = self.H @ s.m, jnp.diag(self.H @ s.P @ self.H.T)
                     # calculate the new sites
-                    _, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
-                                                             (site_params[0][n], site_params[1][n]))
+                    var_exp_n, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
+                                                                     (site_params[0][n], site_params[1][n]))
+                    s.var_exp += jnp.sum(var_exp_n)
                     s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
                     s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:
             site_params = (s.site_mean, s.site_var)
-        return s.smoothed_mean, s.smoothed_var, site_params
+        return s.var_exp, s.smoothed_mean, s.smoothed_var, site_params
 
     def prior_sample(self, num_samps, x=None):
         """
@@ -337,14 +353,14 @@ class SDEGP(object):
             dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(jnp.sort(x))])
         N = dt.shape[0]
         with loops.Scope() as s:
-            s.f_sample = jnp.zeros([N, self.obs_dim, num_samps])
+            s.f_sample = jnp.zeros([N, self.f_dim, num_samps])
             s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(99), shape=[self.state_dim, 1])
             for i in s.range(num_samps):
                 s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.state_dim, 1])
                 for k in s.range(N):
                     A = self.prior.expm(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
-                    C = jnp.linalg.cholesky(Q + 1e-10 * jnp.eye(self.state_dim))  # <--- can be a bit unstable
+                    C = jnp.linalg.cholesky(Q + 1e-8 * jnp.eye(self.state_dim))  # <--- can be a bit unstable
                     # we need to provide a different PRNG seed every time:
                     s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
                     f = (self.H @ s.m).T

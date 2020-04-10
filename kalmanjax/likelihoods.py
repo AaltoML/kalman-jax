@@ -1,9 +1,10 @@
 import jax.numpy as np
 from jax.scipy.special import erf, erfc, gammaln
+from jax.nn import softplus
 from jax import jit, partial, jacrev, random
 from jax.scipy.linalg import cholesky
 from numpy.polynomial.hermite import hermgauss
-from utils import logphi, gaussian_moment_match
+from utils import logphi, gaussian_moment_match, softplus_inv
 pi = 3.141592653589793
 
 
@@ -20,7 +21,7 @@ class Likelihood(object):
         """
         :param hyp: (hyper)parameters of the likelihood model
         """
-        self.hyp = hyp
+        self.hyp = softplus_inv(hyp)
 
     def evaluate_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this likelihood is not implemented')
@@ -199,7 +200,7 @@ class Gaussian(Likelihood):
         :return:
             𝓝(yₙ|fₙ,σ²), where σ² is the observation noise [Q, 1]
         """
-        hyp = self.hyp if hyp is None else hyp
+        hyp = softplus(self.hyp) if hyp is None else hyp
         return (2 * pi * hyp) ** -0.5 * np.exp(-0.5 * (y - f) ** 2 / hyp)
 
     @partial(jit, static_argnums=0)
@@ -213,7 +214,7 @@ class Gaussian(Likelihood):
         :return:
             log𝓝(yₙ|fₙ,σ²), where σ² is the observation noise [Q, 1]
         """
-        hyp = self.hyp if hyp is None else hyp
+        hyp = softplus(self.hyp) if hyp is None else hyp
         return -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - f) ** 2 / hyp
 
     @partial(jit, static_argnums=0)
@@ -223,7 +224,7 @@ class Gaussian(Likelihood):
             E[y|f] = f
             Var[y|f] = σ²
         """
-        hyp = self.hyp if hyp is None else hyp
+        hyp = softplus(self.hyp) if hyp is None else hyp
         return f, hyp
 
     @partial(jit, static_argnums=0)
@@ -243,7 +244,7 @@ class Gaussian(Likelihood):
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
-        hyp = self.hyp if hyp is None else hyp
+        hyp = softplus(self.hyp) if hyp is None else hyp
         return gaussian_moment_match(y, m, v, hyp)
 
 
