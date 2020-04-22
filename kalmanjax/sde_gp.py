@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from jax.ops import index, index_update
+from jax.ops import index, index_update, index_add
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random
@@ -120,7 +120,7 @@ class SDEGP(object):
             # test site parameters are 𝓝(0,∞), and will not be used
             site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
             # replace parameters at training locations with the supplied sites
-            site_mean = index_update(site_mean, index[self.train_id], site_params[0])
+            site_mean = index_add(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, gauss_update,
@@ -156,7 +156,7 @@ class SDEGP(object):
                                                                                       self.dt, self.y, site_params)
         return nlml, site_params
 
-    def run_model(self, params=None):
+    def run_model_old(self, params=None):
         """
         A single parameter update step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
@@ -181,6 +181,32 @@ class SDEGP(object):
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
                                                                               False, None, self.sites.site_params)
+        return neg_log_marg_lik, dlZ
+
+    def run_model(self, params=None):
+        """
+        A single parameter update step - to be fed to a gradient-based optimiser.
+         - we first compute the marginal lilelihood and its gradient w.r.t. the hyperparameters via filtering
+         - then update the site parameters via smoothing (site mean and variance)
+        :param params: the model parameters. If not supplied then defaults to the model's
+                       assigned parameters [num_params]
+        :return:
+            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
+            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
+        """
+        if params is None:
+            # fetch the model parameters from the prior and the likelihood
+            params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
+        # run the forward filter to calculate the filtering distribution
+        # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
+        (neg_log_marg_lik, aux), dlZ = value_and_grad(self.kalman_filter,
+                                                      argnums=2, has_aux=True)(self.y, self.dt, params, True,
+                                                                               False, None, self.sites.site_params)
+        filter_mean, filter_cov, self.sites.site_params = aux
+        # run the smoother and update the sites
+        _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
+                                                                                           filter_cov, self.dt, self.y,
+                                                                                           self.sites.site_params)
         return neg_log_marg_lik, dlZ
 
     def update_model(self, theta_prior=None):
@@ -272,10 +298,10 @@ class SDEGP(object):
                     log_lik_n = jnp.where(mask[n][..., 0, 0], jnp.zeros_like(log_lik_n), log_lik_n)
                 s.neg_log_marg_lik -= jnp.sum(log_lik_n)
                 if store:
-                    s.filtered_mean = index_update(s.filtered_mean, index[n, ...], s.m)
-                    s.filtered_cov = index_update(s.filtered_cov, index[n, ...], s.P)
-                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
-                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
+                    s.filtered_mean = index_add(s.filtered_mean, index[n, ...], s.m)
+                    s.filtered_cov = index_add(s.filtered_cov, index[n, ...], s.P)
+                    s.site_mean = index_add(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
+                    s.site_var = index_add(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if store:
             return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var))
         return s.neg_log_marg_lik
@@ -323,8 +349,8 @@ class SDEGP(object):
                 G_transpose = cho_solve((P_predicted_chol, low), tmp_gain_cov)
                 s.m = m_filtered[n, ...] + G_transpose.T @ (s.m - m_predicted)
                 s.P = P_filtered[n, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
-                s.smoothed_mean = index_update(s.smoothed_mean, index[n, ...], jnp.squeeze((self.H @ s.m).T))
-                s.smoothed_var = index_update(s.smoothed_var, index[n, ...],
+                s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], jnp.squeeze((self.H @ s.m).T))
+                s.smoothed_var = index_add(s.smoothed_var, index[n, ...],
                                               jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
                 # --- Now update the site parameters: ---
                 if site_params is not None:
@@ -334,8 +360,8 @@ class SDEGP(object):
                     var_exp_n, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
                                                                      (site_params[0][n], site_params[1][n]))
                     s.var_exp += jnp.sum(var_exp_n)
-                    s.site_mean = index_update(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
-                    s.site_var = index_update(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
+                    s.site_mean = index_add(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
+                    s.site_var = index_add(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
         if site_params is not None:
             site_params = (s.site_mean, s.site_var)
         return s.var_exp, s.smoothed_mean, s.smoothed_var, site_params
@@ -366,7 +392,7 @@ class SDEGP(object):
                     # we need to provide a different PRNG seed every time:
                     s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
                     f = (self.H @ s.m).T
-                    s.f_sample = index_update(s.f_sample, index[k, ..., i], jnp.squeeze(f))
+                    s.f_sample = index_add(s.f_sample, index[k, ..., i], jnp.squeeze(f))
         return s.f_sample
 
     def posterior_sample(self, num_samps):
@@ -391,5 +417,5 @@ class SDEGP(object):
             for i in ss.range(num_samps):
                 smoothed_sample_i, _, _ = self.predict(prior_samp_y[..., i], self.dt_all, self.mask,
                                                        (site_mean, site_var), gauss_update=True)
-                ss.smoothed_sample = index_update(ss.smoothed_sample, index[..., i], smoothed_sample_i)
+                ss.smoothed_sample = index_add(ss.smoothed_sample, index[..., i], smoothed_sample_i)
         return prior_samp - ss.smoothed_sample + post_mean[..., jnp.newaxis]

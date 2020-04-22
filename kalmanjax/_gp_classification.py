@@ -13,7 +13,7 @@ pi = 3.141592653589793
 
 print('generating some data ...')
 np.random.seed(99)
-N = 320000  # number of training points
+N = 100000  # number of training points
 x = 100 * np.random.rand(N)
 f = 6 * np.sin(pi * x / 10.0) / (pi * x / 10.0 + 1)
 y_ = f + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
