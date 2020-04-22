@@ -51,3 +51,4 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - make it so that when a filtering method is chosen, run_model() only runs the forward filter
 - implement getters and setters for parameters that involve softplus mapping
 - PL marginal likelihood approximation
+- sort out intialisation of likelihood model

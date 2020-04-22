@@ -13,7 +13,7 @@ pi = 3.141592653589793
 
 print('generating some data ...')
 np.random.seed(99)
-N = 1000  # number of training points
+N = 320000  # number of training points
 x = 100 * np.random.rand(N)
 f = 6 * np.sin(pi * x / 10.0) / (pi * x / 10.0 + 1)
 y_ = f + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
@@ -42,15 +42,15 @@ opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])  # p
 
 def gradient_step(i, state, model):
     params = get_params(state)
-    sde_gp_model.prior.hyp = params[0]
-    sde_gp_model.likelihood.hyp = params[1]
+    model.prior.hyp = params[0]
+    model.likelihood.hyp = params[1]
 
     # option 1 - Filter + Smoother + grad(Filter):
-    # neg_log_marg_lik, gradients = model.run_model()
+    neg_log_marg_lik, gradients = model.run_model()
 
     # option 2 - grad(Filter + Smoother):
-    (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
-    model.sites.site_params = site_params
+    # (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
+    # model.sites.site_params = site_params
 
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))

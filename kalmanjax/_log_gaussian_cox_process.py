@@ -49,8 +49,8 @@ opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])  # p
 
 def gradient_step(i, state, model):
     params = get_params(state)
-    sde_gp_model.prior.hyp = params[0]
-    sde_gp_model.likelihood.hyp = params[1]
+    model.prior.hyp = params[0]
+    model.likelihood.hyp = params[1]
 
     # option 1 - Filter + Smoother + grad(Filter):
     # neg_log_marg_lik, gradients = model.run_model()

@@ -23,7 +23,10 @@ def softplus_inv(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
     """
-    return np.log(np.exp(x_) - 1)
+    if x_ is None:
+        return x_
+    else:
+        return np.log(np.exp(x_) - 1)
 
 
 @jit

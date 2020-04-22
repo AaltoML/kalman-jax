@@ -199,9 +199,9 @@ class SDEGP(object):
         The Kalman update step invloves some control flow to work out whether we are
             i) initialising the sites
             ii) using supplied sites
-            iii) performing a Gaussian update with known parameters (e.g. in posterior sampling)
+            iii) performing a Gaussian update with fixed parameters (e.g. in posterior sampling or ELBO calc.)
         If store is True then we compute and return the intermediate filtering distributions
-        p(fₙ|y₁,...,yₖ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
+        p(fₙ|y₁,...,yₙ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
         return the energy / negative log-marginal likelihood, -log p(y).
         :param y: observed data [N, obs_dim]
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
@@ -212,6 +212,8 @@ class SDEGP(object):
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
         :return:
             if store is True:
+                neg_log_marg_lik: the filter energy, i.e. negative log-marginal likelihood -log p(y),
+                                  used for hyperparameter optimisation (learning) [scalar]
                 filtered_mean: intermediate filtering means [N, state_dim, 1]
                 filtered_cov: intermediate filtering covariances [N, state_dim, state_dim]
                 site_mean: mean of the approximate likelihood sₙ(fₙ) [N, obs_dim]
