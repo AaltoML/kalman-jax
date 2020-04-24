@@ -253,18 +253,16 @@ class SDEGP(object):
         if mask is not None:
             mask = mask[..., jnp.newaxis, jnp.newaxis]  # align mask.shape with y.shape
         N = dt.shape[0]
+        if site_params is not None:
+            site_mean, site_var = site_params
         with loops.Scope() as s:
             s.neg_log_marg_lik = 0.0  # negative log-marginal likelihood
             s.m, s.P = self.minf, self.Pinf
             if store:
                 s.filtered_mean = jnp.zeros([N, self.state_dim, 1])
                 s.filtered_cov = jnp.zeros([N, self.state_dim, self.state_dim])
-            if site_params is not None:
-                s.site_mean, s.site_var = site_params
-            else:
-                if store:
-                    s.site_mean = jnp.zeros([N, self.f_dim])
-                    s.site_var = jnp.zeros([N, self.f_dim])
+                s.site_mean = jnp.zeros([N, self.f_dim])
+                s.site_var = jnp.zeros([N, self.f_dim])
             for n in s.range(N):
                 y_n = y[n]
                 # -- KALMAN PREDICT --
@@ -281,11 +279,11 @@ class SDEGP(object):
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 if gauss_update:  # are we performing inference in an auxillary Gaussian model? e.g. in post. sampling
-                    log_lik_n, site_mu, site_var = gaussian_moment_match(y_n, mu, var, s.site_var[n])
+                    log_lik_n, site_mu, site_var = gaussian_moment_match(site_mean[n], mu, var, site_var[n])
                 else:
                     log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
                     if site_params is not None:  # use supplied site parameters to perform the update
-                        site_mu, site_var = s.site_mean[n], s.site_var[n]
+                        site_mu, site_var = site_mean[n], site_var[n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + site_var
                 L, low = cho_factor(S)
@@ -415,7 +413,7 @@ class SDEGP(object):
         with loops.Scope() as ss:
             ss.smoothed_sample = jnp.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
-                smoothed_sample_i, _, _ = self.predict(prior_samp_y[..., i], self.dt_all, self.mask,
-                                                       (site_mean, site_var), gauss_update=True)
+                smoothed_sample_i, _, _ = self.predict(jnp.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
+                                                       (prior_samp_y[..., i], site_var), gauss_update=True)
                 ss.smoothed_sample = index_add(ss.smoothed_sample, index[..., i], smoothed_sample_i)
         return prior_samp - ss.smoothed_sample + post_mean[..., jnp.newaxis]
