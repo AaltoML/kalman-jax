@@ -25,7 +25,7 @@ x_test = x
 
 meanval = np.log(len(disaster_timings)/num_time_bins)  # TODO: incorporate mean
 
-var_f = 0.1  # GP variance
+var_f = 1.0  # GP variance
 len_f = 1.0  # GP lengthscale
 
 theta_prior = jnp.array([var_f, len_f])
@@ -33,8 +33,8 @@ theta_lik = jnp.array([])
 
 prior_ = priors.Matern52(theta_prior)
 lik_ = likelihoods.Poisson(theta_lik)
-approx_inf_ = EP(power=0.5)
-# approx_inf_ = PL()
+# approx_inf_ = EP(power=0.5)
+approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)
 # approx_inf_ = IKS()
 # approx_inf_ = EKS()
@@ -42,7 +42,7 @@ approx_inf_ = EP(power=0.5)
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=1e-2)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])  # params mapped through inverse softplus
 
@@ -53,11 +53,11 @@ def gradient_step(i, state, model):
     model.likelihood.hyp = params[1]
 
     # option 1 - Filter + Smoother + grad(Filter):
-    # neg_log_marg_lik, gradients = model.run_model()
+    neg_log_marg_lik, gradients = model.run_model()
 
     # option 2 - grad(Filter + Smoother):
-    (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
-    model.sites.site_params = site_params
+    # (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
+    # model.sites.site_params = site_params
 
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))
@@ -66,7 +66,7 @@ def gradient_step(i, state, model):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(20):
+for j in range(2000):
     opt_state = gradient_step(j, opt_state, sde_gp_model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))

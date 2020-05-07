@@ -274,8 +274,8 @@ class Matern72(Prior):
         dtlam = dt * lam
         dtlam2 = dtlam ** 2
         A = np.exp(-dtlam) \
-            * (dt * np.array([[lam * (1.0 + 0.5 * dtlam + dtlam * lam / 6.0), 1.0 + dtlam + 0.5 * dtlam2,
-                              0.5 * dt * (1.0 + dtlam),                       dt ** 2 / 2],
+            * (dt * np.array([[lam * (1.0 + 0.5 * dtlam + dtlam2 / 6.0),      1.0 + dtlam + 0.5 * dtlam2,
+                              0.5 * dt * (1.0 + dtlam),                       dt ** 2 / 6],
                               [-dtlam2 * lam ** 2.0 / 6.0,                    lam * (1.0 + 0.5 * dtlam - 0.5 * dtlam2),
                               1.0 + dtlam - 0.5 * dtlam2,                     dt * (0.5 - dtlam / 6.0)],
                               [lam3 * dtlam * (dtlam / 6.0 - 0.5),            dtlam * lam2 * (0.5 * dtlam - 2.0),
