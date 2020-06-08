@@ -243,3 +243,37 @@ class PrL(PL):
     A single forward pass of the PL filter is called the prior linearisation (PrL) filter
     """
     pass
+
+
+class VI(ApproxInf):
+    """
+    Natural gradient VI (using the conjugate-computation VI approach)
+    Refs:
+        Khan & Lin 2017 "Conugate-computation variational inference - converting inference
+                         in non-conjugate models in to inference in conjugate models"
+        Chang, Wilkinson, Khan & Solin 2020 "Fast variational learning in state space Gaussian process models"
+    """
+    def __init__(self, site_params=None, damping=1.):
+        self.damping = damping
+        super().__init__(site_params=site_params)
+        self.name = 'variational inference (VI)'
+
+    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
+        """
+        The update function takes a likelihood as input, and uses CVI to update the site parameters
+        """
+        if site_params is None:
+            _, dE, d2E = likelihood.variational_expectation(y, m, v, hyp)
+            site_var = -0.5 / d2E
+            site_mean = m + dE * site_var
+        else:
+            site_mean, site_var = site_params
+            log_marg_lik, dE, d2E = likelihood.variational_expectation(y, m, v, hyp)
+            lambda_t_1 = site_mean / site_var
+            lambda_t_2 = 1 / site_var
+            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE - 2 * d2E * m)
+            lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * d2E)
+            site_mean = lambda_t_1 / lambda_t_2
+            site_var = np.abs(1 / lambda_t_2)
+        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
+        return log_marg_lik, site_mean, site_var

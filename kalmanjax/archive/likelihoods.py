@@ -497,3 +497,132 @@ class Poisson(Likelihood):
             Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
+
+
+class Beta(Likelihood):
+    """
+    likBeta(f) = 1/Z * y^(mu*phi-1) * (1-y)^((1-mu)*phi-1) with
+    mean=mu and variance=mu*(1-mu)/(1+phi) where mu = g(f) is the Beta intensity,
+    f is a Gaussian process, y is the interval data and
+    Z = Gamma(phi)/Gamma(phi*mu)/Gamma(phi*(1-mu)).
+    Hence, we have
+    llik(f) = log(likBeta(f)) = -lam*(y-mu)^2/(2*mu^2*y) - log(Zy).
+    """
+    def __init__(self, hyp=None, p1=0.5, p2=0.5):
+        """
+        :param hyp: None
+        """
+        self.p1 = p1
+        self.p2 = p2
+        super().__init__(hyp=hyp)
+        self.name = 'Beta'
+
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
+        return beta()
+
+
+class SumOfGaussians(Likelihood):
+    """
+    A sum of two Gaussians
+        p(yₙ|fₙ) = (𝓝(yₙ|fₙ-ω,σ₁²) + 𝓝(yₙ|fₙ+ω,σ₂²)) / 2
+    """
+    # def __init__(self, hyp=None, omega=2., var1=0.5, var2=2.):
+    # def __init__(self, hyp=None, omega=1., var1=0.1, var2=0.7):
+    def __init__(self, hyp=None, omega=0.8, var1=0.3, var2=0.5):
+        """
+        :param hyp: None
+        """
+        self.omega = omega
+        self.var1 = var1
+        self.var2 = var2
+        super().__init__(hyp=hyp)
+        self.name = 'sum of Gaussians'
+
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
+        return (npdf(y, f+self.omega, self.var1) + npdf(y, f-self.omega, self.var2)) / 2.
+
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
+        return np.log(self.evaluate_likelihood(y, f, hyp))
+
+    def sample(self, f, rng_key=123):
+        samp1 = random.normal(random.PRNGKey(rng_key), shape=f.shape)
+        samp2 = random.normal(random.PRNGKey(2*rng_key), shape=f.shape)
+        w = binomial(1, .5, f.shape)
+        # print(w)
+        # print(1.0-w)
+        gauss1 = f - self.omega + np.sqrt(self.var1) * samp1
+        gauss2 = f + self.omega + np.sqrt(self.var2) * samp2
+        return w * gauss1 + (1-w) * gauss2
+        # print(gauss2.shape)
+        # return (1.0-w) * gauss2
+
+    @partial(jit, static_argnums=0)
+    def conditional_moments(self, f, hyp=None):
+        return f, (self.var1 + self.var2) / 2
+
+    # @partial(jit, static_argnums=0)
+    # def moment_match(self, y, m, v, hyp=None, power=1.0):
+    #     # log partition function, lZ:
+    #     # logZₙ = log ∫ 𝓝(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ
+    #     #       = log 𝓝(yₙ|mₙ,σ²+vₙ)
+    #     lZ = (
+    #             - (y - m) ** 2 / (hyp + v) / 2
+    #             - np.log(np.maximum(2 * pi * (hyp + v), 1e-10)) / 2
+    #     )
+    #     # 𝓝(yₙ|fₙ,σ²) = 𝓝(fₙ|yₙ,σ²)
+    #     site_mean = y
+    #     site_var = hyp
+    #     return lZ, site_mean, site_var
+
+
+class Threshold(Likelihood):
+    """
+    The threshold likelihood resulting from the spike and slab prior
+        p(yₙ|fₙ) = 𝓝(yₙ|h(fₙ),σ²)
+    """
+    def __init__(self, hyp, rho=1.2, p=0.2):
+        """
+        :param hyp: the noise variance σ² [scalar]
+        """
+        self.rho = rho
+        self.p = p
+        super().__init__(hyp=hyp)
+        if self.hyp is None:
+            print('using default likelihood parameter since none was supplied')
+            self.hyp = 0.1
+        self.name = 'Threshold'
+
+    @partial(jit, static_argnums=0)
+    def link_fn(self, latent_mean):
+        return (1 - self.rho) * latent_mean + self.rho * threshold_func(latent_mean, self.p)
+
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
+        hyp = self.hyp if hyp is None else hyp
+        return npdf(y, f, hyp)
+
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
+        hyp = self.hyp if hyp is None else hyp
+        return log_npdf(y, f, hyp)
+
+    @partial(jit, static_argnums=0)
+    def conditional_moments(self, f, hyp=None):
+        hyp = self.hyp if hyp is None else hyp
+        lik_expectation = self.link_fn(f)
+        return lik_expectation, hyp
+
+
+def npdf(x, m, v):
+    return np.exp(-(x - m) ** 2 / (2 * v)) / np.sqrt(2 * pi * v)
+
+
+def log_npdf(x, m, v):
+    return -(x - m) ** 2 / (2 * v) - 0.5 * np.log(2 * pi * v)
+
+
+def threshold_func(x, p):
+    return x * p * npdf(x, 0, 11) / ((1 - p) * npdf(x, 0, 1) + p * npdf(x, 0, 11))

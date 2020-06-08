@@ -1,13 +1,12 @@
 import numpy as np
 import jax.numpy as jnp
 from jax.nn import softplus
-from jax import value_and_grad
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 import pandas as pd
 from sde_gp import SDEGP
-from approximate_inference import EP, PL, CL, IKS, EKS, EKEP
+from approximate_inference import EP, PL, CL, IKS, EKS, EKEP, VI
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -39,6 +38,7 @@ approx_inf_ = EP(power=0.5)
 # approx_inf_ = IKS()
 # approx_inf_ = EKS()
 # approx_inf_ = EKEP(power=0.5)
+# approx_inf_ = VI()
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
