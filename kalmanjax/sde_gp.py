@@ -4,7 +4,7 @@ from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
-from utils import gaussian_moment_match, sample_gaussian_noise
+from utils import sample_gaussian_noise
 import numpy as np
 from approximate_inference import EP
 from jax.config import config
@@ -30,6 +30,7 @@ class SDEGP(object):
         - Iterated Kalman smoother (IKS)
         - Extended Kalman EP (EKEP)
         - Extended Kalman smoother (EKS)
+        - Variational Inference - with natural gradients (VI)
     """
     def __init__(self, prior, likelihood, x, y, x_test=None, approx_inf=None):
         """
@@ -95,7 +96,7 @@ class SDEGP(object):
         return (jnp.array(t), jnp.array(test_id), jnp.array(train_id), jnp.array(y_all),
                 jnp.array(mask), jnp.array(dt), jnp.array(dt_all))
 
-    def predict(self, y=None, dt=None, mask=None, site_params=None, gauss_update=False):
+    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -104,7 +105,7 @@ class SDEGP(object):
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [M, 1]
         :param mask: a boolean array signifying which elements are observed and which are nan [M, 1]
         :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
-        :param gauss_update: notify whether we are using an auxillary Gaussian model, e.g. during posterior sampling
+        :param sampling: notify whether we are doing posterior sampling
         :return:
             posterior_mean: the posterior predictive mean [M, obs_dim]
             posterior_var: the posterior predictive variance [M, obs_dim]
@@ -115,7 +116,7 @@ class SDEGP(object):
         mask = self.mask if mask is None else mask
         params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         site_params = self.sites.site_params if site_params is None else site_params
-        if site_params is not None and not gauss_update:
+        if site_params is not None and not sampling:
             # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
             site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
@@ -123,8 +124,7 @@ class SDEGP(object):
             site_mean = index_add(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
-        _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, gauss_update,
-                                                                       mask, site_params)
+        _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params)
         _, posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
         return posterior_mean, posterior_var, site_params
 
@@ -141,7 +141,7 @@ class SDEGP(object):
         if params is None:
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, False)
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False)
         return neg_log_marg_lik, dlZ
 
     def filter_smoother(self, params):
@@ -150,7 +150,7 @@ class SDEGP(object):
         """
         # if self.sites.site_params=None, then the filter initialises the sites too
         nlml, (filter_mean, filter_cov, site_params) = self.kalman_filter(self.y, self.dt, params,
-                                                                          True, False, None, self.sites.site_params)
+                                                                          True, None, self.sites.site_params)
         # run the smoother and update the sites
         var_exp, post_mean, post_var, site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
                                                                                       self.dt, self.y, site_params)
@@ -173,14 +173,14 @@ class SDEGP(object):
         # run the forward filter to calculate the filtering distribution
         # if self.sites.site_params=None then the filter initialises the sites too
         _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
-                                                                                  False, None, self.sites.site_params)
+                                                                                  None, self.sites.site_params)
         # run the smoother and update the sites
         _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
                                                                                            filter_cov, self.dt, self.y,
                                                                                            self.sites.site_params)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
-                                                                              False, None, self.sites.site_params)
+                                                                              None, self.sites.site_params)
         return neg_log_marg_lik, dlZ
 
     def run_model(self, params=None):
@@ -201,7 +201,7 @@ class SDEGP(object):
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         (neg_log_marg_lik, aux), dlZ = value_and_grad(self.kalman_filter,
                                                       argnums=2, has_aux=True)(self.y, self.dt, params, True,
-                                                                               False, None, self.sites.site_params)
+                                                                               None, self.sites.site_params)
         filter_mean, filter_cov, self.sites.site_params = aux
         # run the smoother and update the sites
         _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
@@ -219,7 +219,7 @@ class SDEGP(object):
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
 
     @partial(jit, static_argnums=(0, 4, 5))
-    def kalman_filter(self, y, dt, params, store=False, gauss_update=False, mask=None, site_params=None):
+    def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
         The Kalman update step invloves some control flow to work out whether we are
@@ -233,7 +233,6 @@ class SDEGP(object):
         :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
         :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
         :param store: flag to notify whether to store the intermediates
-        :param gauss_update: flag to notify whether we just want a Gaussian update (e.g. during posterior sampling)
         :param mask: boolean array signifying which elements of y are observed [N, obs_dim]
         :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
         :return:
@@ -253,8 +252,6 @@ class SDEGP(object):
         if mask is not None:
             mask = mask[..., jnp.newaxis, jnp.newaxis]  # align mask.shape with y.shape
         N = dt.shape[0]
-        if site_params is not None:
-            site_mean, site_var = site_params
         with loops.Scope() as s:
             s.neg_log_marg_lik = 0.0  # negative log-marginal likelihood
             s.m, s.P = self.minf, self.Pinf
@@ -278,12 +275,9 @@ class SDEGP(object):
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
-                if gauss_update:  # are we performing inference in an auxillary Gaussian model? e.g. in post. sampling
-                    log_lik_n, site_mu, site_var = gaussian_moment_match(site_mean[n], mu, var, site_var[n])
-                else:
-                    log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
-                    if site_params is not None:  # use supplied site parameters to perform the update
-                        site_mu, site_var = site_mean[n], site_var[n]
+                log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
+                if site_params is not None:  # use supplied site parameters to perform the update
+                    site_mu, site_var = site_params[0][n], site_params[1][n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + site_var
                 L, low = cho_factor(S)
@@ -349,7 +343,7 @@ class SDEGP(object):
                 s.P = P_filtered[n, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
                 s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], jnp.squeeze((self.H @ s.m).T))
                 s.smoothed_var = index_add(s.smoothed_var, index[n, ...],
-                                              jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
+                                           jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
                 # --- Now update the site parameters: ---
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
@@ -414,6 +408,6 @@ class SDEGP(object):
             ss.smoothed_sample = jnp.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
                 smoothed_sample_i, _, _ = self.predict(jnp.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
-                                                       (prior_samp_y[..., i], site_var), gauss_update=True)
+                                                       (prior_samp_y[..., i], site_var), sampling=True)
                 ss.smoothed_sample = index_add(ss.smoothed_sample, index[..., i], smoothed_sample_i)
         return prior_samp - ss.smoothed_sample + post_mean[..., jnp.newaxis]

@@ -33,8 +33,8 @@ theta_lik = jnp.array([])
 
 prior_ = priors.Matern52(theta_prior)
 lik_ = likelihoods.Poisson(theta_lik)
-# approx_inf_ = EP(power=0.5)
-approx_inf_ = PL()
+approx_inf_ = EP(power=0.5)
+# approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)
 # approx_inf_ = IKS()
 # approx_inf_ = EKS()
@@ -42,7 +42,7 @@ approx_inf_ = PL()
 
 sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=1e-2)
+opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])  # params mapped through inverse softplus
 
@@ -66,7 +66,7 @@ def gradient_step(i, state, model):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(2000):
+for j in range(500):
     opt_state = gradient_step(j, opt_state, sde_gp_model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))

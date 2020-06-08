@@ -54,11 +54,11 @@ def gradient_step(i, state, model):
     model.likelihood.hyp = params[1]
 
     # option 1 - Filter + Smoother + grad(Filter):
-    # neg_log_marg_lik, gradients = model.run_model()
+    neg_log_marg_lik, gradients = model.run_model()
 
     # option 2 - grad(Filter + Smoother):
-    (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
-    model.sites.site_params = site_params
+    # (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
+    # model.sites.site_params = site_params
 
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), softplus(params[1]), neg_log_marg_lik))
