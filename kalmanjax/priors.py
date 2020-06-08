@@ -24,7 +24,7 @@ class Prior(object):
     Pinf   - Covariance of the stationary process
     """
     def __init__(self, hyp=None):
-        self.hyp = softplus_inv(hyp)
+        self.hyp = softplus_inv(np.array(hyp))
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -612,6 +612,191 @@ class SubbandMatern52(Prior):
             [-0.5*dt ** 2 * lam**3 * R,           (1. + dt*lam*(1. - dt*lam)) * R, -0.5 * dt * (-2. + dt * lam) * R],
             [0.5*dt*lam**3 * (-2. + dt*lam) * R,  dt * lam**2*(-3. + dt*lam) * R,  0.5*(2. + dt*lam*(-4. + dt*lam)) * R]
         ])
+        return A
+
+
+class Periodic(Prior):
+    """
+    Periodic kernel in SDE form.
+    Hyperparameters:
+        variance, σ²
+        lengthscale, l
+        period, p
+    The associated continuous-time state space model matrices are constructed via
+    a sum of cosines.
+    """
+    def __init__(self, hyp=None, N=6):
+        super().__init__(hyp=hyp)
+        if self.hyp is None:
+            print('using default kernel parameters since none were supplied')
+            self.hyp = np.array([1.0, 1.0, 1.0])
+        self.name = 'Periodic'
+        self.N = N
+        self.K = np.meshgrid(np.arange(self.N + 1), np.arange(self.N + 1))[1]
+        factorial_mesh_K = np.array([[1., 1., 1., 1., 1., 1., 1.],
+                                     [1., 1., 1., 1., 1., 1., 1.],
+                                     [2., 2., 2., 2., 2., 2., 2.],
+                                     [6., 6., 6., 6., 6., 6., 6.],
+                                     [24., 24., 24., 24., 24., 24., 24.],
+                                     [120., 120., 120., 120., 120., 120., 120.],
+                                     [720., 720., 720., 720., 720., 720., 720.]])
+        b = np.array([[1., 0., 0., 0., 0., 0., 0.],
+                      [0., 2., 0., 0., 0., 0., 0.],
+                      [2., 0., 2., 0., 0., 0., 0.],
+                      [0., 6., 0., 2., 0., 0., 0.],
+                      [6., 0., 8., 0., 2., 0., 0.],
+                      [0., 20., 0., 10., 0., 2., 0.],
+                      [20., 0., 30., 0., 12., 0., 2.]])
+        self.b_fmK_2K = b * (1. / factorial_mesh_K) * (2. ** -self.K)
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        var, ell, period = hyperparams
+        a = self.b_fmK_2K * ell ** (-2. * self.K) * np.exp(-1. / ell ** 2.) * var
+        q2 = np.sum(a, axis=0)
+        # The angular frequency
+        omega = 2 * np.pi / period
+        # The model
+        F = np.kron(np.diag(np.arange(self.N + 1)), np.array([[0., -omega], [omega, 0.]]))
+        L = np.eye(2 * (self.N + 1))
+        Qc = np.zeros(2 * (self.N + 1))
+        Pinf = np.kron(np.diag(q2), np.eye(2))
+        H = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        """
+        Calculation of the closed form discrete-time state
+        transition matrix A = expm(FΔt) for the Periodic prior
+        :param dt: step size(s), Δt = tₙ - tₙ₋₁ [1]
+        :param hyperparams: hyperparameters of the prior: variance, lengthscale, period [3, 1]
+        :return: state transition matrix A [2(N+1), 2(N+1)]
+        """
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell, period = hyperparams[1], hyperparams[2]
+        # The angular frequency
+        omega = 2 * np.pi / period
+        harmonics = np.arange(self.N + 1) * omega
+        R0 = rotation_matrix(dt, harmonics[0])
+        R1 = rotation_matrix(dt, harmonics[1])
+        R2 = rotation_matrix(dt, harmonics[2])
+        R3 = rotation_matrix(dt, harmonics[3])
+        R4 = rotation_matrix(dt, harmonics[4])
+        R5 = rotation_matrix(dt, harmonics[5])
+        R6 = rotation_matrix(dt, harmonics[6])
+        A = np.block([
+            [R0, np.zeros([2, 12])],
+            [np.zeros([2, 2]),  R1, np.zeros([2, 10])],
+            [np.zeros([2, 4]),  R2, np.zeros([2, 8])],
+            [np.zeros([2, 6]),  R3, np.zeros([2, 6])],
+            [np.zeros([2, 8]),  R4, np.zeros([2, 4])],
+            [np.zeros([2, 10]), R5, np.zeros([2, 2])],
+            [np.zeros([2, 12]), R6]
+        ])
+        return A
+
+
+class QuasiPeriodicMatern12(Prior):
+    """
+    Quasi-periodic kernel in SDE form (product of Periodic and Matern-1/2).
+    Hyperparameters:
+        variance, σ²
+        lengthscale of Periodic, l_p
+        period, p
+        lengthscale of Matern, l_m
+    The associated continuous-time state space model matrices are constructed via
+    a sum of cosines times a Matern-1/2.
+    """
+    def __init__(self, hyp=None, N=6):
+        super().__init__(hyp=hyp)
+        if self.hyp is None:
+            print('using default kernel parameters since none were supplied')
+            self.hyp = np.array([1.0, 1.0, 1.0, 1.0])
+        self.name = 'Quasi-Periodic Exponential'
+        self.N = N
+        self.K = np.meshgrid(np.arange(self.N + 1), np.arange(self.N + 1))[1]
+        factorial_mesh_K = np.array([[1., 1., 1., 1., 1., 1., 1.],
+                                     [1., 1., 1., 1., 1., 1., 1.],
+                                     [2., 2., 2., 2., 2., 2., 2.],
+                                     [6., 6., 6., 6., 6., 6., 6.],
+                                     [24., 24., 24., 24., 24., 24., 24.],
+                                     [120., 120., 120., 120., 120., 120., 120.],
+                                     [720., 720., 720., 720., 720., 720., 720.]])
+        b = np.array([[1., 0., 0., 0., 0., 0., 0.],
+                      [0., 2., 0., 0., 0., 0., 0.],
+                      [2., 0., 2., 0., 0., 0., 0.],
+                      [0., 6., 0., 2., 0., 0., 0.],
+                      [6., 0., 8., 0., 2., 0., 0.],
+                      [0., 20., 0., 10., 0., 2., 0.],
+                      [20., 0., 30., 0., 12., 0., 2.]])
+        factorial_mesh_K = factorial_mesh_K[:self.N + 1, :self.N + 1]
+        b = b[:self.N + 1, :self.N + 1]
+        self.b_fmK_2K = b * (1. / factorial_mesh_K) * (2. ** -self.K)
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        var, ell_p, period, ell_m = hyperparams
+        var_p = 1.
+        a = self.b_fmK_2K * ell_p ** (-2. * self.K) * np.exp(-1. / ell_p ** 2.) * var_p
+        q2 = np.sum(a, axis=0)
+        # The angular frequency
+        omega = 2 * np.pi / period
+        # The model
+        F_p = np.kron(np.diag(np.arange(self.N + 1)), np.array([[0., -omega], [omega, 0.]]))
+        L_p = np.eye(2 * (self.N + 1))
+        # Qc_p = np.zeros(2 * (self.N + 1))
+        Pinf_p = np.kron(np.diag(q2), np.eye(2))
+        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        F_m = np.array([[-1.0 / ell_m]])
+        L_m = np.array([[1.0]])
+        Qc_m = np.array([[2.0 * var / ell_m]])
+        H_m = np.array([[1.0]])
+        Pinf_m = np.array([[var]])
+        F = np.kron(F_m, np.eye(2 * (self.N + 1))) + F_p
+        L = np.kron(L_m, L_p)
+        Qc = np.kron(Pinf_p, Qc_m)
+        H = np.kron(H_m, H_p)
+        Pinf = np.kron(Pinf_m, Pinf_p)
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        """
+        Calculation of the closed form discrete-time state
+        transition matrix A = expm(FΔt) for the Quasi-Periodic Exponential prior
+        :param dt: step size(s), Δt = tₙ - tₙ₋₁ [1]
+        :param hyperparams: hyperparameters of the prior: variance, lengthscale, period [3, 1]
+        :return: state transition matrix A [2*(N+1), 2*(N+1)]
+        """
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        period, ell_m = hyperparams[2], hyperparams[3]
+        # The angular frequency
+        omega = 2 * np.pi / period
+        # harmonics = np.arange(self.N + 1) * omega
+        harmonics = np.arange(7) * omega
+        R0 = rotation_matrix(dt, harmonics[0])
+        R1 = rotation_matrix(dt, harmonics[1])
+        R2 = rotation_matrix(dt, harmonics[2])
+        R3 = rotation_matrix(dt, harmonics[3])
+        R4 = rotation_matrix(dt, harmonics[4])
+        R5 = rotation_matrix(dt, harmonics[5])
+        R6 = rotation_matrix(dt, harmonics[6])
+        A = np.exp(-dt / ell_m) * np.block([
+            [R0, np.zeros([2, 12])],
+            [np.zeros([2, 2]),  R1, np.zeros([2, 10])],
+            [np.zeros([2, 4]),  R2, np.zeros([2, 8])],
+            [np.zeros([2, 6]),  R3, np.zeros([2, 6])],
+            [np.zeros([2, 8]),  R4, np.zeros([2, 4])],
+            [np.zeros([2, 10]), R5, np.zeros([2, 2])],
+            [np.zeros([2, 12]), R6]
+        ])
+        state_dim = 2 * (self.N + 1)
+        A = A[:state_dim, :state_dim]
         return A
 
 

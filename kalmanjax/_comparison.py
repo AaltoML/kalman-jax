@@ -1,7 +1,5 @@
 import numpy as np
-import jax.numpy as jnp
 from jax.nn import softplus
-from utils import softplus_inv
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
@@ -27,11 +25,10 @@ x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
 
-theta_prior = jnp.array([var_f, len_f])
-theta_lik = jnp.array([])
+theta_prior = [var_f, len_f]
 
 prior_ = prior(theta_prior)
-lik_ = lik(theta_lik)
+lik_ = lik()
 approx_inf_1 = EP(power=0.1)
 approx_inf_2 = EP(power=0.9)
 

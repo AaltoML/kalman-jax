@@ -1,5 +1,4 @@
 import numpy as np
-import jax.numpy as jnp
 from jax.nn import softplus
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
@@ -30,10 +29,11 @@ var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
 var_y = 0.5  # observation noise
 
-theta_prior = jnp.array([var_f, len_f])
-theta_lik = jnp.array(var_y)
+theta_prior = [var_f, len_f]
+theta_lik = var_y
 
 prior_ = priors.Matern52(theta_prior)
+# prior_ = priors.QuasiPeriodicMatern12([var_f, len_f, 20., 50.])
 lik_ = likelihoods.Gaussian(theta_lik)
 approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()

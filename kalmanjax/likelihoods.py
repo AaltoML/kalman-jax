@@ -21,7 +21,8 @@ class Likelihood(object):
         """
         :param hyp: (hyper)parameters of the likelihood model
         """
-        self.hyp = softplus_inv(hyp)
+        hyp = [] if hyp is None else hyp
+        self.hyp = softplus_inv(np.array(hyp))
 
     def evaluate_likelihood(self, y, f, hyp=None):
         raise NotImplementedError('direct evaluation of this likelihood is not implemented')
@@ -310,11 +311,8 @@ class Probit(Likelihood):
         Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
     for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
     """
-    def __init__(self, hyp):
-        """
-        :param hyp: None. This likelihood model has no hyperparameters.
-        """
-        super().__init__(hyp=hyp)
+    def __init__(self):
+        super().__init__(hyp=None)
         self.name = 'Probit'
 
     @staticmethod
@@ -439,12 +437,11 @@ class Poisson(Likelihood):
     'exp':      link(fₙ) = exp(fₙ),         we have p(yₙ|fₙ) = exp(fₙyₙ-exp(fₙ))           / Zy.
     'logistic': link(fₙ) = log(1+exp(fₙ))), we have p(yₙ|fₙ) = logʸ(1+exp(fₙ)))(1+exp(fₙ)) / Zy.
     """
-    def __init__(self, hyp=None, link='exp'):
+    def __init__(self, link='exp'):
         """
-        :param hyp: None. This likelihood model has no hyperparameters
         :param link: link function, either 'exp' or 'logistic'
         """
-        super().__init__(hyp=hyp)
+        super().__init__(hyp=None)
         if link is 'exp':
             self.link_fn = lambda mu: np.exp(mu)
         elif link is 'logistic':

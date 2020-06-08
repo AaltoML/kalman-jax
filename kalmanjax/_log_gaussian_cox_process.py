@@ -1,6 +1,4 @@
 import numpy as np
-import jax.numpy as jnp
-from jax.nn import softplus
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
@@ -28,11 +26,10 @@ meanval = np.log(len(disaster_timings)/num_time_bins)  # TODO: incorporate mean
 var_f = 1.0  # GP variance
 len_f = 1.0  # GP lengthscale
 
-theta_prior = jnp.array([var_f, len_f])
-theta_lik = jnp.array([])
+theta_prior = [var_f, len_f]
 
 prior_ = priors.Matern52(theta_prior)
-lik_ = likelihoods.Poisson(theta_lik)
+lik_ = likelihoods.Poisson()
 approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
 # approx_inf_ = CL(power=0.5)
