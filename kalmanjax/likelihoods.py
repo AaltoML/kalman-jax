@@ -188,8 +188,8 @@ class Likelihood(object):
         :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
         :return:
             exp_log_lik: the expected log likelihood, E[log p(yₙ|fₙ)]  [scalar]
-            dE: first derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
-            d2E: second derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
+            dE_dm: derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
+            dE_dv: derivative of E[log p(yₙ|fₙ)] w.r.t. vₙ  [scalar]
         """
         x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
         w = w / np.sqrt(pi)  # scale weights by 1/√π
@@ -205,18 +205,18 @@ class Likelihood(object):
         # Compute first derivative via quadrature:
         # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|xᵢ√(2vₙ) + mₙ)
-        dE = np.sum(
+        dE_dm = np.sum(
             (sigma_points - m) / v
             * weighted_log_likelihood_eval
         )
         # Compute second derivative via quadrature:
-        # d²E[log p(yₙ|fₙ)]/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] log p(yₙ|xᵢ√(2vₙ) + mₙ)
-        d2E = np.sum(
+        # dE[log p(yₙ|fₙ)]/dvₙ = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|xᵢ√(2vₙ) + mₙ)
+        dE_dv = np.sum(
             (0.5 * (v ** -2) * (sigma_points - m) ** 2 - 0.5 * v ** -1)
             * weighted_log_likelihood_eval
         )
-        return exp_log_lik, dE, d2E
+        return exp_log_lik, dE_dm, dE_dv
 
     @partial(jit, static_argnums=0)
     def variational_expectation(self, y, m, v, hyp=None):

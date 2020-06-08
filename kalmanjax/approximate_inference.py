@@ -270,16 +270,16 @@ class VI(ApproxInf):
         The update function takes a likelihood as input, and uses CVI to update the site parameters
         """
         if site_params is None:
-            _, dE, d2E = likelihood.variational_expectation(y, m, v, hyp)
-            site_var = -0.5 / d2E
-            site_mean = m + dE * site_var
+            _, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp)
+            site_var = -0.5 / dE_dv
+            site_mean = m + dE_dm * site_var
         else:
             site_mean, site_var = site_params
-            log_marg_lik, dE, d2E = likelihood.variational_expectation(y, m, v, hyp)
+            log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp)
             lambda_t_1 = site_mean / site_var
             lambda_t_2 = 1 / site_var
-            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE - 2 * d2E * m)
-            lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * d2E)
+            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv * m)
+            lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
             site_mean = lambda_t_1 / lambda_t_2
             site_var = np.abs(1 / lambda_t_2)
         log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
