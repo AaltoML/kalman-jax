@@ -4,11 +4,12 @@ import matplotlib.pyplot as plt
 import time
 import pandas as pd
 from sde_gp import SDEGP
-from approximate_inference import EP, PL, CL, IKS, EKS, EKEP, VI
+import approximate_inference as approx_inf
 import priors
 import likelihoods
-from utils import softplus_list
-pi = 3.141592653589793
+from utils import softplus_list, plot
+
+plot_intermediate = False
 
 print('loading coal data ...')
 disaster_timings = pd.read_csv('../data/coal.txt', header=None).values[:, 0]
@@ -28,60 +29,64 @@ len_f = 1.0  # GP lengthscale
 
 theta_prior = [var_f, len_f]
 
-prior_ = priors.Matern52(theta_prior)
-lik_ = likelihoods.Poisson()
-approx_inf_ = EP(power=0.5)
-# approx_inf_ = PL()
-# approx_inf_ = CL(power=0.5)
-# approx_inf_ = IKS()
-# approx_inf_ = EKS()
-# approx_inf_ = EKEP(power=0.5)
-# approx_inf_ = VI()
+prior = priors.Matern52(theta_prior)
+lik = likelihoods.Poisson()
+inf_method = approx_inf.EP(power=0.5)
+# inf_method = approx_inf.PL()
+# inf_method = approx_inf.CL(power=0.5)
+# inf_method = approx_inf.IKS()
+# inf_method = approx_inf.EKS()
+# inf_method = approx_inf.EKEP(power=0.5)
+# inf_method = approx_inf.VI()
 
-sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
+model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
-opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])
+opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
 
-def gradient_step(i, state, model):
+def gradient_step(i, state, mod):
     params = get_params(state)
-    model.prior.hyp = params[0]
-    model.likelihood.hyp = params[1]
+    mod.prior.hyp = params[0]
+    mod.likelihood.hyp = params[1]
 
     # grad(Filter) + Smoother:
-    neg_log_marg_lik, gradients = model.run_model()
+    neg_log_marg_lik, gradients = mod.run_model()
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, prior_params[0], prior_params[1], neg_log_marg_lik))
+
+    if plot_intermediate:
+        plot(mod, i)
+
     return opt_update(i, gradients, state)
 
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
 for j in range(500):
-    opt_state = gradient_step(j, opt_state, sde_gp_model)
+    opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _ = sde_gp_model.predict()
+posterior_mean, posterior_var, _ = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
-x_pred = sde_gp_model.t_all
-test_id = sde_gp_model.test_id
-link_fn = sde_gp_model.likelihood.link_fn
+x_pred = model.t_all
+test_id = model.test_id
+link_fn = model.likelihood.link_fn
 
 print('sampling from the posterior ...')
 t0 = time.time()
-posterior_samp = sde_gp_model.posterior_sample(20)
+posterior_samp = model.posterior_sample(20)
 t1 = time.time()
 print('sampling time: %2.2f secs' % (t1-t0))
 
@@ -91,8 +96,8 @@ plt.clf()
 plt.plot(disaster_timings, 0*disaster_timings, 'k+', label='observations', clip_on=False)
 plt.plot(x_pred, link_fn(posterior_mean), 'g', label='posterior mean')
 plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='g', alpha=0.05, label='95% confidence')
-plt.plot(sde_gp_model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'g', alpha=0.15)
-plt.xlim(sde_gp_model.t_test[0], sde_gp_model.t_test[-1])
+plt.plot(model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'g', alpha=0.15)
+plt.xlim(model.t_test[0], model.t_test[-1])
 plt.ylim(0.0)
 plt.legend()
 plt.title('log-Gaussian Cox process via Kalman smoothing (coal mining disasters)')

@@ -75,10 +75,5 @@ kalmanjax/__pycache__*
 *.npy
 *.pyc
 
-# Exclude the paper
-aabi/paper/article.pdf
-aabi/poster/poster.pdf
-aabi/slides/pres.pdf
-aabi/paper/arxiv.zip
-aabi/paper/arxiv
-paper/article.pdf
+kalmanjax/output/
+

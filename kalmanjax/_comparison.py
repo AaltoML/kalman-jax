@@ -4,7 +4,7 @@ from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
-from approximate_inference import EP, PL
+import approximate_inference as approx_inf
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -29,8 +29,8 @@ theta_prior = [var_f, len_f]
 
 prior_ = prior(theta_prior)
 lik_ = lik()
-approx_inf_1 = EP(power=0.1)
-approx_inf_2 = EP(power=0.9)
+approx_inf_1 = approx_inf.EP(power=0.1)
+approx_inf_2 = approx_inf.EP(power=0.9)
 
 sde_gp_model_1 = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_1)
 sde_gp_model_2 = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_2)

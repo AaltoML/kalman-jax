@@ -1,6 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
 from jax import random
+import matplotlib.pyplot as plt
 pi = 3.141592653589793
 
 
@@ -107,3 +108,20 @@ def rotation_matrix(dt, omega):
         [np.sin(omega * dt),  np.cos(omega * dt)]
     ])
     return R
+
+
+def plot(mod, it_num, ax=None):
+    post_mean, post_var, _ = mod.predict()
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+    lb_ = post_mean[:, 0] - 1.96 * post_var[:, 0] ** 0.5
+    ub_ = post_mean[:, 0] + 1.96 * post_var[:, 0] ** 0.5
+    ax.plot(mod.t_train, mod.y, 'k.', label='observations')
+    ax.plot(mod.t_all, post_mean, 'b', label='posterior mean')
+    ax.fill_between(mod.t_all, lb_, ub_, color='b', alpha=0.05, label='95% confidence')
+    ax.legend()
+    plt.xlim([mod.t_test[0], mod.t_test[-1]])
+    plt.title('GP regression via Kalman smoothing')
+    plt.xlabel('time - $t$')
+    plt.savefig('output/test_%d.png' % it_num)
+    plt.close()

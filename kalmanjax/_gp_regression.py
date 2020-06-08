@@ -4,10 +4,10 @@ from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
-from approximate_inference import EP, PL, CL, IKS, EKEP, VI
+import approximate_inference as approx_inf
 import priors
 import likelihoods
-from utils import softplus_list
+from utils import softplus_list, plot
 pi = 3.141592653589793
 
 
@@ -16,6 +16,8 @@ def wiggly_time_series(x_):
     return (np.cos(0.04*x_+0.33*pi) * np.sin(0.2*x_) +
             np.math.sqrt(noise_var) * np.random.normal(0, 1, x_.shape))
 
+
+plot_intermediate = False
 
 print('generating some data ...')
 np.random.seed(12345)
@@ -32,34 +34,37 @@ var_y = 0.5  # observation noise
 theta_prior = [var_f, len_f]
 theta_lik = var_y
 
-# prior_ = priors.Matern52(theta_prior)
-prior_ = priors.QuasiPeriodicMatern32([var_f, len_f, 20., 50.])
-lik_ = likelihoods.Gaussian(theta_lik)
-approx_inf_ = EP(power=0.5)
-# approx_inf_ = PL()
-# approx_inf_ = CL(power=0.5)
-# approx_inf_ = IKS()
-# approx_inf_ = EKEP()
-# approx_inf_ = VI()
+prior = priors.Matern52(theta_prior)
+# prior_ = priors.QuasiPeriodicMatern32([var_f, len_f, 20., 50.])
+lik = likelihoods.Gaussian(theta_lik)
+inf_method = approx_inf.EP(power=0.5)
+# inf_method = approx_inf.PL()
+# inf_method = approx_inf.CL(power=0.5)
+# inf_method = approx_inf.IKS()
+# inf_method = approx_inf.EKEP()
+# inf_method = approx_inf.VI()
 
-sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
+model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
-opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])
+opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
 
-def gradient_step(i, state, model):
+def gradient_step(i, state, mod):
     params = get_params(state)
-    model.prior.hyp = params[0]
-    model.likelihood.hyp = params[1]
+    mod.prior.hyp = params[0]
+    mod.likelihood.hyp = params[1]
 
     # grad(Filter) + Smoother:
-    neg_log_marg_lik, gradients = model.run_model()
+    neg_log_marg_lik, gradients = mod.run_model()
 
     prior_params, lik_param = softplus_list(params[0]), softplus(params[1])
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
           (i, prior_params[0], prior_params[1], lik_param, neg_log_marg_lik))
+
+    if plot_intermediate:
+        plot(mod, i)
 
     return opt_update(i, gradients, state)
 
@@ -67,25 +72,25 @@ def gradient_step(i, state, model):
 print('optimising the hyperparameters ...')
 t0 = time.time()
 for j in range(20):
-    opt_state = gradient_step(j, opt_state, sde_gp_model)
+    opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _ = sde_gp_model.predict()
+posterior_mean, posterior_var, _ = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
-x_pred = sde_gp_model.t_all
-test_id = sde_gp_model.test_id
+x_pred = model.t_all
+test_id = model.test_id
 
 print('sampling from the posterior ...')
 t0 = time.time()
-posterior_samp = sde_gp_model.posterior_sample(20)
+posterior_samp = model.posterior_sample(20)
 t1 = time.time()
 print('sampling time: %2.2f secs' % (t1-t0))
 
@@ -95,8 +100,8 @@ plt.clf()
 plt.plot(x, y, 'k.', label='observations')
 plt.plot(x_pred, posterior_mean, 'b', label='posterior mean')
 plt.fill_between(x_pred, lb, ub, color='b', alpha=0.05, label='95% confidence')
-plt.plot(sde_gp_model.t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
-plt.xlim([sde_gp_model.t_test[0], sde_gp_model.t_test[-1]])
+plt.plot(model.t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
+plt.xlim([model.t_test[0], model.t_test[-1]])
 plt.legend()
 plt.title('GP regression via Kalman smoothing')
 plt.xlabel('time - $t$')
