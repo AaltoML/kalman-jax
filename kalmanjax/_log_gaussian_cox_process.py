@@ -52,7 +52,7 @@ def gradient_step(i, state, mod):
     mod.likelihood.hyp = params[1]
 
     # grad(Filter) + Smoother:
-    neg_log_marg_lik, gradients = mod.run_model()
+    neg_log_marg_lik, gradients = mod.run()
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %

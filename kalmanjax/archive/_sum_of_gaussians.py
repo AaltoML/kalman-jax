@@ -64,7 +64,7 @@ def gradient_step(i, state, model):
 
 
 for j in range(3):
-    neg_log_marg_lik, gradients = sde_gp_model.run_model()
+    neg_log_marg_lik, gradients = sde_gp_model.run()
 print(neg_log_marg_lik)
 
 params = [sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp]

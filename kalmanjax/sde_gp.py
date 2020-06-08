@@ -144,36 +144,7 @@ class SDEGP(object):
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False)
         return neg_log_marg_lik, dlZ
 
-    def run_model_two_stage(self, params=None):
-        """
-        Note: This 2-stage version has been replaced by the more elegant implementation below, however we
-        keep this method because it is both faster and more accurate in practice (for small data).
-        A single parameter update step - to be fed to a gradient-based optimiser.
-         - we first update the site parameters (site mean and variance)
-         - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
-        :param params: the model parameters. If not supplied then defaults to the model's
-                       assigned parameters [num_params]
-        :return:
-            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
-            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
-        """
-        if params is None:
-            # fetch the model parameters from the prior and the likelihood
-            params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        # run the forward filter to calculate the filtering distribution
-        # if self.sites.site_params=None then the filter initialises the sites too
-        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
-                                                                                  None, self.sites.site_params)
-        # run the smoother and update the sites
-        _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
-                                                                                           filter_cov, self.dt, self.y,
-                                                                                           self.sites.site_params)
-        # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
-                                                                              None, self.sites.site_params)
-        return neg_log_marg_lik, dlZ
-
-    def run_model(self, params=None):
+    def run(self, params=None):
         """
         A single parameter update step - to be fed to a gradient-based optimiser.
          - we first compute the marginal lilelihood and its gradient w.r.t. the hyperparameters via filtering
@@ -197,6 +168,35 @@ class SDEGP(object):
         _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
                                                                                            filter_cov, self.dt, self.y,
                                                                                            self.sites.site_params)
+        return neg_log_marg_lik, dlZ
+
+    def run_two_stage(self, params=None):
+        """
+        Note: This 2-stage version has been replaced by the more elegant implementation above, however we
+        keep this method because it is more accurate, and faster in practice for small data.
+        A single parameter update step - to be fed to a gradient-based optimiser.
+         - we first update the site parameters (site mean and variance)
+         - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
+        :param params: the model parameters. If not supplied then defaults to the model's
+                       assigned parameters [num_params]
+        :return:
+            neg_log_marg_lik: the negative log-marginal likelihood -log p(y), i.e. the energy [scalar]
+            dlZ: the derivative of the energy w.r.t. the model parameters [num_params]
+        """
+        if params is None:
+            # fetch the model parameters from the prior and the likelihood
+            params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
+        # run the forward filter to calculate the filtering distribution
+        # if self.sites.site_params=None then the filter initialises the sites too
+        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
+                                                                                  None, self.sites.site_params)
+        # run the smoother and update the sites
+        _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
+                                                                                           filter_cov, self.dt, self.y,
+                                                                                           self.sites.site_params)
+        # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
+                                                                              None, self.sites.site_params)
         return neg_log_marg_lik, dlZ
 
     def update_model(self, theta_prior=None):

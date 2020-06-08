@@ -44,7 +44,7 @@ def gradient_step(i, state, model):
     params = get_params(state)
     model.prior.hyp = params[0]
     model.likelihood.hyp = params[1]
-    neg_log_marg_lik, gradients = model.run_model()
+    neg_log_marg_lik, gradients = model.run()
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))
     return opt_update(i, gradients, state)
@@ -58,8 +58,8 @@ def gradient_step(i, state, model):
 # print('optimisation time: %2.2f secs' % (t1-t0))
 
 for i in range(5):
-    sde_gp_model_1.run_model()
-    sde_gp_model_2.run_model()
+    sde_gp_model_1.run()
+    sde_gp_model_2.run()
 
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
