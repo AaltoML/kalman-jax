@@ -44,7 +44,7 @@ sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, app
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
-opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])  # params mapped through inverse softplus
+opt_state = opt_init([sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp])
 
 
 def gradient_step(i, state, model):
@@ -52,12 +52,8 @@ def gradient_step(i, state, model):
     model.prior.hyp = params[0]
     model.likelihood.hyp = params[1]
 
-    # option 1 - Filter + Smoother + grad(Filter):
+    # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = model.run_model()
-
-    # option 2 - grad(Filter + Smoother):
-    # (neg_log_marg_lik, site_params), gradients = value_and_grad(model.filter_smoother, has_aux=True)(params)
-    # model.sites.site_params = site_params
 
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
           (i, softplus(params[0][0]), softplus(params[0][1]), neg_log_marg_lik))

@@ -1,10 +1,9 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
-from jax import jit, random
+from jax import random
 pi = 3.141592653589793
 
 
-@jit
 def softplus_inv_list(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
@@ -18,7 +17,6 @@ def softplus_inv_list(x_):
     return y_
 
 
-@jit
 def softplus_inv(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
@@ -29,7 +27,6 @@ def softplus_inv(x_):
         return np.log(np.exp(x_) - 1)
 
 
-@jit
 def logphi(z):
     """
     Calculate the log Gaussian CDF, used for closed form moment matching when the EP power is 1,
@@ -49,7 +46,6 @@ def logphi(z):
     return lp, dlp
 
 
-@jit
 def gaussian_moment_match(y, m, v, hyp=None):
     """
     Closed form Gaussian moment matching.
@@ -78,7 +74,6 @@ def gaussian_moment_match(y, m, v, hyp=None):
     return lZ, site_mean, site_var
 
 
-@jit
 def sample_gaussian_noise(latent_mean, likelihood_var):
     lik_std = np.sqrt(likelihood_var)
     gaussian_sample = latent_mean + lik_std[..., np.newaxis] * random.normal(random.PRNGKey(123),

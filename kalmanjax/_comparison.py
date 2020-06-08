@@ -6,7 +6,7 @@ from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
-from approximate_inference import EP, GHKS, PL
+from approximate_inference import EP, PL
 import priors
 import likelihoods
 pi = 3.141592653589793
@@ -32,15 +32,15 @@ theta_lik = jnp.array([])
 
 prior_ = prior(theta_prior)
 lik_ = lik(theta_lik)
-approx_inf_1 = EP(ep_fraction=0.1)
-approx_inf_2 = EP(ep_fraction=0.9)
+approx_inf_1 = EP(power=0.1)
+approx_inf_2 = EP(power=0.9)
 
 sde_gp_model_1 = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_1)
 sde_gp_model_2 = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_2)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
-opt_state = opt_init(softplus_inv([theta_prior, theta_lik]))
+opt_state = opt_init([sde_gp_model_1.prior.hyp, sde_gp_model_1.likelihood.hyp])
 
 
 def gradient_step(i, state, model):
@@ -71,7 +71,7 @@ posterior_mean_1, posterior_var_1, _ = sde_gp_model_1.predict()
 posterior_mean_2, posterior_var_2, _ = sde_gp_model_2.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
-print(sde_gp_model_1.site_params[0][100] - sde_gp_model_2.site_params[0][100])
+print(sde_gp_model_1.sites.site_params[0][100] - sde_gp_model_2.sites.site_params[0][100])
 print(posterior_mean_1 - posterior_mean_2)
 
 lb_1 = posterior_mean_1[:, 0] - 1.96 * posterior_var_1[:, 0]**0.5

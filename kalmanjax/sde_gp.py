@@ -144,20 +144,10 @@ class SDEGP(object):
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False)
         return neg_log_marg_lik, dlZ
 
-    def filter_smoother(self, params):
+    def run_model_two_stage(self, params=None):
         """
-        Run the filter and smoother to compute the NLML/ELBO and the site parameter updates
-        """
-        # if self.sites.site_params=None, then the filter initialises the sites too
-        nlml, (filter_mean, filter_cov, site_params) = self.kalman_filter(self.y, self.dt, params,
-                                                                          True, None, self.sites.site_params)
-        # run the smoother and update the sites
-        var_exp, post_mean, post_var, site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov,
-                                                                                      self.dt, self.y, site_params)
-        return nlml, site_params
-
-    def run_model_old(self, params=None):
-        """
+        Note: This 2-stage version has been replaced by the more elegant implementation below, however we
+        keep this method because it is both faster and more accurate in practice (for small data).
         A single parameter update step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters
@@ -197,8 +187,8 @@ class SDEGP(object):
         if params is None:
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        # run the forward filter to calculate the filtering distribution
-        # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
+        # run the forward filter to calculate the filtering distribution and compute the negative
+        # log-marginal likelihood and its gradient in order to update the hyperparameters
         (neg_log_marg_lik, aux), dlZ = value_and_grad(self.kalman_filter,
                                                       argnums=2, has_aux=True)(self.y, self.dt, params, True,
                                                                                None, self.sites.site_params)
