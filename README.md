@@ -43,7 +43,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [x] Quasi-periodic
 - [x] Subband
 - [x] Sum
-- [x] Product
+- [ ] Product
 - [ ] Latent force models (linear)
 
 ### TODO:
