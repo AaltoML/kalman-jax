@@ -208,7 +208,7 @@ class SDEGP(object):
         """
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.kernel_to_state_space(hyperparams=theta_prior)
 
-    @partial(jit, static_argnums=(0, 4, 5))
+    @partial(jit, static_argnums=(0, 4))
     def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).

@@ -42,6 +42,13 @@ class EP(ApproxInf):
             return likelihood.moment_match(y, mu_cav, var_cav, hyp, self.power)
 
 
+class PEP(EP):
+    """
+    Power expectation propagation (PEP)
+    """
+    pass
+
+
 class EKEP(ApproxInf):
     """
     Extended Kalman expectation propagation (EK-EP)
