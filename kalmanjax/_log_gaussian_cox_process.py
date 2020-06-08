@@ -74,9 +74,10 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _ = model.predict()
+posterior_mean, posterior_var, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
+# print('NLPD: %1.2f' % nlpd)
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5

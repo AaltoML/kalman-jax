@@ -64,8 +64,8 @@ for i in range(5):
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean_1, posterior_var_1, _ = sde_gp_model_1.predict()
-posterior_mean_2, posterior_var_2, _ = sde_gp_model_2.predict()
+posterior_mean_1, posterior_var_1, _, nlpd1 = sde_gp_model_1.predict()
+posterior_mean_2, posterior_var_2, _, nlpd2 = sde_gp_model_2.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print(sde_gp_model_1.sites.site_params[0][100] - sde_gp_model_2.sites.site_params[0][100])

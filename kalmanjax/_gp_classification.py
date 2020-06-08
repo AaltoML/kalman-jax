@@ -15,11 +15,12 @@ print('generating some data ...')
 np.random.seed(99)
 N = 100000  # number of training points
 x = 100 * np.random.rand(N)
-f = 6 * np.sin(pi * x / 10.0) / (pi * x / 10.0 + 1)
-y_ = f + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
+f = lambda x_: 6 * np.sin(pi * x_ / 10.0) / (pi * x_ / 10.0 + 1)
+y_ = f(x) + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
 y = np.sign(y_)
 
 x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
+y_test = np.sign(f(x_test) + np.math.sqrt(0.05)*np.random.randn(x_test.shape[0]))
 
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
@@ -33,7 +34,7 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKEP()  <-- not working
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -68,9 +69,10 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _ = model.predict()
+posterior_mean, posterior_var, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
+print('test NLPD: %1.2f' % nlpd)
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
@@ -87,7 +89,8 @@ print('sampling time: %2.2f secs' % (t1-t0))
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
 plt.clf()
-plt.plot(x, y, 'b+', label='observations')
+plt.plot(x, y, 'b+', label='training observations')
+plt.plot(x_test, y_test, 'r+', alpha=0.4, label='test observations')
 plt.plot(x_pred, link_fn(posterior_mean), 'm', label='posterior mean')
 plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='m', alpha=0.05, label='95% confidence')
 plt.plot(model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)

@@ -26,6 +26,7 @@ N = 1000
 x = np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N))  # unevenly spaced
 y = wiggly_time_series(x)
 x_test = np.linspace(np.min(x)-15.0, np.max(x)+15.0, num=500)
+y_test = wiggly_time_series(x_test) + 0.5*np.random.randn(x_test.shape[0])
 
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
@@ -44,7 +45,7 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKEP()
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -79,9 +80,10 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _ = model.predict()
+posterior_mean, posterior_var, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
+print('test NLPD: %1.2f' % nlpd)
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
@@ -97,7 +99,8 @@ print('sampling time: %2.2f secs' % (t1-t0))
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
 plt.clf()
-plt.plot(x, y, 'k.', label='observations')
+plt.plot(x, y, 'k.', label='training observations')
+plt.plot(x_test, y_test, 'r.', alpha=0.4, label='test observations')
 plt.plot(x_pred, posterior_mean, 'b', label='posterior mean')
 plt.fill_between(x_pred, lb, ub, color='b', alpha=0.05, label='95% confidence')
 plt.plot(model.t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)

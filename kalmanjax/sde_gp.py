@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax.ops import index, index_update, index_add
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
-from jax import value_and_grad, jit, partial, random
+from jax import value_and_grad, jit, partial, random, vmap
 from jax.nn import softplus
 from utils import softplus_list, sample_gaussian_noise
 import numpy as nnp  # "normal" numpy
@@ -32,13 +32,14 @@ class SDEGP(object):
         - Extended Kalman smoother (EKS)
         - Variational Inference - with natural gradients (VI)
     """
-    def __init__(self, prior, likelihood, x, y, x_test=None, approx_inf=None):
+    def __init__(self, prior, likelihood, x, y, x_test=None, y_test=None, approx_inf=None):
         """
         :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
         :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
         :param x: training inputs
         :param y: training data / observations
         :param x_test: test inputs
+        :param y_test: test data / observations
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
@@ -51,9 +52,11 @@ class SDEGP(object):
         if x_test is None:
             t_test = []
         else:
-            t_test = nnp.unique(nnp.squeeze(x_test))  # test inputs
+            t_test, test_sort_ind = nnp.unique(nnp.squeeze(x_test), return_index=True)  # test inputs
+            if y_test is not None:
+                y_test = y_test[test_sort_ind].reshape(-1, 1)
         (self.t_all, self.test_id, self.train_id,
-         self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y)
+         self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y, y_test)
         self.t_test = np.array(t_test)
         self.prior = prior
         self.likelihood = likelihood
@@ -67,12 +70,13 @@ class SDEGP(object):
         print('inference method is', self.sites.name)
 
     @staticmethod
-    def input_admin(t_train, t_test, y):
+    def input_admin(t_train, t_test, y, y_test):
         """
         Order the inputs, remove duplicates, and index the train and test input locations.
         :param t_train: training inputs [N, 1]
         :param t_test: testing inputs [N*, 1]
         :param y: observations at the training inputs [N, 1]
+        :param y_test: observations at the test inputs [N*, 1]
         :return:
             t: the combined and sorted training and test inputs [N + N*, 1]
             test_id: an array of indices corresponding to the test inputs [N*, 1]
@@ -89,6 +93,8 @@ class SDEGP(object):
         train_id = x_ind[n_test:]  # index the training locations
         y_all = nnp.nan * nnp.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
         y_all[x_ind[n_test:], :] = y  # and the data at the train locations
+        if y_test is not None:
+            y_all[x_ind[:n_test], :] = y_test  # and the data at the train locations
         mask = nnp.ones(y_all.shape[0], dtype=bool)
         mask[train_id] = False
         dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train)])
@@ -126,7 +132,29 @@ class SDEGP(object):
             site_params = (site_mean, site_var)
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params)
         _, posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt)
-        return posterior_mean, posterior_var, site_params
+        nlpd_test = self.negative_log_predictive_density(self.y_all[self.test_id], posterior_mean[self.test_id],
+                                                         posterior_var[self.test_id], softplus(params[1]))
+        return posterior_mean, posterior_var, site_params, nlpd_test
+
+    def negative_log_predictive_density(self, y_test, m_test, v_test, hyp_lik):
+        """
+        Compute the (normalised) negative log predictive density (NLPD) of the test data yₙ*:
+            NLPD = - ∑ₙ log ∫ p(yₙ*|fₙ*) 𝓝(fₙ*|mₙ*,vₙ*) dfₙ*
+        where fₙ* is the function value at the test location.
+        The above is equivalent to the quantity used for EP moment matching, so we
+        vectorise that method using vmap, and compute it for all test data.
+        :param y_test: the test data yₙ*  [N*, 1]
+        :param m_test: posterior predictive mean at the test locations, mₙ*  [N*, 1]
+        :param v_test: posterior predictive variance at the test locations, vₙ*  [N*, 1]
+        :param hyp_lik: the hyperparameters of the likelihood model  [array]
+        :return:
+            NLPD: the negative log predictive density for the test data
+        """
+        lpd_func = vmap(
+            self.likelihood.moment_match, (0, 0, 0, None, None)
+        )
+        log_predictive_density, _, _ = lpd_func(y_test, m_test, v_test, hyp_lik, 1)
+        return -np.mean(log_predictive_density)  # mean = normalised sum
 
     def neg_log_marg_lik(self, params=None):
         """
@@ -391,13 +419,13 @@ class SDEGP(object):
         :return:
             the posterior samples [N_test, num_samps]
         """
-        post_mean, _, (site_mean, site_var) = self.predict(site_params=self.sites.site_params)
+        post_mean, _, (site_mean, site_var), _ = self.predict(site_params=self.sites.site_params)
         prior_samp = self.prior_sample(num_samps, x=self.t_all)
         prior_samp_y = sample_gaussian_noise(prior_samp, site_var)
         with loops.Scope() as ss:
             ss.smoothed_sample = np.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
-                smoothed_sample_i, _, _ = self.predict(np.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
-                                                       (prior_samp_y[..., i], site_var), sampling=True)
+                smoothed_sample_i, _, _, _ = self.predict(np.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
+                                                          (prior_samp_y[..., i], site_var), sampling=True)
                 ss.smoothed_sample = index_add(ss.smoothed_sample, index[..., i], smoothed_sample_i)
         return prior_samp - ss.smoothed_sample + post_mean[..., np.newaxis]
