@@ -1,11 +1,11 @@
-import jax.numpy as jnp
+import jax.numpy as np
 from jax.ops import index, index_update, index_add
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
 from utils import sample_gaussian_noise
-import numpy as np
+import numpy as nnp  # "normal" numpy
 from approximate_inference import EP
 from jax.config import config
 config.update("jax_enable_x64", True)
@@ -42,19 +42,19 @@ class SDEGP(object):
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
-        x, ind = np.unique(x, return_index=True)
+        x, ind = nnp.unique(x, return_index=True)
         if y.ndim < 2:
-            y = np.expand_dims(y, 1)  # make 2-D
+            y = nnp.expand_dims(y, 1)  # make 2-D
         y = y[ind, :]
         self.t_train = x
-        self.y = jnp.array(y)
+        self.y = np.array(y)
         if x_test is None:
             t_test = []
         else:
-            t_test = np.unique(np.squeeze(x_test))  # test inputs
+            t_test = nnp.unique(nnp.squeeze(x_test))  # test inputs
         (self.t_all, self.test_id, self.train_id,
          self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y)
-        self.t_test = jnp.array(t_test)
+        self.t_test = np.array(t_test)
         self.prior = prior
         self.likelihood = likelihood
         # construct the state space model:
@@ -62,7 +62,7 @@ class SDEGP(object):
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss()
         self.state_dim = self.F.shape[0]
         self.f_dim = self.H.shape[0]
-        self.minf = jnp.zeros([self.state_dim, 1])  # stationary state mean
+        self.minf = np.zeros([self.state_dim, 1])  # stationary state mean
         self.sites = EP() if approx_inf is None else approx_inf
         print('inference method is', self.sites.name)
 
@@ -83,18 +83,18 @@ class SDEGP(object):
             dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         """
         # here we use non-JAX numpy to sort out indexing of these static arrays
-        t, x_ind = np.unique(np.concatenate([t_test, t_train]), return_inverse=True)
+        t, x_ind = nnp.unique(nnp.concatenate([t_test, t_train]), return_inverse=True)
         n_test = t_test.shape[0]  # number of test locations
         test_id = x_ind[:n_test]  # index the test locations
         train_id = x_ind[n_test:]  # index the training locations
-        y_all = np.nan * np.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
+        y_all = nnp.nan * nnp.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
         y_all[x_ind[n_test:], :] = y  # and the data at the train locations
-        mask = np.ones(y_all.shape[0], dtype=bool)
+        mask = nnp.ones(y_all.shape[0], dtype=bool)
         mask[train_id] = False
-        dt = np.concatenate([jnp.array([0.0]), np.diff(t_train)])
-        dt_all = np.concatenate([jnp.array([0.0]), np.diff(t)])
-        return (jnp.array(t), jnp.array(test_id), jnp.array(train_id), jnp.array(y_all),
-                jnp.array(mask), jnp.array(dt), jnp.array(dt_all))
+        dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train)])
+        dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t)])
+        return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
+                np.array(mask), np.array(dt), np.array(dt_all))
 
     def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False):
         """
@@ -119,7 +119,7 @@ class SDEGP(object):
         if site_params is not None and not sampling:
             # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
-            site_mean, site_var = jnp.zeros([dt.shape[0], 1]), 1e5*jnp.ones([dt.shape[0], 1])
+            site_mean, site_var = np.zeros([dt.shape[0], 1]), 1e5 * np.ones([dt.shape[0], 1])
             # replace parameters at training locations with the supplied sites
             site_mean = index_add(site_mean, index[self.train_id], site_params[0])
             site_var = index_update(site_var, index[self.train_id], site_params[1])
@@ -240,16 +240,16 @@ class SDEGP(object):
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         if mask is not None:
-            mask = mask[..., jnp.newaxis, jnp.newaxis]  # align mask.shape with y.shape
+            mask = mask[..., np.newaxis, np.newaxis]  # align mask.shape with y.shape
         N = dt.shape[0]
         with loops.Scope() as s:
             s.neg_log_marg_lik = 0.0  # negative log-marginal likelihood
             s.m, s.P = self.minf, self.Pinf
             if store:
-                s.filtered_mean = jnp.zeros([N, self.state_dim, 1])
-                s.filtered_cov = jnp.zeros([N, self.state_dim, self.state_dim])
-                s.site_mean = jnp.zeros([N, self.f_dim])
-                s.site_var = jnp.zeros([N, self.f_dim])
+                s.filtered_mean = np.zeros([N, self.state_dim, 1])
+                s.filtered_cov = np.zeros([N, self.state_dim, self.state_dim])
+                s.site_mean = np.zeros([N, self.f_dim])
+                s.site_var = np.zeros([N, self.f_dim])
             for n in s.range(N):
                 y_n = y[n]
                 # -- KALMAN PREDICT --
@@ -264,7 +264,7 @@ class SDEGP(object):
                 mu = self.H @ m_
                 var = self.H @ P_ @ self.H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    y_n = jnp.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
+                    y_n = np.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
                 log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
                 if site_params is not None:  # use supplied site parameters to perform the update
                     site_mu, site_var = site_params[0][n], site_params[1][n]
@@ -275,15 +275,15 @@ class SDEGP(object):
                 s.m = m_ + K @ (site_mu - mu)
                 s.P = P_ - K @ S @ K.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    s.m = jnp.where(mask[n], m_, s.m)
-                    s.P = jnp.where(mask[n], P_, s.P)
-                    log_lik_n = jnp.where(mask[n][..., 0, 0], jnp.zeros_like(log_lik_n), log_lik_n)
-                s.neg_log_marg_lik -= jnp.sum(log_lik_n)
+                    s.m = np.where(mask[n], m_, s.m)
+                    s.P = np.where(mask[n], P_, s.P)
+                    log_lik_n = np.where(mask[n][..., 0, 0], np.zeros_like(log_lik_n), log_lik_n)
+                s.neg_log_marg_lik -= np.sum(log_lik_n)
                 if store:
                     s.filtered_mean = index_add(s.filtered_mean, index[n, ...], s.m)
                     s.filtered_cov = index_add(s.filtered_cov, index[n, ...], s.P)
-                    s.site_mean = index_add(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
-                    s.site_var = index_add(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
+                    s.site_mean = index_add(s.site_mean, index[n, ...], np.squeeze(site_mu.T))
+                    s.site_var = index_add(s.site_var, index[n, ...], np.squeeze(site_var.T))
         if store:
             return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var))
         return s.neg_log_marg_lik
@@ -310,13 +310,13 @@ class SDEGP(object):
         theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         N = dt.shape[0]
-        dt = jnp.concatenate([dt[1:], jnp.array([0.0])], axis=0)
+        dt = np.concatenate([dt[1:], np.array([0.0])], axis=0)
         with loops.Scope() as s:
             s.var_exp = 0.0  # variational expectations
             s.m, s.P = m_filtered[-1, ...], P_filtered[-1, ...]
-            s.smoothed_mean, s.smoothed_var = jnp.zeros([N, self.f_dim]), jnp.zeros([N, self.f_dim])
+            s.smoothed_mean, s.smoothed_var = np.zeros([N, self.f_dim]), np.zeros([N, self.f_dim])
             if site_params is not None:
-                s.site_mean, s.site_var = jnp.zeros([N, self.f_dim]), jnp.zeros([N, self.f_dim])
+                s.site_mean, s.site_var = np.zeros([N, self.f_dim]), np.zeros([N, self.f_dim])
             for n in s.range(N-1, -1, -1):
                 # --- First compute the smoothing distribution: ---
                 A = self.prior.expm(dt[n], theta_prior)  # closed form integration of transition matrix
@@ -331,19 +331,19 @@ class SDEGP(object):
                 G_transpose = cho_solve((P_predicted_chol, low), tmp_gain_cov)
                 s.m = m_filtered[n, ...] + G_transpose.T @ (s.m - m_predicted)
                 s.P = P_filtered[n, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
-                s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], jnp.squeeze((self.H @ s.m).T))
+                s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], np.squeeze((self.H @ s.m).T))
                 s.smoothed_var = index_add(s.smoothed_var, index[n, ...],
-                                           jnp.squeeze(jnp.diag(self.H @ s.P @ self.H.T)))
+                                           np.squeeze(np.diag(self.H @ s.P @ self.H.T)))
                 # --- Now update the site parameters: ---
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
-                    mu, var = self.H @ s.m, jnp.diag(self.H @ s.P @ self.H.T)
+                    mu, var = self.H @ s.m, np.diag(self.H @ s.P @ self.H.T)
                     # calculate the new sites
                     var_exp_n, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
                                                                      (site_params[0][n], site_params[1][n]))
-                    s.var_exp += jnp.sum(var_exp_n)
-                    s.site_mean = index_add(s.site_mean, index[n, ...], jnp.squeeze(site_mu.T))
-                    s.site_var = index_add(s.site_var, index[n, ...], jnp.squeeze(site_var.T))
+                    s.var_exp += np.sum(var_exp_n)
+                    s.site_mean = index_add(s.site_mean, index[n, ...], np.squeeze(site_mu.T))
+                    s.site_var = index_add(s.site_var, index[n, ...], np.squeeze(site_var.T))
         if site_params is not None:
             site_params = (s.site_mean, s.site_var)
         return s.var_exp, s.smoothed_mean, s.smoothed_var, site_params
@@ -358,23 +358,23 @@ class SDEGP(object):
         """
         self.update_model(softplus(self.prior.hyp))
         if x is None:
-            dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(self.t_all)])
+            dt = np.concatenate([np.array([0.0]), np.diff(self.t_all)])
         else:
-            dt = jnp.concatenate([jnp.array([0.0]), jnp.diff(jnp.sort(x))])
+            dt = np.concatenate([np.array([0.0]), np.diff(np.sort(x))])
         N = dt.shape[0]
         with loops.Scope() as s:
-            s.f_sample = jnp.zeros([N, self.f_dim, num_samps])
-            s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(99), shape=[self.state_dim, 1])
+            s.f_sample = np.zeros([N, self.f_dim, num_samps])
+            s.m = np.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(99), shape=[self.state_dim, 1])
             for i in s.range(num_samps):
-                s.m = jnp.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.state_dim, 1])
+                s.m = np.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.state_dim, 1])
                 for k in s.range(N):
                     A = self.prior.expm(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
-                    C = jnp.linalg.cholesky(Q + 1e-8 * jnp.eye(self.state_dim))  # <--- can be a bit unstable
+                    C = np.linalg.cholesky(Q + 1e-8 * np.eye(self.state_dim))  # <--- can be a bit unstable
                     # we need to provide a different PRNG seed every time:
                     s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
                     f = (self.H @ s.m).T
-                    s.f_sample = index_add(s.f_sample, index[k, ..., i], jnp.squeeze(f))
+                    s.f_sample = index_add(s.f_sample, index[k, ..., i], np.squeeze(f))
         return s.f_sample
 
     def posterior_sample(self, num_samps):
@@ -395,9 +395,9 @@ class SDEGP(object):
         prior_samp = self.prior_sample(num_samps, x=self.t_all)
         prior_samp_y = sample_gaussian_noise(prior_samp, site_var)
         with loops.Scope() as ss:
-            ss.smoothed_sample = jnp.zeros(prior_samp_y.shape)
+            ss.smoothed_sample = np.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
-                smoothed_sample_i, _, _ = self.predict(jnp.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
+                smoothed_sample_i, _, _ = self.predict(np.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
                                                        (prior_samp_y[..., i], site_var), sampling=True)
                 ss.smoothed_sample = index_add(ss.smoothed_sample, index[..., i], smoothed_sample_i)
-        return prior_samp - ss.smoothed_sample + post_mean[..., jnp.newaxis]
+        return prior_samp - ss.smoothed_sample + post_mean[..., np.newaxis]

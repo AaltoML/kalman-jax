@@ -3,8 +3,6 @@ from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
 from jax import jit, partial, jacrev, random
 from jax.scipy.linalg import cholesky
-from jax.scipy.stats import beta
-from numpy.random import binomial
 from numpy.polynomial.hermite import hermgauss
 from utils import logphi, gaussian_moment_match, softplus_inv
 pi = 3.141592653589793
