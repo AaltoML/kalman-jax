@@ -25,7 +25,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [x] GHK-EP - Gauss-Hermite Kalman EP
  - [x] PL - posterior linearisation
  - [x] CL - cavity linearisation
- - [ ] CVI - conjugate-computation variational inference
+ - [x] CVI - conjugate-computation variational inference
  - [ ] STVI - spatio-temporal variational inference
  - [ ] STEP - spatio-temporal expectation propagation
 
@@ -37,10 +37,13 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 
 ### Priors
 - [x] Matern class
-- [ ] RBF
-- [ ] Periodic
-- [ ] Cosine
-- [ ] Quasi-periodic
+- [x] RBF
+- [x] Cosine
+- [x] Periodic
+- [x] Quasi-periodic
+- [x] Subband
+- [x] Sum
+- [x] Product
 - [ ] Latent force models (linear)
 
 ### TODO:
@@ -48,7 +51,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - allow user to feed in test locations during prediction
 - extend to multi-output/multi-dimensional case
 - make predict() method automatically return test NLPD
-- make it so that when a filtering method is chosen, run_model() only runs the forward filter
+- make it so that when a filtering method is chosen, run() only runs the forward filter
 - implement getters and setters for parameters that involve softplus mapping
 - PL marginal likelihood approximation
 - sort out intialisation of likelihood model
