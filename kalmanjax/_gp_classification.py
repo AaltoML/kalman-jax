@@ -96,6 +96,6 @@ plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='m', alpha=0.05, label=
 plt.plot(model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
 plt.xlim(model.t_test[0], model.t_test[-1])
 plt.legend()
-plt.title('GP classification via Kalman smoothing')
+plt.title('GP classification via Kalman smoothing. Test NLPD: %1.2f' % nlpd)
 plt.xlabel('time - $t$')
 plt.show()
