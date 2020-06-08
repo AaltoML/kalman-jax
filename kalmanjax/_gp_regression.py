@@ -8,6 +8,7 @@ from sde_gp import SDEGP
 from approximate_inference import EP, PL, CL, IKS, EKEP, VI
 import priors
 import likelihoods
+from utils import softplus_list
 pi = 3.141592653589793
 
 
@@ -56,8 +57,10 @@ def gradient_step(i, state, model):
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = model.run_model()
 
+    prior_params, lik_param = softplus_list(params[0]), softplus(params[1])
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
-          (i, softplus(params[0][0]), softplus(params[0][1]), softplus(params[1]), neg_log_marg_lik))
+          (i, prior_params[0], prior_params[1], lik_param, neg_log_marg_lik))
+
     return opt_update(i, gradients, state)
 
 

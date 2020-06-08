@@ -4,7 +4,7 @@ from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random
 from jax.nn import softplus
-from utils import sample_gaussian_noise
+from utils import softplus_list, sample_gaussian_noise
 import numpy as nnp  # "normal" numpy
 from approximate_inference import EP
 from jax.config import config
@@ -59,7 +59,7 @@ class SDEGP(object):
         self.likelihood = likelihood
         # construct the state space model:
         print('building SDE-GP with', self.prior.name, 'prior and', self.likelihood.name, 'likelihood ...')
-        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss()
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.kernel_to_state_space()
         self.state_dim = self.F.shape[0]
         self.f_dim = self.H.shape[0]
         self.minf = np.zeros([self.state_dim, 1])  # stationary state mean
@@ -206,7 +206,7 @@ class SDEGP(object):
         return:
             computes the model matrices F, L, Qc, H, Pinf. See the prior class for details
         """
-        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.cf_to_ss(hyperparams=theta_prior)
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.kernel_to_state_space(hyperparams=theta_prior)
 
     @partial(jit, static_argnums=(0, 4, 5))
     def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
@@ -237,7 +237,7 @@ class SDEGP(object):
                 neg_log_marg_lik: the filter energy, i.e. negative log-marginal likelihood -log p(y),
                                   used for hyperparameter optimisation (learning) [scalar]
         """
-        theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
+        theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         if mask is not None:
             mask = mask[..., np.newaxis, np.newaxis]  # align mask.shape with y.shape
@@ -255,7 +255,7 @@ class SDEGP(object):
                 # -- KALMAN PREDICT --
                 #  mₙ⁻ = Aₙ mₙ₋₁
                 #  Pₙ⁻ = Aₙ Pₙ₋₁ Aₙ' + Qₙ, where Qₙ = Pinf - Aₙ Pinf Aₙ'
-                A = self.prior.expm(dt[n], theta_prior)
+                A = self.prior.state_transition(dt[n], theta_prior)
                 m_ = A @ s.m
                 P_ = A @ (s.P - self.Pinf) @ A.T + self.Pinf
                 # --- KALMAN UPDATE ---
@@ -307,7 +307,7 @@ class SDEGP(object):
             smoothed_var: the posterior marginal variances [N, obs_dim]
             site_params: the updated sites [2, N, obs_dim]
         """
-        theta_prior, theta_lik = softplus(params[0]), softplus(params[1])
+        theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         N = dt.shape[0]
         dt = np.concatenate([dt[1:], np.array([0.0])], axis=0)
@@ -319,7 +319,7 @@ class SDEGP(object):
                 s.site_mean, s.site_var = np.zeros([N, self.f_dim]), np.zeros([N, self.f_dim])
             for n in s.range(N-1, -1, -1):
                 # --- First compute the smoothing distribution: ---
-                A = self.prior.expm(dt[n], theta_prior)  # closed form integration of transition matrix
+                A = self.prior.state_transition(dt[n], theta_prior)  # closed form integration of transition matrix
                 m_predicted = A @ m_filtered[n, ...]
                 tmp_gain_cov = A @ P_filtered[n, ...]
                 P_predicted = A @ (P_filtered[n, ...] - self.Pinf) @ A.T + self.Pinf
@@ -356,7 +356,7 @@ class SDEGP(object):
         :return:
             f_sample: the prior samples [S, N_samp]
         """
-        self.update_model(softplus(self.prior.hyp))
+        self.update_model(softplus_list(self.prior.hyp))
         if x is None:
             dt = np.concatenate([np.array([0.0]), np.diff(self.t_all)])
         else:
@@ -368,7 +368,7 @@ class SDEGP(object):
             for i in s.range(num_samps):
                 s.m = np.linalg.cholesky(self.Pinf) @ random.normal(random.PRNGKey(i), shape=[self.state_dim, 1])
                 for k in s.range(N):
-                    A = self.prior.expm(dt[k], self.prior.hyp)  # transition and noise process matrices
+                    A = self.prior.state_transition(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
                     C = np.linalg.cholesky(Q + 1e-8 * np.eye(self.state_dim))  # <--- can be a bit unstable
                     # we need to provide a different PRNG seed every time:

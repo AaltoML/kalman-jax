@@ -4,6 +4,19 @@ from jax import random
 pi = 3.141592653589793
 
 
+def softplus_list(x_):
+    """
+    Softplus positiviy mapping, used for transforming parameters.
+    Loop over the elements of the paramter list so we can handle the special case
+    where an element is empty
+    """
+    y_ = [np.log(1 + np.exp(-np.abs(x_[0]))) + np.maximum(x_[0], 0)]
+    for i in range(1, len(x_)):
+        if x_[i] is not []:
+            y_ = y_ + [np.log(1 + np.exp(-np.abs(x_[i]))) + np.maximum(x_[i], 0)]
+    return y_
+
+
 def softplus_inv_list(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
@@ -13,7 +26,7 @@ def softplus_inv_list(x_):
     y_ = x_
     for i in range(len(x_)):
         if x_[i] is not []:
-            y_[i] = np.log(np.exp(x_[i]) - 1)
+            y_[i] = np.log(1-np.exp(-np.abs(x_[i]))) + np.maximum(x_[i], 0)
     return y_
 
 
@@ -79,3 +92,18 @@ def sample_gaussian_noise(latent_mean, likelihood_var):
     gaussian_sample = latent_mean + lik_std[..., np.newaxis] * random.normal(random.PRNGKey(123),
                                                                              shape=latent_mean.shape)
     return gaussian_sample
+
+
+def rotation_matrix(dt, omega):
+    """
+    Discrete time rotation matrix
+    :param dt: step size [1]
+    :param omega: frequency [1]
+    :return:
+        R: rotation matrix [2, 2]
+    """
+    R = np.array([
+        [np.cos(omega * dt), -np.sin(omega * dt)],
+        [np.sin(omega * dt),  np.cos(omega * dt)]
+    ])
+    return R
