@@ -32,8 +32,8 @@ var_y = 0.5  # observation noise
 theta_prior = [var_f, len_f]
 theta_lik = var_y
 
-prior_ = priors.Matern52(theta_prior)
-# prior_ = priors.QuasiPeriodicMatern12([var_f, len_f, 20., 50.])
+# prior_ = priors.Matern52(theta_prior)
+prior_ = priors.QuasiPeriodicMatern32([var_f, len_f, 20., 50.])
 lik_ = likelihoods.Gaussian(theta_lik)
 approx_inf_ = EP(power=0.5)
 # approx_inf_ = PL()
