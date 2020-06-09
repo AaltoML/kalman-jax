@@ -1,8 +1,17 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
+from jax.scipy.linalg import cho_factor, cho_solve
 from jax import random
 import matplotlib.pyplot as plt
 pi = 3.141592653589793
+
+
+def solve(P, Q):
+    """
+    Compute P^-1 Q, where P is a covariance matrix, using the Cholesky factoristion
+    """
+    L = cho_factor(P)
+    return cho_solve(L, Q)
 
 
 def softplus_list(x_):

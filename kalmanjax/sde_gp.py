@@ -1,10 +1,9 @@
 import jax.numpy as np
 from jax.ops import index, index_update, index_add
-from jax.scipy.linalg import cho_factor, cho_solve
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random, vmap
 from jax.nn import softplus
-from utils import softplus_list, sample_gaussian_noise
+from utils import softplus_list, sample_gaussian_noise, solve
 import numpy as nnp  # "normal" numpy
 from approximate_inference import EP
 from jax.config import config
@@ -298,8 +297,7 @@ class SDEGP(object):
                     site_mu, site_var = site_params[0][n], site_params[1][n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = var + site_var
-                L, low = cho_factor(S)
-                K = (cho_solve((L, low), self.H @ P_)).T
+                K = solve(S, self.H @ P_).T  # HP(S^-1)
                 s.m = m_ + K @ (site_mu - mu)
                 s.P = P_ - K @ S @ K.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
@@ -355,8 +353,7 @@ class SDEGP(object):
                 # G = F * A' * P^{-1}
                 # since both F(iltered) and P(redictive) are cov matrices, thus self-adjoint, we can take the transpose:
                 #   = (P^{-1} * A * F)'
-                P_predicted_chol, low = cho_factor(P_predicted)
-                G_transpose = cho_solve((P_predicted_chol, low), tmp_gain_cov)
+                G_transpose = solve(P_predicted, tmp_gain_cov)  # (P^-1)AF
                 s.m = m_filtered[n, ...] + G_transpose.T @ (s.m - m_predicted)
                 s.P = P_filtered[n, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
                 s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], np.squeeze((self.H @ s.m).T))
