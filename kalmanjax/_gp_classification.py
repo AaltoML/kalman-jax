@@ -29,9 +29,10 @@ theta_prior = [var_f, len_f]
 
 prior = priors.Matern52(theta_prior)
 lik = likelihoods.Probit()
-inf_method = approx_inf.EP(power=0.5)
+# inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.PL()
-# inf_method = approx_inf.EKEP()  <-- not working
+inf_method = approx_inf.EKS()
+# inf_method = approx_inf.EKEP()  # <-- not working
 # inf_method = approx_inf.VI()
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)

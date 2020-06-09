@@ -277,7 +277,7 @@ class Gaussian(Likelihood):
             Var[y|f] = σ²
         """
         hyp = softplus(self.hyp) if hyp is None else hyp
-        return f, hyp
+        return f, hyp.reshape(-1, 1)
 
     @partial(jit, static_argnums=0)
     def moment_match(self, y, m, v, hyp=None, power=1.0):
