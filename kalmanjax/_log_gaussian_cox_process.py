@@ -79,15 +79,18 @@ t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 # print('NLPD: %1.2f' % nlpd)
 
-lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
-ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
 x_pred = model.t_all
-test_id = model.test_id
 link_fn = model.likelihood.link_fn
+scale = num_time_bins / (max(x_pred) - min(x_pred))
+post_mean_lgcp = link_fn(posterior_mean[:, 0] + posterior_var[:, 0] / 2) * scale
+lb_lgcp = link_fn(posterior_mean[:, 0] - np.sqrt(posterior_var[:, 0]) * 1.645) * scale
+ub_lgcp = link_fn(posterior_mean[:, 0] + np.sqrt(posterior_var[:, 0]) * 1.645) * scale
+test_id = model.test_id
 
 print('sampling from the posterior ...')
 t0 = time.time()
 posterior_samp = model.posterior_sample(20)
+post_samp_lgcp = link_fn(posterior_samp[test_id, 0, :]) * scale
 t1 = time.time()
 print('sampling time: %2.2f secs' % (t1-t0))
 
@@ -95,9 +98,9 @@ print('plotting ...')
 plt.figure(1, figsize=(12, 5))
 plt.clf()
 plt.plot(disaster_timings, 0*disaster_timings, 'k+', label='observations', clip_on=False)
-plt.plot(x_pred, link_fn(posterior_mean), 'g', label='posterior mean')
-plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='g', alpha=0.05, label='95% confidence')
-plt.plot(model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'g', alpha=0.15)
+plt.plot(x_pred, post_mean_lgcp, 'g', label='posterior mean')
+plt.fill_between(x_pred, lb_lgcp, ub_lgcp, color='g', alpha=0.05, label='95% confidence')
+plt.plot(model.t_test, post_samp_lgcp, 'g', alpha=0.15)
 plt.xlim(model.t_test[0], model.t_test[-1])
 plt.ylim(0.0)
 plt.legend()

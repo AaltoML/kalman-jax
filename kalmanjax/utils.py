@@ -110,18 +110,18 @@ def rotation_matrix(dt, omega):
     return R
 
 
-def plot(mod, it_num, ax=None):
-    post_mean, post_var, _, nlpd = mod.predict()
+def plot(model, it_num, ax=None):
+    post_mean, post_var, _, nlpd = model.predict()
     if ax is None:
         fig, ax = plt.subplots(1, 1)
-    lb_ = post_mean[:, 0] - 1.96 * post_var[:, 0] ** 0.5
-    ub_ = post_mean[:, 0] + 1.96 * post_var[:, 0] ** 0.5
-    ax.plot(mod.t_train, mod.y, 'k.', label='training observations')
-    plt.plot(mod.t_test, mod.y_all[mod.test_id], 'r.', alpha=0.4, label='test observations')
-    ax.plot(mod.t_all, post_mean, 'b', label='posterior mean')
-    ax.fill_between(mod.t_all, lb_, ub_, color='b', alpha=0.05, label='95% confidence')
+    lb = post_mean[:, 0] - 1.96 * post_var[:, 0] ** 0.5
+    ub = post_mean[:, 0] + 1.96 * post_var[:, 0] ** 0.5
+    ax.plot(model.t_train, model.y, 'k.', label='training observations')
+    plt.plot(model.t_test, model.y_all[model.test_id], 'r.', alpha=0.4, label='test observations')
+    ax.plot(model.t_all, post_mean, 'b', label='posterior mean')
+    ax.fill_between(model.t_all, lb, ub, color='b', alpha=0.05, label='95% confidence')
     ax.legend()
-    plt.xlim([mod.t_test[0], mod.t_test[-1]])
+    plt.xlim([model.t_test[0], model.t_test[-1]])
     plt.title('Test NLPD: %1.2f' % nlpd)
     plt.xlabel('time - $t$')
     plt.savefig('output/test_%d.png' % it_num)
