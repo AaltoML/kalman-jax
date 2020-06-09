@@ -492,3 +492,5 @@ class Poisson(Likelihood):
             Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
+
+## ADD IN BERNOULLI LIKELIHOOD
