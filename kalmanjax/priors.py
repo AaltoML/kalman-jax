@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax import jit, partial
 from jax.nn import softplus
 from jax.scipy.linalg import expm
-from utils import softplus_inv, softplus_list, rotation_matrix
+from utils import softplus_inv, softplus_list, rotation_matrix, solve
 
 
 class Prior(object):
@@ -184,7 +184,6 @@ class Matern52(Prior):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
-        # lam = tf.constant(5.0**0.5 / ell, dtype=floattype)
         lam = 5.0**0.5 / ell
         F = np.array([[0.0, 1.0, 0.0],
                       [0.0, 0.0, 1.0],
@@ -920,6 +919,101 @@ class QuasiPeriodicMatern32(Prior):
             [-dt * lam ** 2 * R,  (1. - dt * lam) * R]
         ])
         return Ri
+
+
+class SpatioTemporalMatern52(Prior):
+    """
+    Spatio-Temporal Matern-5/2 kernel in SDE form.
+    Hyperparameters:
+        variance, σ²
+        lengthscale, l
+    The associated continuous-time state space model matrices are:
+    letting λ = √5/l
+    F      = ( 0    1    0
+               0    0    1
+              -λ³ -3λ² -3λ)
+    L      = (0
+              0
+              1)
+    Qc     = 16λ⁵σ²/3
+    H      = (1  0  0)
+    letting κ = λ²σ²/3,
+    Pinf   = ( σ²  0  -κ
+               0   κ   0
+              -κ   0   λ⁴σ²)
+    """
+    def __init__(self, hyp=None, z=None):
+        super().__init__(hyp=hyp)
+        if self.hyp is None:
+            print('using default kernel parameters since none were supplied')
+            self.hyp = [1.0, 1.0, 1.0]
+        if z is None:
+            self.z = np.linspace(-3., 3., num=15).reshape(-1, 1)
+        self.M = self.z.shape[0]
+        self.name = 'Spatio-Temporal Matern-5/2'
+
+    def set_hyperparams(self, hyp):
+        self.hyp = hyp
+
+    @staticmethod
+    def spatial_covariance(z, z_prime, ell):
+        r = np.sqrt(5) * np.abs(z - z_prime.T) / ell
+        return (1 + r + r**2 / 3) * np.exp(-r)
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        # uses variance and lengthscale hyperparameters to construct the state space model
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        var, ell_time, ell_space = hyperparams[0], hyperparams[1], hyperparams[2]
+        Kmm = self.spatial_covariance(self.z, self.z, ell_space)
+        lam = 5.0**0.5 / ell_time
+        F_time = np.array([[0.0, 1.0, 0.0],
+                           [0.0, 0.0, 1.0],
+                           [-lam**3.0, -3.0*lam**2.0, -3.0*lam]])
+        F = np.kron(np.eye(self.M), F_time)
+        L = np.array([[0.0],
+                      [0.0],
+                      [1.0]])
+        Qc = np.array([[var * 400.0 * 5.0 ** 0.5 / 3.0 / ell_time ** 5.0]])
+        H = None
+        kappa = 5.0 / 3.0 * var / ell_time**2.0
+        Pinf_time = np.array([[var,    0.0,   -kappa],
+                              [0.0,    kappa, 0.0],
+                              [-kappa, 0.0,   25.0*var / ell_time**4.0]])
+        Pinf = np.kron(Kmm, Pinf_time)
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space, hyperparams=None):
+        # uses variance and lengthscale hyperparameters to construct the state space model
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell_space = hyperparams[2]
+        H_time = np.array([[1.0, 0.0, 0.0]])
+        Kzz = self.spatial_covariance(self.z, self.z, ell_space)
+        Kxz = self.spatial_covariance(x_space.reshape(-1, 1), self.z, ell_space)
+        Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
+        H = np.kron(Kx, H_time)
+        return H
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        """
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
+        :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
+        :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
+        :return: state transition matrix A [3, 3]
+        """
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell = hyperparams[1]
+        lam = np.sqrt(5.0) / ell
+        dtlam = dt * lam
+        A_time = np.exp(-dtlam) \
+            * (dt * np.array([[lam * (0.5 * dtlam + 1.0),      dtlam + 1.0,            0.5 * dt],
+                              [-0.5 * dtlam * lam ** 2,        lam * (1.0 - dtlam),    1.0 - 0.5 * dtlam],
+                              [lam ** 3 * (0.5 * dtlam - 1.0), lam ** 2 * (dtlam - 3), lam * (0.5 * dtlam - 2.0)]])
+               + np.eye(3))
+        A = np.kron(np.eye(self.M), A_time)
+        return A
 
 
 class Sum(object):

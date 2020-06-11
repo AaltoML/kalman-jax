@@ -135,3 +135,24 @@ def plot(model, it_num, ax=None):
     plt.xlabel('time - $t$')
     plt.savefig('output/test_%d.png' % it_num)
     plt.close()
+
+
+def plot_2d_classification(m, it_num):
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    # xtest, ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
+    # Xtest = np.vstack((xtest.flatten(), ytest.flatten())).T
+    for i, mark in [[1, 'o'], [0, 'o']]:
+        ind = m.y[:, 0] == i
+        # ax.plot(X[ind, 0], X[ind, 1], mark)
+        ax.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=100, alpha=.5)
+    mu, var, _, nlpd_test = m.predict()
+    ax.contour(m.t_test, m.y_all[m.test_id], mu.reshape(100, 100), levels=[.5],
+               colors='k', linewidths=4.)
+    ax.axis('equal')
+    plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+    # ax.axis('off')
+    ax.set_xlim(-2.8, 2.8)
+    ax.set_ylim(-2.8, 2.8)
+    plt.savefig('output/test_%d.png' % it_num)
+    plt.close()
