@@ -16,7 +16,7 @@ X = np.loadtxt('../data/banana_X_train', delimiter=',')
 Y = np.loadtxt('../data/banana_Y_train')[:, None]
 
 # Test points
-Xtest, _ = np.mgrid[-3.:3.:100j, -3.:3.:100j]
+Xtest, Ytest = np.mgrid[-3.:3.:100j, -3.:3.:100j]
 # Xtest = np.vstack((Xtest.flatten(), Ytest.flatten())).T
 # X0test, X1test = np.linspace(-3., 3., num=100), np.linspace(-3., 3., num=100)
 
@@ -85,11 +85,11 @@ x_pred = model.t_all
 test_id = model.test_id
 link_fn = model.likelihood.link_fn
 
-print('sampling from the posterior ...')
-t0 = time.time()
-posterior_samp = model.posterior_sample(20)
-t1 = time.time()
-print('sampling time: %2.2f secs' % (t1-t0))
+# print('sampling from the posterior ...')
+# t0 = time.time()
+# posterior_samp = model.posterior_sample(20)
+# t1 = time.time()
+# print('sampling time: %2.2f secs' % (t1-t0))
 
 print('plotting ...')
 fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -97,9 +97,8 @@ for i, mark in [[1, 'o'], [0, 'o']]:
     ind = Y[:, 0] == i
     # ax.plot(X[ind, 0], X[ind, 1], mark)
     ax.scatter(X[ind, 0], X[ind, 1], s=100, alpha=.5)
-mu, var, _, nlpd_test = model.predict()
-ax.contour(Xtest, Ytest, mu.reshape(100, 100), levels=[.5],
-           colors='k', linewidths=4.)
+mu, var, _, nlpd_test = model.predict_2d()
+ax.contour(Xtest, Ytest, mu.reshape(100, 100), levels=[.5], colors='k', linewidths=4.)
 ax.axis('equal')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)

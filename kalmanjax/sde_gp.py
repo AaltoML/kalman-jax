@@ -92,7 +92,7 @@ class SDEGP(object):
             dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         """
         if not (t_test.shape[1] == t_train.shape[1]):
-            r_test = t_test[:, 1:]  # spacial test points
+            r_test = t_test.copy()  # spacial test points
             t_test = t_test[:, :t_train.shape[1]]  # temporal test points
         else:
             r_test = t_test.copy()
@@ -114,7 +114,7 @@ class SDEGP(object):
         return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
                 np.array(mask), np.array(dt), np.array(dt_all), np.array(r_test))
 
-    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):
+    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None, return_full=False):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -144,29 +144,41 @@ class SDEGP(object):
             site_var = index_update(site_var, index[self.train_id], site_params[1])
             site_params = (site_mean, site_var)
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, x)
-        _, posterior_mean, posterior_var, _ = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
-                                                                                None, None, x)
-        nlpd_test = self.negative_log_predictive_density(self.y_all[self.test_id], posterior_mean[self.test_id],
-                                                         posterior_var[self.test_id], softplus(params[1]))
+        _, posterior_mean, posterior_var = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
+                                                                             True, return_full, None, None, x)
+        nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+                                                         posterior_mean[self.test_id],
+                                                         posterior_var[self.test_id],
+                                                         softplus_list(params[0]), softplus(params[1]),
+                                                         return_full)
         return posterior_mean, posterior_var, site_params, nlpd_test
 
     def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):
-        posterior_mean, posterior_var, site_params, nlpd_test = self.predict(y, dt, mask, site_params, sampling, x)
-        m_test, v_test = posterior_mean[self.test_id], posterior_var[self.test_id]
-        Ntest = self.test_id.shape[0]
-        y_dim = self.r_test.shape[1]
-        test_mean = np.zeros([Ntest, y_dim])
-        test_var = np.zeros([Ntest, y_dim])
-        for n in range(Ntest):
-            # evaluate spatial kernel
-            H = self.prior.measurement_model(self.r_test[n], softplus_list(self.prior.hyp))
-            # return mean
-            test_mean[n] = H @ m_test
-            # return variance
-            test_var[n] = np.diag(H @ v_test @ H.T)
-        return posterior_mean, posterior_var, site_params, nlpd_test
+        posterior_mean, posterior_cov, site_params, nlpd_test = self.predict(y, dt, mask, site_params, sampling, x, True)
+        mean_test, cov_test = posterior_mean[self.test_id], posterior_cov[self.test_id]
+        measure_func = vmap(
+            self.compute_measurement, (0, 0, 0, None)
+        )
+        m_test, v_test = measure_func(self.r_test, mean_test, cov_test, softplus_list(self.prior.hyp))
+        # Ntest = self.test_id.shape[0]
+        # y_dim = self.r_test.shape[1]
+        # test_mean = np.zeros([Ntest, y_dim])
+        # test_var = np.zeros([Ntest, y_dim])
+        # for n in range(Ntest):
+        #     # evaluate spatial kernel
+        #     H = self.prior.measurement_model(self.r_test[n], softplus_list(self.prior.hyp))
+        #     # return mean
+        #     test_mean[n] = H @ mean_test
+        #     # return variance
+        #     test_var[n] = np.diag(H @ cov_test @ H.T)
+        return m_test, v_test, site_params, nlpd_test
 
-    def negative_log_predictive_density(self, y_test, m_test, v_test, hyp_lik):
+    @partial(jit, static_argnums=0)
+    def compute_measurement(self, x, mean, cov, hyp_prior):
+        H = self.prior.measurement_model(x, hyp_prior)
+        return H @ mean, H @ cov @ H.T
+
+    def negative_log_predictive_density(self, x_test, y_test, m_test, v_test, hyp_prior, hyp_lik, full_cov):
         """
         Compute the (normalised) negative log predictive density (NLPD) of the test data yₙ*:
             NLPD = - ∑ₙ log ∫ p(yₙ*|fₙ*) 𝓝(fₙ*|mₙ*,vₙ*) dfₙ*
@@ -180,6 +192,11 @@ class SDEGP(object):
         :return:
             NLPD: the negative log predictive density for the test data
         """
+        if full_cov:
+            measure_func = vmap(
+                self.compute_measurement, (0, 0, 0, None)
+            )
+            m_test, v_test = measure_func(x_test, m_test, v_test, hyp_prior)
         lpd_func = vmap(
             self.likelihood.moment_match, (0, 0, 0, None, None)
         )
@@ -224,10 +241,9 @@ class SDEGP(object):
                                                                                self.t_train)
         filter_mean, filter_cov, self.sites.site_params = aux
         # run the smoother and update the sites
-        _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
-                                                                                           filter_cov, self.dt, self.y,
-                                                                                           self.sites.site_params,
-                                                                                           self.t_train)
+        self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt,
+                                                                   False, False, self.y,
+                                                                   self.sites.site_params, self.t_train)
         return neg_log_marg_lik, dlZ
 
     def run_two_stage(self, params=None):
@@ -249,14 +265,16 @@ class SDEGP(object):
         # run the forward filter to calculate the filtering distribution
         # if self.sites.site_params=None then the filter initialises the sites too
         _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
-                                                                                  None, self.sites.site_params)
+                                                                                  None, self.sites.site_params,
+                                                                                  self.t_train)
         # run the smoother and update the sites
-        _, post_mean, post_var, self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean,
-                                                                                           filter_cov, self.dt, self.y,
-                                                                                           self.sites.site_params)
+        self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt,
+                                                                   False, False, self.y,
+                                                                   self.sites.site_params, self.t_train)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
-                                                                              None, self.sites.site_params)
+                                                                              None, self.sites.site_params,
+                                                                              self.t_train)
         return neg_log_marg_lik, dlZ
 
     def update_model(self, theta_prior=None):
@@ -348,8 +366,9 @@ class SDEGP(object):
             return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var))
         return s.neg_log_marg_lik
 
-    @partial(jit, static_argnums=0)
-    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y=None, site_params=None, x=None):
+    @partial(jit, static_argnums=(0, 5, 6))
+    def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, store=False, return_full=False,
+                                     y=None, site_params=None, x=None):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
         i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
@@ -372,9 +391,13 @@ class SDEGP(object):
         N = dt.shape[0]
         dt = np.concatenate([dt[1:], np.array([0.0])], axis=0)
         with loops.Scope() as s:
-            s.var_exp = 0.0  # variational expectations
             s.m, s.P = m_filtered[-1, ...], P_filtered[-1, ...]
-            s.smoothed_mean, s.smoothed_var = np.zeros([N, self.f_dim]), np.zeros([N, self.f_dim])
+            if return_full:
+                s.smoothed_mean = np.zeros([N, self.state_dim, 1])
+                s.smoothed_cov = np.zeros([N, self.state_dim, self.state_dim])
+            else:
+                s.smoothed_mean = np.zeros([N, self.f_dim])
+                s.smoothed_cov = np.zeros([N, self.f_dim])
             if site_params is not None:
                 s.site_mean, s.site_var = np.zeros([N, self.f_dim]), np.zeros([N, self.f_dim])
             for n in s.range(N-1, -1, -1):
@@ -391,22 +414,28 @@ class SDEGP(object):
                 s.m = m_filtered[n, ...] + G_transpose.T @ (s.m - m_predicted)
                 s.P = P_filtered[n, ...] + G_transpose.T @ (s.P - P_predicted) @ G_transpose
                 H = self.prior.measurement_model(x[n, 1:], theta_prior)
-                s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], np.squeeze((H @ s.m).T))
-                s.smoothed_var = index_add(s.smoothed_var, index[n, ...],
-                                           np.squeeze(np.diag(H @ s.P @ H.T)))
+                if store:
+                    if return_full:
+                        s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], s.m)
+                        s.smoothed_cov = index_add(s.smoothed_cov, index[n, ...], s.P)
+                    else:
+                        s.smoothed_mean = index_add(s.smoothed_mean, index[n, ...], np.squeeze((H @ s.m).T))
+                        s.smoothed_cov = index_add(s.smoothed_cov, index[n, ...],
+                                                   np.squeeze(np.diag(H @ s.P @ H.T)))
                 # --- Now update the site parameters: ---
                 if site_params is not None:
                     # extract mean and var from state (we discard cross-covariance for now):
                     mu, var = H @ s.m, np.diag(H @ s.P @ H.T)
                     # calculate the new sites
-                    var_exp_n, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
-                                                                     (site_params[0][n], site_params[1][n]))
-                    s.var_exp += np.sum(var_exp_n)
+                    _, site_mu, site_var = self.sites.update(self.likelihood, y[n], mu, var, theta_lik,
+                                                             (site_params[0][n], site_params[1][n]))
                     s.site_mean = index_add(s.site_mean, index[n, ...], np.squeeze(site_mu.T))
                     s.site_var = index_add(s.site_var, index[n, ...], np.squeeze(site_var.T))
         if site_params is not None:
             site_params = (s.site_mean, s.site_var)
-        return s.var_exp, s.smoothed_mean, s.smoothed_var, site_params
+        if store:
+            return site_params, s.smoothed_mean, s.smoothed_cov
+        return site_params
 
     def prior_sample(self, num_samps, x=None):
         """

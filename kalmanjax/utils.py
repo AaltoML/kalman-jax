@@ -145,7 +145,7 @@ def plot_2d_classification(m, it_num):
         ind = m.y[:, 0] == i
         # ax.plot(X[ind, 0], X[ind, 1], mark)
         ax.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=100, alpha=.5)
-    mu, var, _, nlpd_test = m.predict()
+    mu, var, _, nlpd_test = m.predict_2d()
     ax.contour(m.t_test, m.y_all[m.test_id], mu.reshape(100, 100), levels=[.5],
                colors='k', linewidths=4.)
     ax.axis('equal')
