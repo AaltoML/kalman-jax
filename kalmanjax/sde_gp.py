@@ -31,14 +31,13 @@ class SDEGP(object):
         - Extended Kalman smoother (EKS)
         - Variational Inference - with natural gradients (VI)
     """
-    def __init__(self, prior, likelihood, x, y, x_test=None, r_test=None, y_test=None, approx_inf=None):
+    def __init__(self, prior, likelihood, x, y, x_test=None, y_test=None, approx_inf=None):
         """
         :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
         :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
         :param x: training inputs
         :param y: training data / observations
         :param x_test: test inputs
-
         :param y_test: test data / observations
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
@@ -55,11 +54,13 @@ class SDEGP(object):
             t_test = np.empty((1,) + x.shape[1:]) * np.nan
         else:
             t_test, test_sort_ind = nnp.unique(nnp.squeeze(x_test), return_index=True, axis=0)  # test inputs
-            t_test = t_test.reshape((-1,) + x.shape[1:])
+            if t_test.ndim < 2:
+                # t_test = t_test.reshape((-1,) + x.shape[1:])
+                t_test = nnp.expand_dims(t_test, 1)
             if y_test is not None:
                 y_test = y_test[test_sort_ind].reshape((-1,) + y.shape[1:])
-        (self.t_all, self.test_id, self.train_id,
-         self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y, y_test)
+        (self.t_all, self.test_id, self.train_id, self.y_all,
+         self.mask, self.dt, self.dt_all, self.r_test) = self.input_admin(self.t_train, t_test, self.y, y_test)
         self.t_test = np.array(t_test)
         self.prior = prior
         self.likelihood = likelihood
@@ -90,6 +91,11 @@ class SDEGP(object):
             dt: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
             dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         """
+        if not (t_test.shape[1] == t_train.shape[1]):
+            r_test = t_test[:, 1:]  # spacial test points
+            t_test = t_test[:, :t_train.shape[1]]  # temporal test points
+        else:
+            r_test = t_test.copy()
         # here we use non-JAX numpy to sort out indexing of these static arrays
         t_test_train = nnp.concatenate([t_test, t_train])
         t_test_train = t_test_train[~np.isnan(t_test_train[:, 0]), :]
@@ -106,7 +112,7 @@ class SDEGP(object):
         dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
         dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t[:, 0])])
         return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
-                np.array(mask), np.array(dt), np.array(dt_all))
+                np.array(mask), np.array(dt), np.array(dt_all), np.array(r_test))
 
     def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):
         """
@@ -142,6 +148,22 @@ class SDEGP(object):
                                                                                 None, None, x)
         nlpd_test = self.negative_log_predictive_density(self.y_all[self.test_id], posterior_mean[self.test_id],
                                                          posterior_var[self.test_id], softplus(params[1]))
+        return posterior_mean, posterior_var, site_params, nlpd_test
+
+    def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):
+        posterior_mean, posterior_var, site_params, nlpd_test = self.predict(y, dt, mask, site_params, sampling, x)
+        m_test, v_test = posterior_mean[self.test_id], posterior_var[self.test_id]
+        Ntest = self.test_id.shape[0]
+        y_dim = self.r_test.shape[1]
+        test_mean = np.zeros([Ntest, y_dim])
+        test_var = np.zeros([Ntest, y_dim])
+        for n in range(Ntest):
+            # evaluate spatial kernel
+            H = self.prior.measurement_model(self.r_test[n], softplus_list(self.prior.hyp))
+            # return mean
+            test_mean[n] = H @ m_test
+            # return variance
+            test_var[n] = np.diag(H @ v_test @ H.T)
         return posterior_mean, posterior_var, site_params, nlpd_test
 
     def negative_log_predictive_density(self, y_test, m_test, v_test, hyp_lik):

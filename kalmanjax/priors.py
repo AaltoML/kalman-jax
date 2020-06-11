@@ -31,6 +31,10 @@ class Prior(object):
         raise NotImplementedError('kernel to state space mapping not implemented for this prior')
 
     @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        raise NotImplementedError('measurement model not implemented for this prior')
+
+    @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt).
@@ -74,6 +78,11 @@ class Exponential(Prior):
         H = np.array([[1.0]])
         Pinf = np.array([[var]])
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.array([[1.0]])
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -132,6 +141,11 @@ class Matern32(Prior):
         Pinf = np.array([[var, 0.0],
                          [0.0, 3.0 * var / ell ** 2.0]])
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.array([[1.0, 0.0]])
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -198,6 +212,11 @@ class Matern52(Prior):
                          [0.0,    kappa, 0.0],
                          [-kappa, 0.0,   25.0*var / ell**4.0]])
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.array([[1.0, 0.0, 0.0]])
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -275,6 +294,11 @@ class Matern72(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.array([[1, 0, 0, 0]])
+        return H
+
+    @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-7/2 prior.
@@ -338,6 +362,11 @@ class Cosine(Prior):
         Qc = []
         Pinf = np.eye(2)
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.array([[1.0, 0.0]])
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -404,6 +433,13 @@ class SubbandMatern12(Prior):
         H = np.kron(H_mat, H_cos)
         Pinf = np.kron(Pinf_mat, np.eye(2))
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H_mat = np.array([[1.0]])
+        H_cos = np.array([[1.0, 0.0]])
+        H = np.kron(H_mat, H_cos)
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -492,6 +528,13 @@ class SubbandMatern32(Prior):
         H = np.kron(H_mat, H_cos)
         Pinf = np.kron(Pinf_mat, np.eye(2))
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H_mat = np.array([[1.0, 0.0]])
+        H_cos = np.array([[1.0, 0.0]])
+        H = np.kron(H_mat, H_cos)
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -594,6 +637,13 @@ class SubbandMatern52(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H_mat = np.array([[1.0, 0.0, 0.0]])
+        H_cos = np.array([[1.0, 0.0]])
+        H = np.kron(H_mat, H_cos)
+        return H
+
+    @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the closed form discrete-time state
@@ -664,6 +714,11 @@ class Periodic(Prior):
         Pinf = np.kron(np.diag(q2), np.eye(2))
         H = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -762,6 +817,13 @@ class QuasiPeriodicMatern12(Prior):
         H = np.kron(H_m, H_p)
         Pinf = np.kron(Pinf_m, Pinf_p)
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H_m = np.array([[1.0]])
+        H = np.kron(H_m, H_p)
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -877,6 +939,13 @@ class QuasiPeriodicMatern32(Prior):
             [np.zeros([4, 24]), np.kron(Pinf_m, q2[6] * np.eye(2))]
         ])
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H_m = np.array([[1.0, 0.0]])
+        H = np.kron(H_m, H_p)
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
@@ -1055,6 +1124,16 @@ class Sum(object):
                 [np.zeros([Pinf_.shape[0], Pinf.shape[1]]), Pinf_]
             ])
         return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = self.components[0].measurement_model(x_space, hyperparams[0])
+        for i in range(1, len(self.components)):
+            H_ = self.components[i].measurement_model(x_space, hyperparams[i])
+            H = np.block([
+                H, H_
+            ])
+        return H
 
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):

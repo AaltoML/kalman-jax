@@ -16,9 +16,9 @@ X = np.loadtxt('../data/banana_X_train', delimiter=',')
 Y = np.loadtxt('../data/banana_Y_train')[:, None]
 
 # Test points
-# Xtest, Ytest = np.mgrid[-3.:3.:100j, -3.:3.:100j]
+Xtest, _ = np.mgrid[-3.:3.:100j, -3.:3.:100j]
 # Xtest = np.vstack((Xtest.flatten(), Ytest.flatten())).T
-X0test, X1test = np.linspace(-3., 3., num=100), np.linspace(-3., 3., num=100)
+# X0test, X1test = np.linspace(-3., 3., num=100), np.linspace(-3., 3., num=100)
 
 # plot_2d_classification(None, 0)
 
@@ -39,7 +39,7 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKEP()  # <-- not working
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=X0test, r_test=X1test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
