@@ -42,18 +42,21 @@ class SDEGP(object):
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
-        x, ind = nnp.unique(x, return_index=True)
+        x, ind = nnp.unique(x, return_index=True, axis=0)
+        if x.ndim < 2:
+            x = nnp.expand_dims(x, 1)  # make 2-D
         if y.ndim < 2:
             y = nnp.expand_dims(y, 1)  # make 2-D
         y = y[ind, :]
         self.t_train = x
         self.y = np.array(y)
         if x_test is None:
-            t_test = []
+            t_test = np.empty([1, x.shape[1:]]) * np.nan
         else:
-            t_test, test_sort_ind = nnp.unique(nnp.squeeze(x_test), return_index=True)  # test inputs
+            t_test, test_sort_ind = nnp.unique(nnp.squeeze(x_test), return_index=True, axis=0)  # test inputs
+            t_test = t_test.reshape((-1,) + x.shape[1:])
             if y_test is not None:
-                y_test = y_test[test_sort_ind].reshape(-1, 1)
+                y_test = y_test[test_sort_ind].reshape((-1,) + y.shape[1:])
         (self.t_all, self.test_id, self.train_id,
          self.y_all, self.mask, self.dt, self.dt_all) = self.input_admin(self.t_train, t_test, self.y, y_test)
         self.t_test = np.array(t_test)
@@ -86,8 +89,10 @@ class SDEGP(object):
             dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         """
         # here we use non-JAX numpy to sort out indexing of these static arrays
-        t, x_ind = nnp.unique(nnp.concatenate([t_test, t_train]), return_inverse=True)
-        n_test = t_test.shape[0]  # number of test locations
+        t_test_train = nnp.concatenate([t_test, t_train])
+        t_test_train = t_test_train[~np.isnan(t_test_train[:, 0]), :]
+        t, x_ind = nnp.unique(t_test_train, return_inverse=True, axis=0)
+        n_test = t_test[~np.isnan(t_test[:, 0])].shape[0]  # number of test locations
         test_id = x_ind[:n_test]  # index the test locations
         train_id = x_ind[n_test:]  # index the training locations
         y_all = nnp.nan * nnp.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
@@ -96,8 +101,8 @@ class SDEGP(object):
             y_all[x_ind[:n_test], :] = y_test  # and the data at the train locations
         mask = nnp.ones(y_all.shape[0], dtype=bool)
         mask[train_id] = False
-        dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train)])
-        dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t)])
+        dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
+        dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t[:, 0])])
         return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
                 np.array(mask), np.array(dt), np.array(dt_all))
 
@@ -383,9 +388,9 @@ class SDEGP(object):
         """
         self.update_model(softplus_list(self.prior.hyp))
         if x is None:
-            dt = np.concatenate([np.array([0.0]), np.diff(self.t_all)])
+            dt = np.concatenate([np.array([0.0]), np.diff(self.t_all[:, 0])])
         else:
-            dt = np.concatenate([np.array([0.0]), np.diff(np.sort(x))])
+            dt = np.concatenate([np.array([0.0]), np.diff(np.sort(x[:, 0]))])
         N = dt.shape[0]
         with loops.Scope() as s:
             s.f_sample = np.zeros([N, self.f_dim, num_samps])

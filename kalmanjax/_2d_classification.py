@@ -6,24 +6,49 @@ from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
 import likelihoods
-from utils import softplus_list, plot
+from utils import softplus_list
 pi = 3.141592653589793
 
 plot_intermediate = True
 
-print('generating some data ...')
-np.random.seed(99)
-N = 100000  # number of training points
-x = 100 * np.random.rand(N)
-f = lambda x_: 6 * np.sin(pi * x_ / 10.0) / (pi * x_ / 10.0 + 1)
-y_ = f(x) + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
-y = np.sign(y_)
+print('loading banana data ...')
+X = np.loadtxt('../data/banana_X_train', delimiter=',')
+Y = np.loadtxt('../data/banana_Y_train')[:, None]
 
-x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
-y_test = np.sign(f(x_test) + np.math.sqrt(0.05)*np.random.randn(x_test.shape[0]))
+# Test points
+Xtest, Ytest = np.mgrid[-3.:3.:100j, -3.:3.:100j]
+Xtest = np.vstack((Xtest.flatten(), Ytest.flatten())).T
+
+
+# Set up plotting
+def plot(m, it_num):
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    # xtest, ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
+    # Xtest = np.vstack((xtest.flatten(), ytest.flatten())).T
+    for i, mark in [[1, 'o'], [0, 'o']]:
+        ind = Y[:, 0] == i
+        # ax.plot(X[ind, 0], X[ind, 1], mark)
+        ax.scatter(X[ind, 0], X[ind, 1], s=100, alpha=.5)
+    # mu, var = m.predict_y(Xtest)
+    # ax.contour(xtest, ytest, mu.numpy().reshape(100, 100), levels=[.5],
+    #            colors='k', linewidths=4.)
+    ax.axis('equal')
+    plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+    # ax.axis('off')
+    ax.set_xlim(-2.8, 2.8)
+    ax.set_ylim(-2.8, 2.8)
+    plt.savefig('output/test_%d.png' % it_num)
+    plt.close()
+
+
+plot(None, 0)
+
+np.random.seed(99)
+N = X.shape[0]  # number of training points
 
 var_f = 1.0  # GP variance
-len_f = 5.0  # GP lengthscale
+len_f = 1.0  # GP lengthscale
 
 theta_prior = [var_f, len_f]
 
@@ -35,9 +60,9 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKEP()  # <-- not working
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=None, y_test=None, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -77,7 +102,7 @@ print('test NLPD: %1.2f' % nlpd)
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
-x_pred = model.t_all[:, 0]
+x_pred = model.t_all
 test_id = model.test_id
 link_fn = model.likelihood.link_fn
 

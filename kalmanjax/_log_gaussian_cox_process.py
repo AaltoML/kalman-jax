@@ -79,7 +79,7 @@ t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 # print('NLPD: %1.2f' % nlpd)
 
-x_pred = model.t_all
+x_pred = model.t_all[:, 0]
 link_fn = model.likelihood.link_fn
 scale = num_time_bins / (max(x_pred) - min(x_pred))
 post_mean_lgcp = link_fn(posterior_mean[:, 0] + posterior_var[:, 0] / 2) * scale

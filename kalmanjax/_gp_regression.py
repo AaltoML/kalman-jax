@@ -38,12 +38,12 @@ theta_lik = var_y
 prior = priors.Matern52(theta_prior)
 # prior_ = priors.QuasiPeriodicMatern32([var_f, len_f, 20., 50.])
 lik = likelihoods.Gaussian(theta_lik)
-# inf_method = approx_inf.EP(power=0.5)
+inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.PL()
 # inf_method = approx_inf.CL(power=0.5)
 # inf_method = approx_inf.IKS()
 # inf_method = approx_inf.EKS()
-inf_method = approx_inf.EKEP()
+# inf_method = approx_inf.EKEP()
 # inf_method = approx_inf.VI()
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
@@ -88,7 +88,7 @@ print('test NLPD: %1.2f' % nlpd)
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
-x_pred = model.t_all
+x_pred = model.t_all[:, 0]
 test_id = model.test_id
 
 print('sampling from the posterior ...')
