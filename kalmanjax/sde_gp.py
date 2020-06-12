@@ -174,7 +174,7 @@ class SDEGP(object):
     def run(self, params=None):
         """
         A single parameter update step - to be fed to a gradient-based optimiser.
-         - we first compute the marginal lilelihood and its gradient w.r.t. the hyperparameters via filtering
+         - we first compute the marginal likelihood and its gradient w.r.t. the hyperparameters via filtering
          - then update the site parameters via smoothing (site mean and variance)
         :param params: the model parameters. If not supplied then defaults to the model's
                        assigned parameters [num_params]
@@ -235,7 +235,7 @@ class SDEGP(object):
         """
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.kernel_to_state_space(hyperparams=theta_prior)
 
-    @partial(jit, static_argnums=(0, 4))
+    #@partial(jit, static_argnums=(0, 4))
     def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
@@ -305,6 +305,7 @@ class SDEGP(object):
                     s.P = np.where(mask[n], P_, s.P)
                     log_lik_n = np.where(mask[n][..., 0, 0], np.zeros_like(log_lik_n), log_lik_n)
                 s.neg_log_marg_lik -= np.sum(log_lik_n)
+                #s.neg_log_marg_lik += np.sum(log_lik_n)
                 if store:
                     s.filtered_mean = index_add(s.filtered_mean, index[n, ...], s.m)
                     s.filtered_cov = index_add(s.filtered_cov, index[n, ...], s.P)
@@ -314,7 +315,7 @@ class SDEGP(object):
             return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var))
         return s.neg_log_marg_lik
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y=None, site_params=None):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),

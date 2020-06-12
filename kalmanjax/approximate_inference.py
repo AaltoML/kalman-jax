@@ -109,14 +109,26 @@ class EKS(ApproxInf):
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr * var_obs * Jr + Jf * v * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
+        #site_var = (Jf * (Jr * sigma * Jr) ** -1 * Jf) ** -1
         site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
+        #site_mean = m + site_var * Jf * (Jr * var_obs * Jr)**-1 * residual
         # now compute the marginal likelihood approx.
         chol_site_var = cholesky(site_var, lower=True)
+        chol_site_var = np.sqrt(site_var)
+
+        # log_marg_lik = -1 * (
+        #         .5 * site_var.shape[0] * np.log(2 * pi)
+        #         + np.sum(np.log(np.diag(chol_site_var)))
+        #         + .5 * (residual * site_var ** -1 * residual)  # TODO: use cholesky for inverse in multi-dim case
+        # )
+
         log_marg_lik = -1 * (
-                .5 * site_var.shape[0] * np.log(2 * pi)
-                + np.sum(np.log(np.diag(chol_site_var)))
-                + .5 * (residual * site_var ** -1 * residual)  # TODO: use cholesky for inverse in multi-dim case
-        )
+                .5  * np.log(2 * pi)
+                + .5*np.log(sigma)
+                + .5 * (residual * (sigma ** -1) * residual))  # TODO: use cholesky for inverse in multi-dim case
+
+
+        #log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
         return log_marg_lik, site_mean, site_var
 
 

@@ -31,12 +31,12 @@ theta_prior = [var_f, len_f]
 
 prior = priors.Matern52(theta_prior)
 lik = likelihoods.Poisson()
-inf_method = approx_inf.EP(power=0.5)
+#inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.PL()
 # inf_method = approx_inf.CL(power=0.5)
 # inf_method = approx_inf.IKS()
-# inf_method = approx_inf.EKS()
-# inf_method = approx_inf.EKEP(power=0.5)
+inf_method = approx_inf.EKS()
+#inf_method = approx_inf.EKEP()
 # inf_method = approx_inf.VI()
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=inf_method)
@@ -66,7 +66,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(500):
+for j in range(20):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))

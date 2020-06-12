@@ -26,11 +26,11 @@ class Prior(object):
     def __init__(self, hyp=None):
         self.hyp = softplus_inv(np.array(hyp))
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         raise NotImplementedError('kernel to state space mapping not implemented for this prior')
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt).
@@ -63,7 +63,7 @@ class Exponential(Prior):
             self.hyp = [1.0, 1.0]
         self.name = 'Exponential'
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
@@ -75,7 +75,7 @@ class Exponential(Prior):
         Pinf = np.array([[var]])
         return F, L, Qc, H, Pinf
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the exponential prior.
@@ -117,7 +117,7 @@ class Matern32(Prior):
             self.hyp = [1.0, 1.0]
         self.name = 'Matern-3/2'
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
@@ -133,7 +133,7 @@ class Matern32(Prior):
                          [0.0, 3.0 * var / ell ** 2.0]])
         return F, L, Qc, H, Pinf
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-3/2 prior.
@@ -179,7 +179,7 @@ class Matern52(Prior):
     def set_hyperparams(self, hyp):
         self.hyp = hyp
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
@@ -200,7 +200,7 @@ class Matern52(Prior):
                          [-kappa, 0.0,   25.0*var / ell**4.0]])
         return F, L, Qc, H, Pinf
 
-    @partial(jit, static_argnums=0)
+    #@partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
         Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
