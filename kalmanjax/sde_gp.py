@@ -31,7 +31,7 @@ class SDEGP(object):
         - Extended Kalman smoother (EKS)
         - Variational Inference - with natural gradients (VI)
     """
-    def __init__(self, prior, likelihood, x, y, x_test=None, y_test=None, approx_inf=None):
+    def __init__(self, prior, likelihood, x, y, x_test=None, y_test=None, r_test=None, approx_inf=None):
         """
         :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
         :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
@@ -39,6 +39,7 @@ class SDEGP(object):
         :param y: training data / observations
         :param x_test: test inputs
         :param y_test: test data / observations
+
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
@@ -59,8 +60,12 @@ class SDEGP(object):
                 t_test = nnp.expand_dims(t_test, 1)
             if y_test is not None:
                 y_test = y_test[test_sort_ind].reshape((-1,) + y.shape[1:])
+            if r_test is not None:
+                r_test = r_test[test_sort_ind]
+        if r_test is None:
+            r_test = np.empty((1,) + x_test.shape[1:]) * np.nan
         (self.t_all, self.test_id, self.train_id, self.y_all,
-         self.mask, self.dt, self.dt_all, self.r_test) = self.input_admin(self.t_train, t_test, self.y, y_test)
+         self.mask, self.dt, self.dt_all, self.r_test) = self.input_admin(self.t_train, t_test, self.y, y_test, r_test)
         self.t_test = np.array(t_test)
         self.prior = prior
         self.likelihood = likelihood
@@ -75,13 +80,14 @@ class SDEGP(object):
         print('inference method is', self.sites.name)
 
     @staticmethod
-    def input_admin(t_train, t_test, y, y_test):
+    def input_admin(t_train, t_test, y, y_test, r_test):
         """
         Order the inputs, remove duplicates, and index the train and test input locations.
         :param t_train: training inputs [N, 1]
         :param t_test: testing inputs [N*, 1]
         :param y: observations at the training inputs [N, 1]
         :param y_test: observations at the test inputs [N*, 1]
+
         :return:
             t: the combined and sorted training and test inputs [N + N*, 1]
             test_id: an array of indices corresponding to the test inputs [N*, 1]
@@ -92,10 +98,12 @@ class SDEGP(object):
             dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         """
         if not (t_test.shape[1] == t_train.shape[1]):
-            r_test = t_test.copy()  # spacial test points
-            t_test = t_test[:, :t_train.shape[1]]  # temporal test points
-        else:
-            r_test = t_test.copy()
+            t_test = np.concatenate([t_test[:, 0][:, None],
+                                     np.nan * np.empty([t_test.shape[0], t_train.shape[1]-1])], axis=1)
+        #     r_test = t_test.copy()  # spacial test points
+        #     t_test = t_test[:, :t_train.shape[1]]  # temporal test points
+        # else:
+        #     r_test = t_test.copy()
         # here we use non-JAX numpy to sort out indexing of these static arrays
         t_test_train = nnp.concatenate([t_test, t_train])
         t_test_train = t_test_train[~np.isnan(t_test_train[:, 0]), :]

@@ -39,7 +39,7 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKEP()  # <-- not working
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, r_test=Ytest, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -98,11 +98,16 @@ for i, mark in [[1, 'o'], [0, 'o']]:
     # ax.plot(X[ind, 0], X[ind, 1], mark)
     ax.scatter(X[ind, 0], X[ind, 1], s=100, alpha=.5)
 mu, var, _, nlpd_test = model.predict_2d()
-ax.contour(Xtest, Ytest, mu.reshape(100, 100), levels=[.5], colors='k', linewidths=4.)
+mu = np.squeeze(mu)
+# ax.imshow(mu.T)
+ax.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=4.)
 ax.axis('equal')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
 # ax.axis('off')
 ax.set_xlim(-2.8, 2.8)
 ax.set_ylim(-2.8, 2.8)
+
+# plt.figure(2)
+# plt.imshow(mu)
 plt.show()
