@@ -8,7 +8,7 @@ from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
 import likelihoods
-from utils import softplus_list, plot_2d_classification
+from utils import softplus_list, plot_2d_classification, plot_2d_classification_filtering
 pi = 3.141592653589793
 
 plot_intermediate = True
@@ -18,7 +18,7 @@ X = np.loadtxt('../data/banana_X_train', delimiter=',')
 Y = np.loadtxt('../data/banana_Y_train')[:, None]
 
 # Test points
-Xtest, Ytest = np.mgrid[-3.:3.:100j, -3.:3.:100j]
+Xtest, Ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
 # Xtest = np.vstack((Xtest.flatten(), Ytest.flatten())).T
 # X0test, X1test = np.linspace(-3., 3., num=100), np.linspace(-3., 3., num=100)
 
@@ -43,12 +43,12 @@ inf_method = approx_inf.EP(power=0.5)
 
 model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, r_test=Ytest, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=4e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
 
-def gradient_step(i, state, mod):
+def gradient_step(i, state, mod, plot_num_, mu_prev_):
     params = get_params(state)
     mod.prior.hyp = params[0]
     mod.likelihood.hyp = params[1]
@@ -61,15 +61,18 @@ def gradient_step(i, state, mod):
           (i, prior_params[0], prior_params[1], prior_params[2], neg_log_marg_lik))
 
     if plot_intermediate:
-        plot_2d_classification(mod, i)
+        # plot_2d_classification(mod, i)
+        plot_num_, mu_prev_ = plot_2d_classification_filtering(mod, i, plot_num_, mu_prev_)
 
-    return opt_update(i, gradients, state)
+    return opt_update(i, gradients, state), plot_num_, mu_prev_
 
 
+plot_num = 0
+mu_prev = None
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(50):
-    opt_state = gradient_step(j, opt_state, model)
+for j in range(15):
+    opt_state, plot_num, mu_prev = gradient_step(j, opt_state, model, plot_num, mu_prev)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
@@ -95,11 +98,11 @@ link_fn = model.likelihood.link_fn
 
 print('plotting ...')
 fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-for i, mark in [[1, 'o'], [0, 'o']]:
-    ind = Y[:, 0] == i
+for label, mark in [[1, 'o'], [0, 'o']]:
+    ind = Y[:, 0] == label
     # ax.plot(X[ind, 0], X[ind, 1], mark)
     ax.scatter(X[ind, 0], X[ind, 1], s=100, alpha=.5)
-mu, var, _, nlpd_test = model.predict_2d()
+mu, var, _, nlpd_test, _, _ = model.predict_2d()
 mu = np.squeeze(mu)
 # ax.imshow(mu.T)
 ax.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=4.)
@@ -107,7 +110,7 @@ ax.axis('equal')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
 # ax.axis('off')
-lim = 3
+lim = 2.8
 ax.set_xlim(-lim, lim)
 ax.set_ylim(-lim, lim)
 
@@ -121,8 +124,8 @@ plt.figure(2)
 plt.imshow(link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower')
 plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
 # plt.axis('equal')
-for i in [1, 0]:
-    ind = Y[:, 0] == i
+for label in [1, 0]:
+    ind = Y[:, 0] == label
     plt.scatter(X[ind, 0], X[ind, 1], s=50, alpha=.5, edgecolor='k')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)

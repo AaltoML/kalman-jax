@@ -136,7 +136,7 @@ def plot(model, it_num, ax=None):
     plt.xlim([model.t_test[0], model.t_test[-1]])
     plt.title('Test NLPD: %1.2f' % nlpd)
     plt.xlabel('time - $t$')
-    plt.savefig('output/output_%02d.png' % it_num)
+    plt.savefig('output/output_%04d.png' % it_num)
     plt.close()
 
 
@@ -161,21 +161,81 @@ def plot_2d_classification(m, it_num):
     mu, var, _, nlpd_test = m.predict_2d()
     mu = np.squeeze(mu)
     lim = 3
+    label0, label1 = -1., 1.  # class labels are +/-1
     cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
     cmap = hsv_to_rgb(
-        interp1d([-1, 1], rgb_to_hsv(cmap_), axis=0
+        interp1d([label0, label1], rgb_to_hsv(cmap_), axis=0
                  )(m.likelihood.link_fn(nnp.linspace(-3.5, 3.5, num=64))))
     newcmp = ListedColormap(cmap)
 
-    Xtest, Ytest = nnp.mgrid[-3.:3.:100j, -3.:3.:100j]
-    plt.figure(2)
-    plt.imshow(m.likelihood.link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower')
+    Xtest, Ytest = nnp.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
+    plt.figure()
+    plt.imshow(m.likelihood.link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
+               vmin=label0, vmax=label1)
     plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
     # plt.axis('equal')
-    for i in [1, 0]:
-        ind = m.y[:, 0] == i
+    for label in [1, 0]:
+        ind = m.y[:, 0] == label
         plt.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=50, alpha=.5, edgecolor='k')
     plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
-    plt.savefig('output/output_%02d.png' % it_num)
+    plt.savefig('output/output_%04d.png' % it_num)
     plt.close()
+
+
+def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
+    mu, var, _, nlpd_test, mu_filt, var_filt = m.predict_2d()
+    mu, mu_filt = np.squeeze(mu), np.squeeze(mu_filt)
+    if mu_prev is None:
+        mu_plot = nnp.zeros_like(mu)
+    else:
+        mu_plot = mu_prev
+    lim = 2.8
+    label0, label1 = -1., 1.  # class labels are +/-1
+    cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
+    cmap = hsv_to_rgb(
+        interp1d([label0, label1], rgb_to_hsv(cmap_), axis=0
+                 )(m.likelihood.link_fn(nnp.linspace(-3.5, 3.5, num=64))))
+    newcmp = ListedColormap(cmap)
+
+    Xtest, Ytest = nnp.mgrid[-lim:lim:100j, -lim:lim:100j]
+
+    for i in range(mu_plot.shape[0]):
+        mu_plot[i] = mu_filt[i]
+        plt.figure()
+        plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
+                   vmin=label0, vmax=label1)
+        # plt.contour(Xtest, Ytest, mu_plot, levels=[.0], colors='k', linewidths=1.5)
+        # plt.axis('equal')
+        for label in [1, 0]:
+            ind = m.y[:, 0] == label
+            plt.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=50, alpha=.5, edgecolor='k')
+        plt.plot([Xtest[i, 0], Xtest[i, 0]], [-lim, lim], 'k', alpha=0.4)
+        plt.title('Iteration: %02d' % (it_num + 1), loc='right', fontweight='bold')
+        plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+        plt.xlim(-lim, lim)
+        plt.ylim(-lim, lim)
+        plt.savefig('output/output_%04d.png' % plot_num)
+        plt.close()
+        plot_num += 1
+    for i in range(mu_plot.shape[0] - 1, -1, -1):
+        mu_plot[i] = mu[i]
+        plt.figure()
+        plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
+                   vmin=label0, vmax=label1)
+        # plt.contour(Xtest, Ytest, mu_plot, levels=[.0], colors='k', linewidths=1.5)
+        # plt.axis('equal')
+        for label in [1, 0]:
+            ind = m.y[:, 0] == label
+            plt.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=50, alpha=.5, edgecolor='k')
+        plt.plot([Xtest[i, 0], Xtest[i, 0]], [-lim, lim], 'k', alpha=0.4)
+        plt.title('Iteration: %02d' % (it_num + 1), loc='right', fontweight='bold')
+        plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+        plt.xlim(-lim, lim)
+        plt.ylim(-lim, lim)
+        plt.savefig('output/output_%04d.png' % plot_num)
+        plt.close()
+        plot_num += 1
+    return plot_num, mu_plot
