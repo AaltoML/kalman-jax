@@ -203,8 +203,11 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
     for i in range(mu_plot.shape[0]):
         mu_plot[i] = mu_filt[i]
         plt.figure()
-        plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
-                   vmin=label0, vmax=label1)
+        im = plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
+                        vmin=label0, vmax=label1)
+        cb = plt.colorbar(im)
+        cb.set_ticks([cb.vmin, 0, cb.vmax])
+        cb.set_ticklabels([-1, 0, 1])
         # plt.contour(Xtest, Ytest, mu_plot, levels=[.0], colors='k', linewidths=1.5)
         # plt.axis('equal')
         for label in [1, 0]:
@@ -222,8 +225,11 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
     for i in range(mu_plot.shape[0] - 1, -1, -1):
         mu_plot[i] = mu[i]
         plt.figure()
-        plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
-                   vmin=label0, vmax=label1)
+        im = plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
+                        vmin=label0, vmax=label1)
+        cb = plt.colorbar(im)
+        cb.set_ticks([cb.vmin, 0, cb.vmax])
+        cb.set_ticklabels([-1, 0, 1])
         # plt.contour(Xtest, Ytest, mu_plot, levels=[.0], colors='k', linewidths=1.5)
         # plt.axis('equal')
         for label in [1, 0]:
