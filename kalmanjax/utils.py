@@ -136,7 +136,7 @@ def plot(model, it_num, ax=None):
     plt.xlim([model.t_test[0], model.t_test[-1]])
     plt.title('Test NLPD: %1.2f' % nlpd)
     plt.xlabel('time - $t$')
-    plt.savefig('output/test_%d.png' % it_num)
+    plt.savefig('output/output_%02d.png' % it_num)
     plt.close()
 
 
@@ -177,5 +177,5 @@ def plot_2d_classification(m, it_num):
         plt.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=50, alpha=.5, edgecolor='k')
     plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
-    plt.savefig('output/test_%d.png' % it_num)
+    plt.savefig('output/output_%02d.png' % it_num)
     plt.close()
