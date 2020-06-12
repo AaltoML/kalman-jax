@@ -11,7 +11,7 @@ import likelihoods
 from utils import softplus_list, plot_2d_classification
 pi = 3.141592653589793
 
-plot_intermediate = False
+plot_intermediate = True
 
 print('loading banana data ...')
 X = np.loadtxt('../data/banana_X_train', delimiter=',')
@@ -27,9 +27,9 @@ Xtest, Ytest = np.mgrid[-3.:3.:100j, -3.:3.:100j]
 np.random.seed(99)
 N = X.shape[0]  # number of training points
 
-var_f = 1.0  # GP variance
-len_time = 1.0  # temporal lengthscale
-len_space = 1.0  # spacial lengthscale
+var_f = 0.2  # GP variance
+len_time = 0.2  # temporal lengthscale
+len_space = 0.2  # spacial lengthscale
 
 theta_prior = [var_f, len_time, len_space]
 
@@ -43,7 +43,7 @@ inf_method = approx_inf.EP(power=0.5)
 
 model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, r_test=Ytest, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -68,7 +68,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(20):
+for j in range(50):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -79,7 +79,7 @@ t0 = time.time()
 posterior_mean, posterior_var, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
-print('test NLPD: %1.2f' % nlpd)
+# print('test NLPD: %1.2f' % nlpd)
 
 lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
 ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
@@ -111,8 +111,8 @@ lim = 3
 ax.set_xlim(-lim, lim)
 ax.set_ylim(-lim, lim)
 
-x1 = np.linspace(-lim, lim, num=100)
-x2 = np.linspace(-lim, lim, num=100)
+# x1 = np.linspace(-lim, lim, num=100)
+# x2 = np.linspace(-lim, lim, num=100)
 cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
 cmap = hsv_to_rgb(interp1d([-1, 1], rgb_to_hsv(cmap_), axis=0)(link_fn(np.linspace(-3.5, 3.5, num=64))))
 newcmp = ListedColormap(cmap)
@@ -124,4 +124,6 @@ plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
 for i in [1, 0]:
     ind = Y[:, 0] == i
     plt.scatter(X[ind, 0], X[ind, 1], s=50, alpha=.5, edgecolor='k')
+plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
 plt.show()

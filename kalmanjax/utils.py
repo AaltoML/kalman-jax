@@ -2,7 +2,10 @@ import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax import random
+import numpy as nnp
+from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
+from matplotlib.colors import hsv_to_rgb, rgb_to_hsv, ListedColormap
 pi = 3.141592653589793
 
 
@@ -138,21 +141,41 @@ def plot(model, it_num, ax=None):
 
 
 def plot_2d_classification(m, it_num):
-    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-    # xtest, ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
-    # Xtest = np.vstack((xtest.flatten(), ytest.flatten())).T
-    for i, mark in [[1, 'o'], [0, 'o']]:
-        ind = m.y[:, 0] == i
-        # ax.plot(X[ind, 0], X[ind, 1], mark)
-        ax.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=100, alpha=.5)
+    # fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    # # xtest, ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
+    # # Xtest = np.vstack((xtest.flatten(), ytest.flatten())).T
+    # for i, mark in [[1, 'o'], [0, 'o']]:
+    #     ind = m.y[:, 0] == i
+    #     # ax.plot(X[ind, 0], X[ind, 1], mark)
+    #     ax.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=100, alpha=.5)
+    # mu, var, _, nlpd_test = m.predict_2d()
+    # ax.contour(m.t_test, m.y_all[m.test_id], mu.reshape(100, 100), levels=[.5],
+    #            colors='k', linewidths=4.)
+    # ax.axis('equal')
+    # plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    # plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+    # # ax.axis('off')
+    # ax.set_xlim(-2.8, 2.8)
+    # ax.set_ylim(-2.8, 2.8)
+
     mu, var, _, nlpd_test = m.predict_2d()
-    ax.contour(m.t_test, m.y_all[m.test_id], mu.reshape(100, 100), levels=[.5],
-               colors='k', linewidths=4.)
-    ax.axis('equal')
+    mu = np.squeeze(mu)
+    lim = 3
+    cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
+    cmap = hsv_to_rgb(
+        interp1d([-1, 1], rgb_to_hsv(cmap_), axis=0
+                 )(m.likelihood.link_fn(nnp.linspace(-3.5, 3.5, num=64))))
+    newcmp = ListedColormap(cmap)
+
+    Xtest, Ytest = nnp.mgrid[-3.:3.:100j, -3.:3.:100j]
+    plt.figure(2)
+    plt.imshow(m.likelihood.link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower')
+    plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
+    # plt.axis('equal')
+    for i in [1, 0]:
+        ind = m.y[:, 0] == i
+        plt.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=50, alpha=.5, edgecolor='k')
     plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
-    # ax.axis('off')
-    ax.set_xlim(-2.8, 2.8)
-    ax.set_ylim(-2.8, 2.8)
     plt.savefig('output/test_%d.png' % it_num)
     plt.close()
