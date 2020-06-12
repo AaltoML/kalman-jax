@@ -1,6 +1,8 @@
 import numpy as np
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
+from matplotlib.colors import hsv_to_rgb, rgb_to_hsv, ListedColormap
+from scipy.interpolate import interp1d
 import time
 from sde_gp import SDEGP
 import approximate_inference as approx_inf
@@ -105,9 +107,21 @@ ax.axis('equal')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
 # ax.axis('off')
-ax.set_xlim(-2.8, 2.8)
-ax.set_ylim(-2.8, 2.8)
+lim = 3
+ax.set_xlim(-lim, lim)
+ax.set_ylim(-lim, lim)
 
-# plt.figure(2)
-# plt.imshow(mu)
+x1 = np.linspace(-lim, lim, num=100)
+x2 = np.linspace(-lim, lim, num=100)
+cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
+cmap = hsv_to_rgb(interp1d([-1, 1], rgb_to_hsv(cmap_), axis=0)(link_fn(np.linspace(-3.5, 3.5, num=64))))
+newcmp = ListedColormap(cmap)
+
+plt.figure(2)
+plt.imshow(link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower')
+plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
+# plt.axis('equal')
+for i in [1, 0]:
+    ind = Y[:, 0] == i
+    plt.scatter(X[ind, 0], X[ind, 1], s=50, alpha=.5, edgecolor='k')
 plt.show()
