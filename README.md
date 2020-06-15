@@ -1,4 +1,4 @@
-# kalman-jax
+# kalmanjax
 Approximate inference for Markov Gaussian processes using iterated Kalman filtering and smoothing.
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
