@@ -158,9 +158,9 @@ def plot_2d_classification(m, it_num):
     # ax.set_xlim(-2.8, 2.8)
     # ax.set_ylim(-2.8, 2.8)
 
-    mu, var, _, nlpd_test = m.predict_2d()
+    mu, var, _, nlpd_test, _, _ = m.predict_2d()
     mu = np.squeeze(mu)
-    lim = 3
+    lim = 2.8
     label0, label1 = -1., 1.  # class labels are +/-1
     cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
     cmap = hsv_to_rgb(
@@ -170,8 +170,11 @@ def plot_2d_classification(m, it_num):
 
     Xtest, Ytest = nnp.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
     plt.figure()
-    plt.imshow(m.likelihood.link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
-               vmin=label0, vmax=label1)
+    im = plt.imshow(m.likelihood.link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
+                    vmin=label0, vmax=label1)
+    cb = plt.colorbar(im)
+    cb.set_ticks([cb.vmin, 0, cb.vmax])
+    cb.set_ticklabels([-1, 0, 1])
     plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
     # plt.axis('equal')
     for label in [1, 0]:
@@ -179,6 +182,7 @@ def plot_2d_classification(m, it_num):
         plt.scatter(m.t_train[ind, 0], m.t_train[ind, 1], s=50, alpha=.5, edgecolor='k')
     plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+    plt.title('Iteration: %02d' % (it_num + 1), loc='right', fontweight='bold')
     plt.savefig('output/output_%04d.png' % it_num)
     plt.close()
 
@@ -200,7 +204,7 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
 
     Xtest, Ytest = nnp.mgrid[-lim:lim:100j, -lim:lim:100j]
 
-    for i in range(mu_plot.shape[0]):
+    for i in range(Xtest.shape[0]):
         mu_plot[i] = mu_filt[i]
         plt.figure()
         im = plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',
@@ -222,7 +226,7 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
         plt.savefig('output/output_%04d.png' % plot_num)
         plt.close()
         plot_num += 1
-    for i in range(mu_plot.shape[0] - 1, -1, -1):
+    for i in range(Xtest.shape[0] - 1, -1, -1):
         mu_plot[i] = mu[i]
         plt.figure()
         im = plt.imshow(m.likelihood.link_fn(mu_plot).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origin='lower',

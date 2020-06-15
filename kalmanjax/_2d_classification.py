@@ -11,7 +11,7 @@ import likelihoods
 from utils import softplus_list, plot_2d_classification, plot_2d_classification_filtering
 pi = 3.141592653589793
 
-plot_intermediate = False
+plot_intermediate = True
 
 print('loading banana data ...')
 X = np.loadtxt('../data/banana_X_train', delimiter=',')
@@ -43,7 +43,7 @@ inf_method = approx_inf.EP(power=0.5)
 
 model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, r_test=Ytest, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=8e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -61,8 +61,8 @@ def gradient_step(i, state, mod, plot_num_, mu_prev_):
           (i, prior_params[0], prior_params[1], prior_params[2], neg_log_marg_lik))
 
     if plot_intermediate:
-        # plot_2d_classification(mod, i)
-        plot_num_, mu_prev_ = plot_2d_classification_filtering(mod, i, plot_num_, mu_prev_)
+        plot_2d_classification(mod, i)
+        # plot_num_, mu_prev_ = plot_2d_classification_filtering(mod, i, plot_num_, mu_prev_)
 
     return opt_update(i, gradients, state), plot_num_, mu_prev_
 
@@ -71,7 +71,7 @@ plot_num = 0
 mu_prev = None
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(8):
+for j in range(30):
     opt_state, plot_num, mu_prev = gradient_step(j, opt_state, model, plot_num, mu_prev)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))

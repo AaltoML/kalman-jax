@@ -108,9 +108,8 @@ class EKS(ApproxInf):
         likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr * var_obs * Jr  # + Jf * v * Jf
-        site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
-        # site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
-        site_mean = m + site_var * Jf * sigma**-1 * residual
+        site_var = (Jf * sigma ** -1 * Jf) ** -1
+        site_mean = m + (site_var + v) * Jf * (sigma + Jf * v * Jf) ** -1 * residual
         # now compute the marginal likelihood approx.
         chol_site_var = cholesky(site_var, lower=True)
         log_marg_lik = -1 * (
