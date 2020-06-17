@@ -302,7 +302,7 @@ class Gaussian(Likelihood):
 
 class Bernoulli(Likelihood):
     """
-    The Probit Binary Classification likelihood, i.e. the Error Function Likelihood,
+    The Probit link function, i.e. the Error Function Likelihood,
     i.e. the Gaussian (Normal) cumulative density function:
         p(yₙ|fₙ) = Φ(yₙfₙ)
                  = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙyₙ],
@@ -310,6 +310,8 @@ class Bernoulli(Likelihood):
     The Normal CDF is calulcated using the error function:
         Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
     for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
+    The logit link function,
+        i.e. p(yₙ|fₙ) = 1 / 1 + exp(-fₙ)
     """
     def __init__(self,link):
         super().__init__(hyp=None)
@@ -317,7 +319,8 @@ class Bernoulli(Likelihood):
             self.link_fn = lambda f: 1 / (1 + np.exp(-f))
             self.link = link
         elif link is 'probit':
-            self.link_fn = lambda f: erfc(-f / np.sqrt(2.0)) - 1.0
+            jitter = 1e-3
+            self.link_fn = lambda f: 0.5 * (1.0 + erf(f / np.sqrt(2.0))) * (1 - 2 * jitter) + jitter
             self.link = link
         else:
             raise NotImplementedError('link function not implemented')
@@ -329,7 +332,7 @@ class Bernoulli(Likelihood):
     # def link_fn(latent_mean):
     #     return erfc(-latent_mean / np.sqrt(2.0)) - 1.0
 
-    #@partial(jit, static_argnums=0)
+    @partial(jit, static_argnums=0)
     def eval(self, mu, var):
         """
         ported from GPML toolbox - not used.
@@ -340,9 +343,10 @@ class Bernoulli(Likelihood):
         yvar = 4 * p * (1 - p)
         return lp, ymu, yvar
 
-    #@partial(jit, static_argnums=0)
+    @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
         """
+        Probit:
         Evaluate the Gaussian CDF likelihood model,
             Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
         for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
@@ -352,13 +356,16 @@ class Bernoulli(Likelihood):
         :param hyp: dummy input, Probit has no hyperparameters
         :return:
             Φ(yₙfₙ) [Q, 1]
+        Logit:
+        Evaluate Bernoulli likelihood with a probability p,
+
         """
         if self.link is 'probit':
             return (1.0 + erf(y * f / np.sqrt(2.0))) / 2.0  # Φ(z)
         elif self.link is 'logit':
             return np.where(np.equal(y, 1), self.link_fn(f), 1 - self.link_fn(f))
 
-    #@partial(jit, static_argnums=0)
+    @partial(jit, static_argnums=0)
     def evaluate_log_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Gaussian CDF log-likelihood,
@@ -376,7 +383,7 @@ class Bernoulli(Likelihood):
         elif self.link is 'logit':
             return np.log(np.where(np.equal(y, 1), self.link_fn(f), 1 - self.link_fn(f)))
 
-    #@partial(jit, static_argnums=0)
+    @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
         """
         The first two conditional moments of a Probit likelihood are:
@@ -394,7 +401,7 @@ class Bernoulli(Likelihood):
         elif self.link is 'logit':
             return self.link_fn(f), self.link_fn(f)-(self.link_fn(f)**2)
 
-    #@partial(jit, static_argnums=(0, 5))
+    @partial(jit, static_argnums=(0, 5))
     def moment_match(self, y, m, v, hyp=None, power=1.0):
         """
         Probit likelihood moment matching.
@@ -436,8 +443,16 @@ class Bernoulli(Likelihood):
             return self.moment_match_quadrature(y, m, v, None, power)
 
 
-# class Erf(Probit):
-#     pass
+class Probit(Bernoulli):
+    """
+
+    """
+    def __init__(self):
+        super().__init__(link='probit')
+
+
+class Erf(Probit):
+    pass
 
 
 class Poisson(Likelihood):

@@ -1,5 +1,6 @@
 import jax.numpy as np
 from jax.scipy.linalg import cholesky
+from jax.scipy.linalg import cho_solve
 pi = 3.141592653589793
 
 
@@ -79,13 +80,14 @@ class EKEP(ApproxInf):
         sigma = Jr * var_obs * Jr + Jf * var_cav * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
         site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
+
         # now compute the marginal likelihood approx.
-        chol_site_var = cholesky(site_var, lower=True)
+        chol_sigma = cholesky(sigma, lower=True)
         log_marg_lik = -1 * (
                 .5 * site_var.shape[0] * np.log(2 * pi)
-                + np.sum(np.log(np.diag(chol_site_var)))
-                + .5 * (residual * site_var**-1 * residual)
-        )
+                + np.sum(np.log(np.diag(chol_sigma)))
+                + .5 * (residual.T @ cho_solve((chol_sigma,True),residual)))
+
         return log_marg_lik, site_mean, site_var
 
 
@@ -109,26 +111,16 @@ class EKS(ApproxInf):
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr * var_obs * Jr + Jf * v * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
-        #site_var = (Jf * (Jr * sigma * Jr) ** -1 * Jf) ** -1
         site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
-        #site_mean = m + site_var * Jf * (Jr * var_obs * Jr)**-1 * residual
-        # now compute the marginal likelihood approx.
-        chol_site_var = cholesky(site_var, lower=True)
-        chol_site_var = np.sqrt(site_var)
 
-        # log_marg_lik = -1 * (
-        #         .5 * site_var.shape[0] * np.log(2 * pi)
-        #         + np.sum(np.log(np.diag(chol_site_var)))
-        #         + .5 * (residual * site_var ** -1 * residual)  # TODO: use cholesky for inverse in multi-dim case
-        # )
+        # now compute the marginal likelihood approx.
+        chol_sigma = cholesky(sigma, lower=True)
 
         log_marg_lik = -1 * (
-                .5  * np.log(2 * pi)
-                + .5*np.log(sigma)
-                + .5 * (residual * (sigma ** -1) * residual))  # TODO: use cholesky for inverse in multi-dim case
+                .5 * site_var.shape[0] * np.log(2 * pi)
+                + np.sum(np.log(np.diag(chol_sigma)))
+                + .5 * (residual.T @ cho_solve((chol_sigma,True),residual)))
 
-
-        #log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
         return log_marg_lik, site_mean, site_var
 
 

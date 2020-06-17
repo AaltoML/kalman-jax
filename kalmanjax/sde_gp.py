@@ -235,7 +235,7 @@ class SDEGP(object):
         """
         self.F, self.L, self.Qc, self.H, self.Pinf = self.prior.kernel_to_state_space(hyperparams=theta_prior)
 
-    #@partial(jit, static_argnums=(0, 4))
+    @partial(jit, static_argnums=(0, 4))
     def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None):
         """
         Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
@@ -315,7 +315,7 @@ class SDEGP(object):
             return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_var))
         return s.neg_log_marg_lik
 
-    #@partial(jit, static_argnums=0)
+    @partial(jit, static_argnums=0)
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, y=None, site_params=None):
         """
         Run the RTS smoother to get p(fₙ|y₁,...,y_N),
