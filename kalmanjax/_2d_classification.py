@@ -11,7 +11,7 @@ import likelihoods
 from utils import softplus_list, plot_2d_classification, plot_2d_classification_filtering
 pi = 3.141592653589793
 
-plot_intermediate = True
+plot_intermediate = False
 
 print('loading banana data ...')
 X = np.loadtxt('../data/banana_X_train', delimiter=',')
@@ -101,7 +101,7 @@ plt.figure(1)
 for label, mark in [[1, 'o'], [0, 'o']]:
     ind = Y[:, 0] == label
     # ax.plot(X[ind, 0], X[ind, 1], mark)
-    plt.scatter(X[ind, 0], X[ind, 1], s=100, alpha=.5)
+    plt.scatter(X[ind, 0], X[ind, 1], s=50, alpha=.5)
 mu, var, _, nlpd_test, _, _ = model.predict_2d()
 mu = np.squeeze(mu)
 # ax.imshow(mu.T)
