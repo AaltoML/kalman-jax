@@ -9,11 +9,11 @@ import likelihoods
 from utils import softplus_list, plot
 pi = 3.141592653589793
 
-plot_intermediate = True
+plot_intermediate = False
 
 print('generating some data ...')
 np.random.seed(99)
-N = 100000  # number of training points
+N = 1000  # number of training points
 x = 100 * np.random.rand(N)
 f = lambda x_: 6 * np.sin(pi * x_ / 10.0) / (pi * x_ / 10.0 + 1)
 y_ = f(x) + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
@@ -62,7 +62,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(20):
+for j in range(100):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
