@@ -306,13 +306,13 @@ class Bernoulli(Likelihood):
     Link function maps latent GP to [0,1].
     The Probit link function, i.e. the Error Function Likelihood:
         i.e. the Gaussian (Normal) cumulative density function:
-        E[yₙ=1|fₙ] = Φ(fₙ)
-                   = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙ],
+        P = E[yₙ=1|fₙ] = Φ(fₙ)
+                       = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙ],
         The Normal CDF is calulcated using the error function:
-                P = Φ(fₙ) = (1 + erf(fₙ / √2)) / 2
+                       = (1 + erf(fₙ / √2)) / 2
         for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
     The logit link function:
-        P = Φ(fₙ) = 1 / 1 + exp(-fₙ)
+        P = E[yₙ=1|fₙ] = 1 / 1 + exp(-fₙ)
     """
     def __init__(self, link):
         super().__init__(hyp=None)
@@ -378,7 +378,7 @@ class Bernoulli(Likelihood):
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
-        y = np.sign(y)  # only allow values of {0,1}
+        y = np.sign(y)  # only allow values of {0, 1}
         if power == 1 and self.link == 'probit':  # if a = 1, we can calculate the moments in closed form
             y = np.sign(y - 0.01)  # set zeros to -1 for closed form probit calc
             z = m / np.sqrt(1.0 + v)
