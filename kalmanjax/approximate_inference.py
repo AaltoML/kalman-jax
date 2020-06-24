@@ -1,6 +1,5 @@
 import jax.numpy as np
-from jax.scipy.linalg import cholesky
-from jax.scipy.linalg import cho_solve
+from jax.scipy.linalg import cho_factor, cho_solve
 pi = 3.141592653589793
 
 
@@ -80,18 +79,18 @@ class ExtendedExpectationPropagation(ApproxInf):
             mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
         # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
         Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)  # evaluated at the mean
-        var_obs = 1.0  # observation noise scale is w.l.o.g. 1
+        var_obs = np.array([[1.0]])  # observation noise scale is w.l.o.g. 1
         likelihood_expectation, _ = likelihood.conditional_moments(mu_cav, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr * var_obs * Jr + self.power * Jf * var_cav * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
-        site_mean = m + (site_var + self.power * var_cav) * Jf * sigma**-1 * residual
+        site_mean = mu_cav + (site_var + self.power * var_cav) * Jf * sigma**-1 * residual
         # now compute the marginal likelihood approx.
-        chol_sigma = cholesky(sigma, lower=True)
+        chol_sigma, low = cho_factor(sigma)
         log_marg_lik = -1 * (
                 .5 * site_var.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
-                + .5 * (residual.T @ cho_solve((chol_sigma, True), residual)))
+                + .5 * (residual.T @ cho_solve((chol_sigma, low), residual)))
         return log_marg_lik, site_mean, site_var
 
 
@@ -114,18 +113,18 @@ class ExtendedKalmanSmoother(ApproxInf):
         """
         # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
         Jf, Jr = likelihood.analytical_linearisation(m, hyp)  # evaluated at the mean
-        var_obs = 1.0  # observation noise scale is w.l.o.g. 1
+        var_obs = np.array([[1.0]])  # observation noise scale is w.l.o.g. 1
         likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr * var_obs * Jr
         site_var = (Jf * sigma ** -1 * Jf) ** -1
         site_mean = m + site_var * Jf * sigma**-1 * residual
         # now compute the marginal likelihood approx.
-        chol_sigma = cholesky(sigma, lower=True)
+        chol_sigma, low = cho_factor(sigma)
         log_marg_lik = -1 * (
                 .5 * site_var.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
-                + .5 * (residual.T @ cho_solve((chol_sigma,True),residual)))
+                + .5 * (residual.T @ cho_solve((chol_sigma, low), residual)))
         return log_marg_lik, site_mean, site_var
 
 
