@@ -77,9 +77,9 @@ class EKEP(ApproxInf):
         var_obs = 1.0  # observation noise scale is w.l.o.g. 1
         likelihood_expectation, _ = likelihood.conditional_moments(mu_cav, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
-        sigma = Jr * var_obs * Jr + Jf * var_cav * Jf
+        sigma = Jr * var_obs * Jr + self.power * Jf * var_cav * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
-        site_mean = m + (site_var + var_cav) * Jf * sigma**-1 * residual
+        site_mean = m + (site_var + self.power * var_cav) * Jf * sigma**-1 * residual
 
         # now compute the marginal likelihood approx.
         chol_sigma = cholesky(sigma, lower=True)
