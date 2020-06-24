@@ -302,17 +302,17 @@ class Gaussian(Likelihood):
 
 class Bernoulli(Likelihood):
     """
-    Bernoulli likelihood is p(yₙ|fₙ) = pʸ(1-p)⁽¹⁻ʸ⁾, where p = E[yₙ=1|fₙ].
+    Bernoulli likelihood is p(yₙ|fₙ) = Pʸ(1-P)⁽¹⁻ʸ⁾, where P = E[yₙ=1|fₙ].
     Link function maps latent GP to [0,1].
-    The Probit link function, i.e. the Error Function Likelihood,
-    i.e. the Gaussian (Normal) cumulative density function:
+    The Probit link function, i.e. the Error Function Likelihood:
+        i.e. the Gaussian (Normal) cumulative density function:
         E[yₙ=1|fₙ] = Φ(fₙ)
                    = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙ],
-    The Normal CDF is calulcated using the error function:
-        p = Φ(fₙ) = (1 + erf(fₙ / √2)) / 2
-    for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
-    The logit link function,
-        p = Φ(fₙ) = 1 / 1 + exp(-fₙ)
+        The Normal CDF is calulcated using the error function:
+                P = Φ(fₙ) = (1 + erf(fₙ / √2)) / 2
+        for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
+    The logit link function:
+        P = Φ(fₙ) = 1 / 1 + exp(-fₙ)
     """
     def __init__(self,link):
         super().__init__(hyp=None)
@@ -336,7 +336,7 @@ class Bernoulli(Likelihood):
         :param f: latent function value fₙ ϵ ℝ
         :param hyp: dummy input, Probit/Logit has no hyperparameters
         :return:
-            p(yₙ|fₙ) = pʸ(1-p)⁽¹⁻ʸ⁾
+            p(yₙ|fₙ) = Pʸ(1-P)⁽¹⁻ʸ⁾
         """
         return np.where(np.equal(y, 1), self.link_fn(f), 1 - self.link_fn(f))
 
@@ -370,7 +370,6 @@ class Bernoulli(Likelihood):
         If the EP fraction a = 1, we get
                   = log Φ(yₙzₙ), where zₙ = mₙ / √(1 + vₙ)   [see Rasmussen & Williams p74]
         otherwise we must use quadrature to compute the log partition and its derivatives.
-        Note: we enforce yₙ ϵ {-1, +1}.
         :param y: observed data (yₙ) [scalar]
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
@@ -381,9 +380,9 @@ class Bernoulli(Likelihood):
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
-        y = np.sign(y)  # only allow values of +/-1
-        y = np.sign(y - 0.01)  # set zeros to -1
+        y = np.sign(y)  # only allow values of {0,1}
         if power == 1 and self.link == 'probit':  # if a = 1, we can calculate the moments in closed form
+            y = np.sign(y - 0.01)  # set zeros to -1 for closed form probit calc
             z = m / np.sqrt(1.0 + v)
             z = z * y  # zₙ = yₙmₙ / √(1 + vₙ)
             # logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -403,19 +402,29 @@ class Bernoulli(Likelihood):
 
 class Probit(Bernoulli):
     """
-    The Probit model is passed to Bernoulli likelihood with Probit link.
+    The probit model is passed to Bernoulli likelihood with probit link.
     """
     def __init__(self):
         super().__init__(link='probit')
 
-
-class Erf(Bernoulli):
-        """
-    The Probit model is passed to Bernoulli likelihood with Probit link.
+class Logit(Bernoulli):
+    """
+    The logit model is passed to Bernoulli likelihood with logit link.
     """
     def __init__(self):
-        super().__init__(link='probit')
+        super().__init__(link='logit')
 
+class Erf(Probit):
+    """
+    The erf model is passed to Bernoulli likelihood with probit link.
+    """
+    pass
+
+class Logistic(Logit):
+    """
+    The logistic model is passed to Bernoulli likelihood with logit link.
+    """
+    pass
 
 class Poisson(Likelihood):
     """
