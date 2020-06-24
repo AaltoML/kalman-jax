@@ -249,3 +249,44 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
         plt.close()
         plot_num += 1
     return plot_num, mu_plot
+
+
+def ut3_ws(n, kappa=None):
+    # [W, SX, u] = ut3_ws(n, [kappa])
+    # Return weights and sigma - points for 3rd order
+    # UT for dimension n with parameter kappa (default 1-n).
+
+    if kappa is None:
+        # kappa = 1 - n
+        kappa = 0 # CKF
+
+    if (n == 1) and (kappa == 0):
+        W = np.array([0., 0.5, 0.5])
+        SX = np.array([0., 1., -1.])
+        u = 1
+    elif (n == 2) and (kappa == 0):
+        W = np.array([0., 0.25, 0.25, 0.25, 0.25])
+        SX = np.block([[0., 1.4142,  0., -1.4142, 0.],
+                       [0., 0., 1.4142, 0., -1.4142]])
+        u = 1.4142
+    elif (n == 3) and (kappa == 0):
+        W = np.array([0., 0.1667, 0.1667, 0.1667, 0.1667, 0.1667, 0.1667])
+        SX = np.block([[0., 1.7321, 0.,  0., -1.7321, 0., 0.],
+                       [0., 0., 1.7321, 0., 0., -1.7321, 0.],
+                       [0., 0., 0., 1.7321, 0., 0., -1.7321]])
+        u = 1.7321
+    else:
+        # Weights
+        W = np.zeros([1, 2 * n + 1])
+        for j in range(2 * n + 1):
+            if j == 1:
+                wm = kappa / (n + kappa)
+            else:
+                wm = 1 / (2 * (n + kappa))
+            W[j] = wm
+
+        # Sigma points
+        SX = np.block([np.zeros(n, 1), np.eye(n) - np.eye(n)])
+        SX = np.sqrt(n + kappa) * SX
+        u = np.sqrt(n + kappa)
+    return W, SX, u
