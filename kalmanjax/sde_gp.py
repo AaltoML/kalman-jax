@@ -260,7 +260,7 @@ class SDEGP(object):
     def run(self, params=None):
         """
         A single parameter update step - to be fed to a gradient-based optimiser.
-         - we first compute the marginal lilelihood and its gradient w.r.t. the hyperparameters via filtering
+         - we first compute the marginal likelihood and its gradient w.r.t. the hyperparameters via filtering
          - then update the site parameters via smoothing (site mean and variance)
         :param params: the model parameters. If not supplied then defaults to the model's
                        assigned parameters [num_params]
@@ -395,6 +395,7 @@ class SDEGP(object):
                     s.P = np.where(mask[n], P_, s.P)
                     log_lik_n = np.where(mask[n][..., 0, 0], np.zeros_like(log_lik_n), log_lik_n)
                 s.neg_log_marg_lik -= np.sum(log_lik_n)
+                #s.neg_log_marg_lik += np.sum(log_lik_n)
                 if store:
                     s.filtered_mean = index_add(s.filtered_mean, index[n, ...], s.m)
                     s.filtered_cov = index_add(s.filtered_cov, index[n, ...], s.P)

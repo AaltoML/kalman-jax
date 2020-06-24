@@ -9,6 +9,8 @@ import likelihoods
 from utils import softplus_list, plot
 pi = 3.141592653589793
 
+
+
 plot_intermediate = False
 
 print('generating some data ...')
@@ -18,9 +20,12 @@ x = 100 * np.random.rand(N)
 f = lambda x_: 6 * np.sin(pi * x_ / 10.0) / (pi * x_ / 10.0 + 1)
 y_ = f(x) + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
 y = np.sign(y_)
+y[y == -1] = 0
 
 x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
 y_test = np.sign(f(x_test) + np.math.sqrt(0.05)*np.random.randn(x_test.shape[0]))
+
+y_test[y_test == -1] = 0
 
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
@@ -28,12 +33,14 @@ len_f = 5.0  # GP lengthscale
 theta_prior = [var_f, len_f]
 
 prior = priors.Matern52(theta_prior)
-lik = likelihoods.Probit()
-inf_method = approx_inf.EP(power=0.5)
+
+lik = likelihoods.Bernoulli(link='logit')
+inf_method = approx_inf.EP(power=0.9)
 # inf_method = approx_inf.PL()
-# inf_method = approx_inf.EKS()
-# inf_method = approx_inf.EKEP()  # <-- not working
-# inf_method = approx_inf.VI()
+#inf_method = approx_inf.EKS()
+#inf_method = approx_inf.EKEP()
+#inf_method = approx_inf.VI()
+
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 

@@ -300,66 +300,56 @@ class Gaussian(Likelihood):
         return gaussian_moment_match(y, m, v, hyp)
 
 
-class Probit(Likelihood):
+class Bernoulli(Likelihood):
     """
-    The Probit Binary Classification likelihood, i.e. the Error Function Likelihood,
-    i.e. the Gaussian (Normal) cumulative density function:
-        p(yₙ|fₙ) = Φ(yₙfₙ)
-                 = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙyₙ],
-    and where we force the data to be +/-1: yₙ ϵ {-1, +1}.
-    The Normal CDF is calulcated using the error function:
-        Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
-    for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
+    Bernoulli likelihood is p(yₙ|fₙ) = Pʸ(1-P)⁽¹⁻ʸ⁾, where P = E[yₙ=1|fₙ].
+    Link function maps latent GP to [0,1].
+    The Probit link function, i.e. the Error Function Likelihood:
+        i.e. the Gaussian (Normal) cumulative density function:
+        E[yₙ=1|fₙ] = Φ(fₙ)
+                   = ∫ 𝓝(x|0,1) dx, where the integral is over (-∞, fₙ],
+        The Normal CDF is calulcated using the error function:
+                P = Φ(fₙ) = (1 + erf(fₙ / √2)) / 2
+        for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
+    The logit link function:
+        P = Φ(fₙ) = 1 / 1 + exp(-fₙ)
     """
-    def __init__(self):
+    def __init__(self,link):
         super().__init__(hyp=None)
-        self.name = 'Probit'
+        if link is 'logit':
+            self.link_fn = lambda f: 1 / (1 + np.exp(-f))
+            self.link = link
+        elif link is 'probit':
+            jitter = 1e-10
+            self.link_fn = lambda f: 0.5 * (1.0 + erf(f / np.sqrt(2.0))) * (1 - 2 * jitter) + jitter
+            self.link = link
+        else:
+            raise NotImplementedError('link function not implemented')
+        self.name = 'Bernoulli'
 
-    @staticmethod
-    @jit
-    def link_fn(latent_mean):
-        return erfc(-latent_mean / np.sqrt(2.0)) - 1.0
 
-    @partial(jit, static_argnums=0)
-    def eval(self, mu, var):
-        """
-        ported from GPML toolbox - not used.
-        """
-        lp, _, _ = self.moment_match(1, mu, var)
-        p = np.exp(lp)
-        ymu = 2 * p - 1
-        yvar = 4 * p * (1 - p)
-        return lp, ymu, yvar
 
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
         """
-        Evaluate the Gaussian CDF likelihood model,
-            Φ(yₙfₙ) = (1 + erf(yₙfₙ / √2)) / 2
-        for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z]
-        Can be used to evaluate Q quadrature points when performing moment matching.
         :param y: observed data yₙ ϵ {-1, +1} [scalar]
-        :param f: latent function value fₙ [Q, 1]
-        :param hyp: dummy input, Probit has no hyperparameters
+        :param f: latent function value fₙ ϵ ℝ
+        :param hyp: dummy input, Probit/Logit has no hyperparameters
         :return:
-            Φ(yₙfₙ) [Q, 1]
+            p(yₙ|fₙ) = Pʸ(1-P)⁽¹⁻ʸ⁾
         """
-        return (1.0 + erf(y * f / np.sqrt(2.0))) / 2.0  # Φ(z)
+        return np.where(np.equal(y, 1), self.link_fn(f), 1 - self.link_fn(f))
 
     @partial(jit, static_argnums=0)
     def evaluate_log_likelihood(self, y, f, hyp=None):
         """
-        Evaluate the Gaussian CDF log-likelihood,
-            log Φ(yₙfₙ) = log[(1 + erf(yₙfₙ / √2)) / 2]
-        for erf(z) = (2/√π) ∫ exp(-x²) dx, where the integral is over [0, z].
-        Can be used to evaluate Q quadrature points when performing moment matching.
         :param y: observed data yₙ ϵ {-1, +1} [scalar]
-        :param f: latent function value fₙ [Q, 1]
+        :param f: latent function value fₙ ϵ ℝ
         :param hyp: dummy input, Probit has no hyperparameters
         :return:
-            log Φ(yₙfₙ) [Q, 1]
+            log p(yₙ|fₙ)
         """
-        return np.log(1.0 + erf(y * f / np.sqrt(2.0)) + 1e-10) - np.log(2)  # logΦ(z)
+        return np.log(self.evaluate_likelihood(y,f))
 
     @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
@@ -367,14 +357,8 @@ class Probit(Likelihood):
         The first two conditional moments of a Probit likelihood are:
             E[yₙ|fₙ] = Φ(fₙ)
             Var[yₙ|fₙ] = Φ(fₙ) (1 - Φ(fₙ))
-            where Φ(fₙ) = (1 + erf(fₙ / √2)) / 2
         """
-        # TODO: not working
-        # phi = (1.0 + erf(f / np.sqrt(2.0))) / 2.0
-        # phi = self.link_fn(f)
-        # phi = erfc(f / np.sqrt(2.0)) - 1.0
-        phi = self.evaluate_likelihood(1.0, f)
-        return phi, phi * (1.0 - phi)
+        return self.link_fn(f), self.link_fn(f)-(self.link_fn(f)**2)
 
     @partial(jit, static_argnums=(0, 5))
     def moment_match(self, y, m, v, hyp=None, power=1.0):
@@ -386,7 +370,6 @@ class Probit(Likelihood):
         If the EP fraction a = 1, we get
                   = log Φ(yₙzₙ), where zₙ = mₙ / √(1 + vₙ)   [see Rasmussen & Williams p74]
         otherwise we must use quadrature to compute the log partition and its derivatives.
-        Note: we enforce yₙ ϵ {-1, +1}.
         :param y: observed data (yₙ) [scalar]
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
@@ -397,10 +380,9 @@ class Probit(Likelihood):
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
-        y = np.sign(y)  # only allow values of +/-1
-        # y[np.where(y == 0)] = -1  # set zeros to -1
-        y = np.sign(y - 0.01)  # set zeros to -1
-        if power == 1:  # if a = 1, we can calculate the moments in closed form
+        y = np.sign(y)  # only allow values of {0,1}
+        if power == 1 and self.link == 'probit':  # if a = 1, we can calculate the moments in closed form
+            y = np.sign(y - 0.01)  # set zeros to -1 for closed form probit calc
             z = m / np.sqrt(1.0 + v)
             z = z * y  # zₙ = yₙmₙ / √(1 + vₙ)
             # logZₙ = log ∫ Φ(yₙfₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -418,9 +400,31 @@ class Probit(Likelihood):
             return self.moment_match_quadrature(y, m, v, None, power)
 
 
+class Probit(Bernoulli):
+    """
+    The probit model is passed to Bernoulli likelihood with probit link.
+    """
+    def __init__(self):
+        super().__init__(link='probit')
+
+class Logit(Bernoulli):
+    """
+    The logit model is passed to Bernoulli likelihood with logit link.
+    """
+    def __init__(self):
+        super().__init__(link='logit')
+
 class Erf(Probit):
+    """
+    The erf model is passed to Bernoulli likelihood with probit link.
+    """
     pass
 
+class Logistic(Logit):
+    """
+    The logistic model is passed to Bernoulli likelihood with logit link.
+    """
+    pass
 
 class Poisson(Likelihood):
     """
@@ -492,3 +496,4 @@ class Poisson(Likelihood):
             Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
+
