@@ -3,6 +3,8 @@ Approximate inference for Markov Gaussian processes using iterated Kalman filter
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
 
+The methodology is outlined in the following paper: W. Wilkinson, P. Chang, M. Riis Andersen, A. Solin, State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes. International Conference on Machine Learning (ICML), 2020
+
 ### We combine two recent advances in the field of probabilistic machine learning:
  - Development of state space methods for linear-time approximate inference in Gaussian processes
  - The ability to JIT compile and autodiff through loops efficiently with JAX
