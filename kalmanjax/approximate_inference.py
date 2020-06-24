@@ -17,7 +17,7 @@ class ApproxInf(object):
         raise NotImplementedError('the update function for this approximate inference method is not implemented')
 
 
-class EP(ApproxInf):
+class ExpectationPropagation(ApproxInf):
     """
     Expectation propagation (EP)
     """
@@ -43,28 +43,34 @@ class EP(ApproxInf):
             return likelihood.moment_match(y, mu_cav, var_cav, hyp, self.power)
 
 
-class PEP(EP):
-    """
-    Power expectation propagation (PEP)
-    """
+class PowerExpectationPropagation(ExpectationPropagation):
     pass
 
 
-class EKEP(ApproxInf):
+class EP(ExpectationPropagation):
+    pass
+
+
+class PEP(ExpectationPropagation):
+    pass
+
+
+class ExtendedExpectationPropagation(ApproxInf):
     """
-    Extended Kalman expectation propagation (EK-EP)
+    Extended expectation propagation (EEP). This is equivalent to the extended Kalman smoother (EKS) but with
+    linearisation applied about the cavity mean. Recovers the EKS when power=0.
     """
     def __init__(self, site_params=None, power=1.0):
         self.power = power
         super().__init__(site_params=site_params)
-        self.name = 'extended Kalman expectation propagation (EK-EP)'
+        self.name = 'extended expectation propagation (EEP)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
         """
-        The update function takes a likelihood as input, and uses analytical linearisation
-        to update the site parameters
+        The update function takes a likelihood as input, and uses analytical linearisation (first
+        order Taylor series expansion) to update the site parameters
         """
-        if site_params is None:
+        if (site_params is None) or (self.power == 0):  # avoid cavity calc if power is 0
             mu_cav, var_cav = m, v
         else:
             site_mean, site_var = site_params
@@ -89,9 +95,13 @@ class EKEP(ApproxInf):
         return log_marg_lik, site_mean, site_var
 
 
-class EKS(ApproxInf):
+class EEP(ExtendedExpectationPropagation):
+    pass
+
+
+class ExtendedKalmanSmoother(ApproxInf):
     """
-    Extended Kalman smoother (EKS)
+    Extended Kalman smoother (EKS). Equivalent to EEP when power = 0.
     """
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params)
@@ -107,9 +117,9 @@ class EKS(ApproxInf):
         var_obs = 1.0  # observation noise scale is w.l.o.g. 1
         likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
-        sigma = Jr * var_obs * Jr + Jf * v * Jf
-        site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
-        site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
+        sigma = Jr * var_obs * Jr
+        site_var = (Jf * sigma ** -1 * Jf) ** -1
+        site_mean = m + site_var * Jf * sigma**-1 * residual
         # now compute the marginal likelihood approx.
         chol_sigma = cholesky(sigma, lower=True)
         log_marg_lik = -1 * (
@@ -119,7 +129,11 @@ class EKS(ApproxInf):
         return log_marg_lik, site_mean, site_var
 
 
-class EKF(EKS):
+class EKS(ExtendedKalmanSmoother):
+    pass
+
+
+class ExtendedKalmanFilter(ExtendedKalmanSmoother):
     """
     Extended Kalman filter (EKF)
     A single forward pass of the EKS.
@@ -128,7 +142,11 @@ class EKF(EKS):
     pass
 
 
-class IKS(ApproxInf):
+class EKF(ExtendedKalmanFilter):
+    pass
+
+
+class IteratedKalmanSmoother(ApproxInf):
     """
     Iterated Kalman smoother (IKS). This uses statistical linearisation to perform the updates.
     A single forward pass using this approximation is called the statistical linearisation filter (SLF),
@@ -157,7 +175,11 @@ class IKS(ApproxInf):
         return log_marg_lik, site_mean, site_var
 
 
-class SLF(IKS):
+class IKS(IteratedKalmanSmoother):
+    pass
+
+
+class SLF(IteratedKalmanSmoother):
     """
     Statistical linearisation filter (SLF)
     A single forward pass of the IKS is called the statistical linearisation filter.
@@ -165,7 +187,7 @@ class SLF(IKS):
     pass
 
 
-class GHKF(IKS):
+class GHKF(IteratedKalmanSmoother):
     """
     Gauss-Hermite Kalman filter (GHKF)
     When Gauss-Hermite is used, the statistical linearisation filter (SLF) is equivalent to the GHKF
@@ -173,7 +195,7 @@ class GHKF(IKS):
     pass
 
 
-class PL(ApproxInf):
+class PosteriorLinearisation(ApproxInf):
     """
     Posterior linearisation (PL)
     An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the approximate posterior.
@@ -198,6 +220,10 @@ class PL(ApproxInf):
         _, likelihood_variance = likelihood.conditional_moments(m, hyp)
         site_var = A ** -0.5 * (omega + likelihood_variance)  # approx. likelihood variance
         return log_marg_lik, site_mean, site_var
+
+
+class PL(PosteriorLinearisation):
+    pass
 
 
 class CL(ApproxInf):
@@ -251,7 +277,7 @@ class PrL(PL):
     pass
 
 
-class VI(ApproxInf):
+class VariationalInference(ApproxInf):
     """
     Natural gradient VI (using the conjugate-computation VI approach)
     Refs:
@@ -283,3 +309,11 @@ class VI(ApproxInf):
             site_var = np.abs(1 / lambda_t_2)
         log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
         return log_marg_lik, site_mean, site_var
+
+
+class VI(VariationalInference):
+    pass
+
+
+class CVI(VariationalInference):
+    pass
