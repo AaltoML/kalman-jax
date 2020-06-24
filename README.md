@@ -33,7 +33,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [x] Gaussian
 - [x] Probit
 - [x] Poisson
-- [ ] Logit
+- [x] Logit
 
 ### Priors
 - [x] Matern class
