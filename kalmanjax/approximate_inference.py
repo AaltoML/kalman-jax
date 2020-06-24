@@ -91,7 +91,7 @@ class ExtendedExpectationPropagation(ApproxInf):
         log_marg_lik = -1 * (
                 .5 * site_var.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
-                + .5 * (residual.T @ cho_solve((chol_sigma,True),residual)))
+                + .5 * (residual.T @ cho_solve((chol_sigma, True), residual)))
         return log_marg_lik, site_mean, site_var
 
 

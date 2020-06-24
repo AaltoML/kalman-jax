@@ -33,11 +33,12 @@ theta_prior = [var_f, len_f]
 prior = priors.Matern52(theta_prior)
 
 lik = likelihoods.Bernoulli(link='logit')
-inf_method = approx_inf.EP(power=0.9)
+# inf_method = approx_inf.ExpectationPropagation(power=0.9)
 # inf_method = approx_inf.PL()
 # inf_method = approx_inf.EKS()
 # inf_method = approx_inf.EKEP()
 # inf_method = approx_inf.VI()
+inf_method = approx_inf.ExtendedExpectationPropagation()
 
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
