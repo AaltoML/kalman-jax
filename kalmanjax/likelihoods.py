@@ -149,6 +149,7 @@ class Likelihood(object):
         """
         Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
         We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
+        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
         """
         x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
         w = w / np.sqrt(pi)  # scale weights by 1/√π
