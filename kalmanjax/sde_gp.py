@@ -395,7 +395,6 @@ class SDEGP(object):
                     s.P = np.where(mask[n], P_, s.P)
                     log_lik_n = np.where(mask[n][..., 0, 0], np.zeros_like(log_lik_n), log_lik_n)
                 s.neg_log_marg_lik -= np.sum(log_lik_n)
-                #s.neg_log_marg_lik += np.sum(log_lik_n)
                 if store:
                     s.filtered_mean = index_add(s.filtered_mean, index[n, ...], s.m)
                     s.filtered_cov = index_add(s.filtered_cov, index[n, ...], s.P)

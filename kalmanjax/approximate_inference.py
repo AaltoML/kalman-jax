@@ -54,7 +54,7 @@ class PEP(ExpectationPropagation):
     pass
 
 
-class ExtendedExpectationPropagation(ApproxInf):
+class ExtendedEP(ApproxInf):
     """
     Extended expectation propagation (EEP). This is equivalent to the extended Kalman smoother (EKS) but with
     linearisation applied about the cavity mean. Recovers the EKS when power=0.
@@ -94,7 +94,7 @@ class ExtendedExpectationPropagation(ApproxInf):
         return log_marg_lik, site_mean, site_var
 
 
-class EEP(ExtendedExpectationPropagation):
+class EEP(ExtendedEP):
     pass
 
 
@@ -145,6 +145,44 @@ class EKF(ExtendedKalmanFilter):
     pass
 
 
+class StatisticallyLinearisedEP(ApproxInf):
+    """
+    An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the approximate posterior.
+    """
+    def __init__(self, site_params=None, power=1.0):
+        self.power = power
+        super().__init__(site_params=site_params)
+        self.name = 'statistically linearised expectation propagation (SLEP)'
+
+    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
+        """
+        The update function takes a likelihood as input, and uses statistical linear
+        regression (SLR) w.r.t. the cavity distribution to update the site parameters.
+        """
+        # TODO: implement SLR approximate likelihood
+        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
+        if (site_params is None) or (self.power == 0):
+            mu_cav, var_cav = m, v
+        else:
+            site_mean, site_var = site_params
+            # --- Compute the cavity distribution ---
+            # remove local likelihood approximation to obtain the marginal cavity distribution:
+            var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
+            mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
+        # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
+        A, b, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp)
+        # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
+        # TODO: implement case where A is not invertable
+        site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
+        _, likelihood_variance = likelihood.conditional_moments(mu_cav, hyp)
+        site_var = A ** -2 * (omega + likelihood_variance)  # approx. likelihood var.
+        return log_marg_lik, site_mean, site_var
+
+
+class SLEP(StatisticallyLinearisedEP):
+    pass
+
+
 class IteratedKalmanSmoother(ApproxInf):
     """
     Iterated Kalman smoother (IKS). This uses statistical linearisation to perform the updates.
@@ -170,7 +208,7 @@ class IteratedKalmanSmoother(ApproxInf):
         # TODO: implement case where A is not invertable
         site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
         _, likelihood_variance = likelihood.conditional_moments(m, hyp)
-        site_var = A ** -0.5 * likelihood_variance  # approx. likelihood variance
+        site_var = A ** -2 * likelihood_variance  # approx. likelihood variance
         return log_marg_lik, site_mean, site_var
 
 
@@ -217,7 +255,7 @@ class PosteriorLinearisation(ApproxInf):
         # TODO: implement case where A is not invertable
         site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
         _, likelihood_variance = likelihood.conditional_moments(m, hyp)
-        site_var = A ** -0.5 * (omega + likelihood_variance)  # approx. likelihood variance
+        site_var = A ** -2 * (omega + likelihood_variance)  # approx. likelihood variance
         return log_marg_lik, site_mean, site_var
 
 
@@ -256,7 +294,7 @@ class CL(ApproxInf):
         # TODO: implement case where A is not invertable
         site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
         _, likelihood_variance = likelihood.conditional_moments(mu_cav, hyp)
-        site_var = A ** -0.5 * (omega + likelihood_variance)  # approx. likelihood var.
+        site_var = A ** -2 * (omega + likelihood_variance)  # approx. likelihood var.
         return log_marg_lik, site_mean, site_var
 
 

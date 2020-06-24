@@ -37,7 +37,8 @@ lik = likelihoods.Bernoulli(link='logit')
 # inf_method = approx_inf.IteratedKalmanSmoother()
 # inf_method = approx_inf.VariationalInference()
 # inf_method = approx_inf.ExtendedExpectationPropagation(power=0)
-inf_method = approx_inf.ExtendedKalmanSmoother()
+# inf_method = approx_inf.ExtendedKalmanSmoother()
+inf_method = approx_inf.StatisticallyLinearisedEP()
 
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
