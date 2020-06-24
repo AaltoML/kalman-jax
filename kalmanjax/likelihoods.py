@@ -110,6 +110,40 @@ class Likelihood(object):
         lik_std = cholesky(np.diag(np.expand_dims(lik_variance, 0)))
         return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
 
+    # @partial(jit, static_argnums=0)
+    # def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
+    #     """
+    #     Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
+    #     We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
+    #     """
+    #     x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
+    #     w = w / np.sqrt(pi)  # scale weights by 1/√π
+    #     sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+    #     lik_expectation, _ = self.conditional_moments(sigma_points, hyp)
+    #     # Compute zₙ via quadrature:
+    #     # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+    #     #    ≈ ∑ᵢ wᵢ E[yₙ|xᵢ√(2vₙ) + mₙ]
+    #     mu = np.sum(
+    #         w * lik_expectation
+    #     )
+    #     # Compute variance S via quadrature:
+    #     # S = ∫ (E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+    #     #   ≈ ∑ᵢ wᵢ (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
+    #     S = np.sum(
+    #         w * (lik_expectation - mu) * (lik_expectation - mu)
+    #     )
+    #     # Compute cross covariance C via quadrature:
+    #     # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+    #     #   ≈ ∑ᵢ wᵢ (fₙ-mₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
+    #     C = np.sum(
+    #         w * (sigma_points - m) * (lik_expectation - mu)
+    #     )
+    #     # compute likelihood approximation 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
+    #     A = C * v**-1  # the scale
+    #     b = mu - A * m  # the offset
+    #     omega = S - A * v * A  # the linearisation error
+    #     return A, b, omega
+
     @partial(jit, static_argnums=0)
     def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
         """
@@ -118,31 +152,34 @@ class Likelihood(object):
         """
         x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
         w = w / np.sqrt(pi)  # scale weights by 1/√π
-        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
         lik_expectation, _ = self.conditional_moments(sigma_points, hyp)
+        _, lik_variance = self.conditional_moments(m, hyp)
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #    ≈ ∑ᵢ wᵢ E[yₙ|xᵢ√(2vₙ) + mₙ]
-        z = np.sum(
+        #    ≈ ∑ᵢ wᵢ E[yₙ|fsig]
+        mu = np.sum(
             w * lik_expectation
         )
         # Compute variance S via quadrature:
         # S = ∫ (E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
+        #   ≈ ∑ᵢ wᵢ (E[yₙ|fsig]-zₙ) (E[yₙ|fsig]-zₙ)'
         S = np.sum(
-            w * (lik_expectation - z) * (lik_expectation - z)
-        )
+            w * (lik_expectation - mu) * (lik_expectation - mu)
+        ) + lik_variance
         # Compute cross covariance C via quadrature:
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ (fₙ-mₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
+        #   ≈ ∑ᵢ wᵢ (fsig -mₙ) (E[yₙ|fsig]-zₙ)'
         C = np.sum(
-            w * (sigma_points - m) * (lik_expectation - z)
+            w * (sigma_points - m) * (lik_expectation - mu)
         )
-        # compute likelihood approximation 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
-        A = C * v**-1  # the scale
-        b = z - A * m  # the offset
-        omega = S - A * v * A  # the linearisation error
-        return A, b, omega
+        # Compute derivative of z via quadrature:
+        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       ≈ ∑ᵢ wᵢ E[yₙ|fsig] vₙ⁻¹ (fsig-mₙ)
+        omega = np.sum(
+            w * lik_expectation * v ** -1 * (sigma_points - m)
+        )
+        return mu, S, C, omega
 
     @partial(jit, static_argnums=0)
     def statistical_linear_regression(self, m, v, hyp=None):

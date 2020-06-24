@@ -34,7 +34,6 @@ prior = priors.Matern52(theta_prior)
 
 lik = likelihoods.Bernoulli(link='logit')
 # inf_method = approx_inf.ExpectationPropagation(power=0.9)
-# inf_method = approx_inf.IteratedKalmanSmoother()
 # inf_method = approx_inf.VariationalInference()
 # inf_method = approx_inf.ExtendedExpectationPropagation(power=0)
 # inf_method = approx_inf.ExtendedKalmanSmoother()
