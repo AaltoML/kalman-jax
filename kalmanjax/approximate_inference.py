@@ -80,14 +80,12 @@ class EKEP(ApproxInf):
         sigma = Jr * var_obs * Jr + self.power * Jf * var_cav * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
         site_mean = m + (site_var + self.power * var_cav) * Jf * sigma**-1 * residual
-
         # now compute the marginal likelihood approx.
         chol_sigma = cholesky(sigma, lower=True)
         log_marg_lik = -1 * (
                 .5 * site_var.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
                 + .5 * (residual.T @ cho_solve((chol_sigma,True),residual)))
-
         return log_marg_lik, site_mean, site_var
 
 
@@ -112,15 +110,12 @@ class EKS(ApproxInf):
         sigma = Jr * var_obs * Jr + Jf * v * Jf
         site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
         site_mean = m + (site_var + v) * Jf * sigma**-1 * residual
-
         # now compute the marginal likelihood approx.
         chol_sigma = cholesky(sigma, lower=True)
-
         log_marg_lik = -1 * (
                 .5 * site_var.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
                 + .5 * (residual.T @ cho_solve((chol_sigma,True),residual)))
-
         return log_marg_lik, site_mean, site_var
 
 

@@ -314,7 +314,7 @@ class Bernoulli(Likelihood):
     The logit link function:
         P = Φ(fₙ) = 1 / 1 + exp(-fₙ)
     """
-    def __init__(self,link):
+    def __init__(self, link):
         super().__init__(hyp=None)
         if link is 'logit':
             self.link_fn = lambda f: 1 / (1 + np.exp(-f))
@@ -326,8 +326,6 @@ class Bernoulli(Likelihood):
         else:
             raise NotImplementedError('link function not implemented')
         self.name = 'Bernoulli'
-
-
 
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
@@ -349,7 +347,7 @@ class Bernoulli(Likelihood):
         :return:
             log p(yₙ|fₙ)
         """
-        return np.log(self.evaluate_likelihood(y,f))
+        return np.log(self.evaluate_likelihood(y, f))
 
     @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
@@ -402,29 +400,33 @@ class Bernoulli(Likelihood):
 
 class Probit(Bernoulli):
     """
-    The probit model is passed to Bernoulli likelihood with probit link.
+    The probit likelihood = Bernoulli likelihood with probit link.
     """
     def __init__(self):
         super().__init__(link='probit')
 
+
+class Erf(Probit):
+    """
+    The error function likelihood = probit = Bernoulli likelihood with probit link.
+    """
+    pass
+
+
 class Logit(Bernoulli):
     """
-    The logit model is passed to Bernoulli likelihood with logit link.
+    The logit likelihood = Bernoulli likelihood with logit link.
     """
     def __init__(self):
         super().__init__(link='logit')
 
-class Erf(Probit):
-    """
-    The erf model is passed to Bernoulli likelihood with probit link.
-    """
-    pass
 
 class Logistic(Logit):
     """
-    The logistic model is passed to Bernoulli likelihood with logit link.
+    The logistic likelihood = logit = Bernoulli likelihood with logit link.
     """
     pass
+
 
 class Poisson(Likelihood):
     """
@@ -496,4 +498,3 @@ class Poisson(Likelihood):
             Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
-
