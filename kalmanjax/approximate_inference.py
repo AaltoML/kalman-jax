@@ -98,34 +98,13 @@ class EEP(ExtendedEP):
     pass
 
 
-class ExtendedKalmanSmoother(ApproxInf):
+class ExtendedKalmanSmoother(ExtendedEP):
     """
     Extended Kalman smoother (EKS). Equivalent to EEP when power = 0.
     """
     def __init__(self, site_params=None):
-        super().__init__(site_params=site_params)
+        super().__init__(site_params=site_params, power=0)
         self.name = 'extended Kalman smoother (EKS)'
-
-    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
-        """
-        The update function takes a likelihood as input, and uses analytical linearisation
-        to update the site parameters
-        """
-        # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
-        Jf, Jr = likelihood.analytical_linearisation(m, hyp)  # evaluated at the mean
-        var_obs = np.array([[1.0]])  # observation noise scale is w.l.o.g. 1
-        likelihood_expectation, _ = likelihood.conditional_moments(m, hyp)
-        residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
-        sigma = Jr * var_obs * Jr
-        site_var = (Jf * sigma ** -1 * Jf) ** -1
-        site_mean = m + site_var * Jf * sigma**-1 * residual
-        # now compute the marginal likelihood approx.
-        chol_sigma, low = cho_factor(sigma)
-        log_marg_lik = -1 * (
-                .5 * site_var.shape[0] * np.log(2 * pi)
-                + np.sum(np.log(np.diag(chol_sigma)))
-                + .5 * (residual.T @ cho_solve((chol_sigma, low), residual)))
-        return log_marg_lik, site_mean, site_var
 
 
 class EKS(ExtendedKalmanSmoother):
@@ -184,10 +163,22 @@ class SLEP(StatisticallyLinearisedEP):
     pass
 
 
-class GHKS(StatisticallyLinearisedEP):
+class GaussHermiteKalmanSmoother(StatisticallyLinearisedEP):
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params, power=0)
         self.name = 'Gauss Hermite Kalman Smoother'
+
+
+class GHKS(GaussHermiteKalmanSmoother):
+    pass
+
+
+class PosteriorLinearisation(StatisticallyLinearisedEP):
+    pass
+
+
+class PL(PosteriorLinearisation):
+    pass
 
 
 # class IteratedKalmanSmoother(ApproxInf):

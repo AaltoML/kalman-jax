@@ -37,6 +37,7 @@ lik = likelihoods.Bernoulli(link='logit')
 # inf_method = approx_inf.VariationalInference()
 # inf_method = approx_inf.ExtendedExpectationPropagation(power=0)
 # inf_method = approx_inf.ExtendedKalmanSmoother()
+# inf_method = approx_inf.GaussHermiteKalmanSmoother()
 inf_method = approx_inf.StatisticallyLinearisedEP()
 
 
