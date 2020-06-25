@@ -2,10 +2,12 @@ import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax import random
+from jax.ops import index_add, index
 import numpy as nnp
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 from matplotlib.colors import hsv_to_rgb, rgb_to_hsv, ListedColormap
+from numpy.polynomial.hermite import hermgauss
 pi = 3.141592653589793
 
 
@@ -251,42 +253,50 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
     return plot_num, mu_plot
 
 
-def ut3_ws(n, kappa=None):
-    # [W, SX, u] = ut3_ws(n, [kappa])
-    # Return weights and sigma - points for 3rd order
-    # UT for dimension n with parameter kappa (default 1-n).
+def gauss_hermite(dim=1, num_quad_pts=20):
+    """
+    Return weights and sigma-points for Gauss-Hermite cubature
+    """
+    sigma_pts, weights = hermgauss(num_quad_pts)  # Gauss-Hermite sigma points and weights
+    sigma_pts = np.sqrt(2) * sigma_pts
+    weights = weights / np.sqrt(pi)  # scale weights by 1/√π
+    return sigma_pts, weights
 
+
+def unscented_transform_third_order(dim=1, kappa=None):
+    """
+    Return weights and sigma-points for 3rd order
+    UT for dimension dim with parameter kappa (default 1-n).
+    """
     if kappa is None:
         # kappa = 1 - n
-        kappa = 0 # CKF
-
-    if (n == 1) and (kappa == 0):
-        W = np.array([0., 0.5, 0.5])
-        SX = np.array([0., 1., -1.])
-        u = 1
-    elif (n == 2) and (kappa == 0):
-        W = np.array([0., 0.25, 0.25, 0.25, 0.25])
-        SX = np.block([[0., 1.4142,  0., -1.4142, 0.],
-                       [0., 0., 1.4142, 0., -1.4142]])
-        u = 1.4142
-    elif (n == 3) and (kappa == 0):
-        W = np.array([0., 0.1667, 0.1667, 0.1667, 0.1667, 0.1667, 0.1667])
-        SX = np.block([[0., 1.7321, 0.,  0., -1.7321, 0., 0.],
-                       [0., 0., 1.7321, 0., 0., -1.7321, 0.],
-                       [0., 0., 0., 1.7321, 0., 0., -1.7321]])
-        u = 1.7321
+        kappa = 0  # CKF
+    if (dim == 1) and (kappa == 0):
+        weights = np.array([0., 0.5, 0.5])
+        sigma_pts = np.array([0., 1., -1.])
+        # sigma_pts = np.array([-1., 0., 1.])
+        # weights = np.array([0.5, 0., 0.5])
+        # u = 1
+    elif (dim == 2) and (kappa == 0):
+        weights = np.array([0., 0.25, 0.25, 0.25, 0.25])
+        sigma_pts = np.block([[0., 1.4142,  0., -1.4142, 0.],
+                              [0., 0., 1.4142, 0., -1.4142]])
+        # u = 1.4142
+    elif (dim == 3) and (kappa == 0):
+        weights = np.array([0., 0.1667, 0.1667, 0.1667, 0.1667, 0.1667, 0.1667])
+        sigma_pts = np.block([[0., 1.7321, 0.,  0., -1.7321, 0., 0.],
+                              [0., 0., 1.7321, 0., 0., -1.7321, 0.],
+                              [0., 0., 0., 1.7321, 0., 0., -1.7321]])
+        # u = 1.7321
     else:
-        # Weights
-        W = np.zeros([1, 2 * n + 1])
-        for j in range(2 * n + 1):
-            if j == 1:
-                wm = kappa / (n + kappa)
-            else:
-                wm = 1 / (2 * (n + kappa))
-            W[j] = wm
-
+        # weights
+        weights = np.zeros([1, 2 * dim + 1])
+        weights = index_add(weights, index[0, 0], kappa / (dim + kappa))
+        for j in range(1, 2 * dim + 1):
+            wm = 1 / (2 * (dim + kappa))
+            weights = index_add(weights, index[0, j], wm)
         # Sigma points
-        SX = np.block([np.zeros(n, 1), np.eye(n) - np.eye(n)])
-        SX = np.sqrt(n + kappa) * SX
-        u = np.sqrt(n + kappa)
-    return W, SX, u
+        sigma_pts = np.block([np.zeros([dim, 1]), np.eye(dim), - np.eye(dim)])
+        sigma_pts = np.sqrt(dim + kappa) * sigma_pts
+        # u = np.sqrt(n + kappa)
+    return sigma_pts, weights  # , u

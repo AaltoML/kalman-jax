@@ -3,8 +3,7 @@ from jax.scipy.special import erf, erfc, gammaln
 from jax.nn import softplus
 from jax import jit, partial, jacrev, random
 from jax.scipy.linalg import cholesky
-from numpy.polynomial.hermite import hermgauss
-from utils import logphi, gaussian_moment_match, softplus_inv
+from utils import logphi, gaussian_moment_match, softplus_inv, gauss_hermite
 pi = 3.141592653589793
 
 
@@ -33,8 +32,8 @@ class Likelihood(object):
     def conditional_moments(self, f, hyp=None):
         raise NotImplementedError('conditional moments of this likelihood are not implemented')
 
-    @partial(jit, static_argnums=0)
-    def moment_match_quadrature(self, y, m, v, hyp=None, power=1.0, num_quad_points=20):
+    @partial(jit, static_argnums=(0, 6))
+    def moment_match_quadrature(self, y, m, v, hyp=None, power=1.0, cubature_func=None):
         """
         Perform moment matching via Gauss-Hermite quadrature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
@@ -45,15 +44,18 @@ class Likelihood(object):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: likelihood hyperparameter [scalar]
         :param power: EP power / fraction (a) [scalar]
-        :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
+        :param cubature_func: the function to compute sigma points and weights to use during cubature
         :return:
             lZ: the log partition function, logZₙ  [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True)  [scalar]
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True)  [scalar]
         """
-        x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
-        w = w / np.sqrt(pi)  # scale weights by 1/√π
-        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        if cubature_func is None:
+            x, w = gauss_hermite(m.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(m.shape[0])
+        # sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        sigma_points = np.sqrt(v) * x + m  # scale locations according to cavity dist.
         # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
@@ -94,12 +96,12 @@ class Likelihood(object):
         site_var = -power * (v + 1 / d2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_var
 
-    @partial(jit, static_argnums=0)
-    def moment_match(self, y, m, v, hyp=None, power=1.0):
+    @partial(jit, static_argnums=(0, 6))
+    def moment_match(self, y, m, v, hyp=None, power=1.0, cubature_func=None):
         """
         If no custom moment matching method is provided, we use Gauss-Hermite quadrature.
         """
-        return self.moment_match_quadrature(y, m, v, hyp, power=power)
+        return self.moment_match_quadrature(y, m, v, hyp, power, cubature_func)
 
     @staticmethod
     def link_fn(latent_mean):
@@ -144,16 +146,18 @@ class Likelihood(object):
     #     omega = S - A * v * A  # the linearisation error
     #     return A, b, omega
 
-    @partial(jit, static_argnums=0)
-    def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
+    @partial(jit, static_argnums=(0, 4))
+    def statistical_linear_regression_quadrature(self, m, v, hyp=None, cubature_func=None):
         """
         Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
         We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
         TODO: this currently assumes an additive noise model (ok for our current applications), make more general
         """
-        x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
-        w = w / np.sqrt(pi)  # scale weights by 1/√π
-        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        if cubature_func is None:
+            x, w = gauss_hermite(m.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(m.shape[0])
+        sigma_points = np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
         lik_expectation, _ = self.conditional_moments(sigma_points, hyp)
         _, lik_variance = self.conditional_moments(m, hyp)
         # Compute zₙ via quadrature:
@@ -182,12 +186,12 @@ class Likelihood(object):
         )
         return mu, S, C, omega
 
-    @partial(jit, static_argnums=0)
-    def statistical_linear_regression(self, m, v, hyp=None):
+    @partial(jit, static_argnums=(0, 4))
+    def statistical_linear_regression(self, m, v, hyp=None, cubature_func=None):
         """
         If no custom SLR method is provided, we use Gauss-Hermite quadrature.
         """
-        return self.statistical_linear_regression_quadrature(m, v, hyp)
+        return self.statistical_linear_regression_quadrature(m, v, hyp, cubature_func)
 
     @partial(jit, static_argnums=0)
     def observation_model(self, f, r, hyp=None):
@@ -212,8 +216,8 @@ class Likelihood(object):
         Jf, Jr = jacrev(self.observation_model, argnums=(0, 1))(m, 0.0, hyp)
         return Jf, Jr
 
-    @partial(jit, static_argnums=0)
-    def variational_expectation_quadrature(self, y, m, v, hyp=None, num_quad_points=20):
+    @partial(jit, static_argnums=(0, 5))
+    def variational_expectation_quadrature(self, y, m, v, hyp=None, cubature_func=None):
         """
         Computes the "variational expectation" via Gauss-Hermite quadrature, i.e. the
         expected log-likelihood, and its derivatives w.r.t. the posterior mean
@@ -223,15 +227,17 @@ class Likelihood(object):
         :param m: posterior mean (mₙ) [scalar]
         :param v: posterior variance (vₙ) [scalar]
         :param hyp: likelihood hyperparameter [scalar]
-        :param num_quad_points: the number of Gauss-Hermite sigma points to use during quadrature [scalar]
+        :param cubature_func: the function to compute sigma points and weights to use during cubature
         :return:
             exp_log_lik: the expected log likelihood, E[log p(yₙ|fₙ)]  [scalar]
             dE_dm: derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
             dE_dv: derivative of E[log p(yₙ|fₙ)] w.r.t. vₙ  [scalar]
         """
-        x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
-        w = w / np.sqrt(pi)  # scale weights by 1/√π
-        sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        if cubature_func is None:
+            x, w = gauss_hermite(m.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(m.shape[0])
+        sigma_points = np.sqrt(v) * x + m  # scale locations according to cavity dist.
         # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
         # Compute expected log likelihood via quadrature:
@@ -256,12 +262,12 @@ class Likelihood(object):
         )
         return exp_log_lik, dE_dm, dE_dv
 
-    @partial(jit, static_argnums=0)
-    def variational_expectation(self, y, m, v, hyp=None):
+    @partial(jit, static_argnums=(0, 5))
+    def variational_expectation(self, y, m, v, hyp=None, cubature_func=None):
         """
         If no custom variational expectation method is provided, we use Gauss-Hermite quadrature.
         """
-        return self.variational_expectation_quadrature(y, m, v, hyp)
+        return self.variational_expectation_quadrature(y, m, v, hyp, cubature_func)
 
 
 class Gaussian(Likelihood):
@@ -318,7 +324,7 @@ class Gaussian(Likelihood):
         return f, hyp.reshape(-1, 1)
 
     @partial(jit, static_argnums=0)
-    def moment_match(self, y, m, v, hyp=None, power=1.0):
+    def moment_match(self, y, m, v, hyp=None, power=1.0, cubature_func=None):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -329,6 +335,7 @@ class Gaussian(Likelihood):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: observation noise variance (σ²) [scalar]
         :param power: EP power / fraction (a) - this is never required for the Gaussian likelihood [scalar]
+        :param cubature_func: not used
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -396,8 +403,8 @@ class Bernoulli(Likelihood):
         """
         return self.link_fn(f), self.link_fn(f)-(self.link_fn(f)**2)
 
-    @partial(jit, static_argnums=(0, 5))
-    def moment_match(self, y, m, v, hyp=None, power=1.0):
+    @partial(jit, static_argnums=(0, 5, 6))
+    def moment_match(self, y, m, v, hyp=None, power=1.0, cubature_func=None):
         """
         Probit likelihood moment matching.
         Calculates the log partition function of the EP tilted distribution:
@@ -411,6 +418,7 @@ class Bernoulli(Likelihood):
         :param v: cavity variance (vₙ) [scalar]
         :param hyp: dummy variable (Probit has no hyperparameters)
         :param power: EP power / fraction (a) [scalar]
+        :param cubature_func: function returning the sigma points and weights for cubature
         :return:
             lZ: the log partition function, logZₙ [scalar]
             dlZ: first derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
@@ -433,7 +441,7 @@ class Bernoulli(Likelihood):
             return lZ, site_mean, site_var
         else:
             # if a is not 1, we can calculate the moments via quadrature
-            return self.moment_match_quadrature(y, m, v, None, power)
+            return self.moment_match_quadrature(y, m, v, None, power, cubature_func)
 
 
 class Probit(Bernoulli):

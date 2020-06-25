@@ -1,4 +1,4 @@
-def kalman_filter_no_jit(self, y, dt, params, store=False, mask=None, site_params=None, x=None):
+def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None, x=None):
     """
     Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
     The Kalman update step invloves some control flow to work out whether we are

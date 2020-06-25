@@ -236,9 +236,9 @@ class SDEGP(object):
             )
             m_test, v_test = measure_func(x_test, m_test, v_test, hyp_prior)
         lpd_func = vmap(
-            self.likelihood.moment_match, (0, 0, 0, None, None)
+            self.likelihood.moment_match, (0, 0, 0, None, None, None)
         )
-        log_predictive_density, _, _ = lpd_func(y_test, m_test, v_test, hyp_lik, 1)
+        log_predictive_density, _, _ = lpd_func(y_test, m_test, v_test, hyp_lik, 1, None)
         return -np.mean(log_predictive_density)  # mean = normalised sum
 
     def neg_log_marg_lik(self, params=None):
@@ -499,7 +499,7 @@ class SDEGP(object):
                 for k in s.range(N):
                     A = self.prior.state_transition(dt[k], self.prior.hyp)  # transition and noise process matrices
                     Q = self.Pinf - A @ self.Pinf @ A.T
-                    C = np.linalg.cholesky(Q + 1e-8 * np.eye(self.state_dim))  # <--- can be a bit unstable
+                    C = np.linalg.cholesky(Q + 1e-7 * np.eye(self.state_dim))  # <--- can be a bit unstable
                     # we need to provide a different PRNG seed every time:
                     s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
                     H = self.prior.measurement_model(x[k, 1:], softplus_list(self.prior.hyp))

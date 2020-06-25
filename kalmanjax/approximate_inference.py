@@ -1,5 +1,6 @@
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor, cho_solve
+from utils import unscented_transform_third_order, gauss_hermite
 pi = 3.141592653589793
 
 
@@ -9,8 +10,14 @@ class ApproxInf(object):
     Each approximate inference scheme implements an 'update' method which is called during
     filtering and smoothing in order to update the local likelihood approximation (the sites).
     """
-    def __init__(self, site_params=None):
+    def __init__(self, site_params=None, intmethod='GH', num_cub_pts=20):
         self.site_params = site_params
+        if intmethod is 'GH':
+            self.cubature_func = lambda dim: gauss_hermite(dim, num_cub_pts)  # Gauss-Hermite
+        elif intmethod is 'UT':
+            self.cubature_func = lambda dim: unscented_transform_third_order(dim)  # Unscented transform
+        else:
+            raise NotImplementedError('integration method not recognised')
 
     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
         raise NotImplementedError('the update function for this approximate inference method is not implemented')
@@ -20,9 +27,9 @@ class ExpectationPropagation(ApproxInf):
     """
     Expectation propagation (EP)
     """
-    def __init__(self, site_params=None, power=1.0):
+    def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
-        super().__init__(site_params=site_params)
+        super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'expectation propagation (EP)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
@@ -31,15 +38,16 @@ class ExpectationPropagation(ApproxInf):
         """
         if site_params is None:
             # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
-            return likelihood.moment_match(y, m, v, hyp, 1.0)  # calculate new sites via moment matching
+            # calculate new sites via moment matching:
+            return likelihood.moment_match(y, m, v, hyp, 1.0, self.cubature_func)
         else:
             site_mean, site_var = site_params
             # --- Compute the cavity distribution ---
             # remove local likelihood approximation to obtain the marginal cavity distribution:
             var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
             mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
-            # calculate the new sites via moment matching
-            return likelihood.moment_match(y, mu_cav, var_cav, hyp, self.power)
+            # calculate the new sites via moment matching:
+            return likelihood.moment_match(y, mu_cav, var_cav, hyp, self.power, self.cubature_func)
 
 
 class PowerExpectationPropagation(ExpectationPropagation):
@@ -128,9 +136,9 @@ class StatisticallyLinearisedEP(ApproxInf):
     """
     An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the approximate posterior.
     """
-    def __init__(self, site_params=None, power=1.0):
+    def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
-        super().__init__(site_params=site_params)
+        super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'statistically linearised expectation propagation (SLEP)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
@@ -139,7 +147,7 @@ class StatisticallyLinearisedEP(ApproxInf):
         regression (SLR) w.r.t. the cavity distribution to update the site parameters.
         """
         # TODO: implement SLR approximate likelihood
-        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
+        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0, self.cubature_func)
         if (site_params is None) or (self.power == 0):
             mu_cav, var_cav = m, v
         else:
@@ -149,7 +157,7 @@ class StatisticallyLinearisedEP(ApproxInf):
             var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
             mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
-        mu, S, C, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp)
+        mu, S, C, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp, self.cubature_func)
         # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
         residual = y - mu
         sigma = S + (self.power - 1) * C * var_cav ** -1 * C
@@ -164,12 +172,22 @@ class SLEP(StatisticallyLinearisedEP):
 
 
 class GaussHermiteKalmanSmoother(StatisticallyLinearisedEP):
-    def __init__(self, site_params=None):
-        super().__init__(site_params=site_params, power=0)
+    def __init__(self, site_params=None, num_cub_pts=20):
+        super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
         self.name = 'Gauss Hermite Kalman Smoother'
 
 
 class GHKS(GaussHermiteKalmanSmoother):
+    pass
+
+
+class UnscentedKalmanSmoother(StatisticallyLinearisedEP):
+    def __init__(self, site_params=None):
+        super().__init__(site_params=site_params, power=0, intmethod='UT')
+        self.name = 'Gauss Hermite Kalman Smoother'
+
+
+class UKS(UnscentedKalmanSmoother):
     pass
 
 
@@ -181,48 +199,7 @@ class PL(PosteriorLinearisation):
     pass
 
 
-# class IteratedKalmanSmoother(ApproxInf):
-#     """
-#     Iterated Kalman smoother (IKS). This uses statistical linearisation to perform the updates.
-#     A single forward pass using this approximation is called the statistical linearisation filter (SLF),
-#     which itself is equivalent to the Unscented/Gauss-Hermite filter (UKF/GHKF), depending on the
-#     quadrature method used.
-#     """
-#     def __init__(self, site_params=None):
-#         super().__init__(site_params=site_params)
-#         self.name = 'iterated Kalman smoother (IKS)'
-#
-#     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
-#         """
-#         The update function takes a likelihood as input, and uses statistical linearisation
-#         to update the site parameters
-#         """
-#         log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
-#         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Var[yₙ|fₙ])
-#         A, b, omega = likelihood.statistical_linear_regression(m, v, hyp)
-#         # classical iterated smoothers, which are based on statistical linearisation (as opposed to SLR),
-#         # do not utilise the linearisation error Ω, distinguishing them from posterior linearisation.
-#         # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,Var[yₙ|fₙ]/√A)
-#         # TODO: implement case where A is not invertable
-#         site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-#         _, likelihood_variance = likelihood.conditional_moments(m, hyp)
-#         site_var = A ** -2 * likelihood_variance  # approx. likelihood variance
-#         return log_marg_lik, site_mean, site_var
-#
-#
-# class IKS(IteratedKalmanSmoother):
-#     pass
-#
-#
-# class SLF(StatisticallyLinearisedEP):
-#     """
-#     Statistical linearisation filter (SLF)
-#     A single forward pass of the IKS is called the statistical linearisation filter.
-#     """
-#     pass
-
-
-class GHKF(GHKS):
+class GaussHermiteKalmanFilter(GaussHermiteKalmanSmoother):
     """
     Gauss-Hermite Kalman filter (GHKF)
     When Gauss-Hermite is used, the statistical linearisation filter (SLF) is equivalent to the GHKF
@@ -230,86 +207,20 @@ class GHKF(GHKS):
     pass
 
 
-# class PosteriorLinearisation(ApproxInf):
-#     """
-#     Posterior linearisation (PL)
-#     An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the approximate posterior.
-#     This is a special case of cavity linearisation, where power = 0.
-#     """
-#     def __init__(self, site_params=None):
-#         super().__init__(site_params=site_params)
-#         self.name = 'posterior linearisation (PL)'
-#
-#     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
-#         """
-#         The update function takes a likelihood as input, and uses statistical linear
-#         regression (SLR) to update the site parameters
-#         """
-#         # TODO: implement PL approximate likelihood
-#         log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
-#         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
-#         A, b, omega = likelihood.statistical_linear_regression(m, v, hyp)
-#         # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
-#         # TODO: implement case where A is not invertable
-#         site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-#         _, likelihood_variance = likelihood.conditional_moments(m, hyp)
-#         site_var = A ** -2 * (omega + likelihood_variance)  # approx. likelihood variance
-#         return log_marg_lik, site_mean, site_var
-#
-#
-# class PL(PosteriorLinearisation):
-#     pass
-#
-#
-# class CL(ApproxInf):
-#     """
-#     Cavity linearisation (CL) - a version of posterior linearisation that linearises w.r.t. the
-#     cavity distribution rather than the posterior. Reduces to PL when power = 0.
-#     """
-#     def __init__(self, site_params=None, power=1.0):
-#         self.power = power
-#         super().__init__(site_params=site_params)
-#         self.name = 'cavity linearisation (CL)'
-#
-#     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
-#         """
-#         The update function takes a likelihood as input, and uses statistical linear
-#         regression (SLR) w.r.t. the cavity distribution to update the site parameters.
-#         """
-#         # TODO: implement CL approximate likelihood
-#         log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
-#         if site_params is None:
-#             mu_cav, var_cav = m, v
-#         else:
-#             site_mean, site_var = site_params
-#             # --- Compute the cavity distribution ---
-#             # remove local likelihood approximation to obtain the marginal cavity distribution:
-#             var_cav = 1.0 / (1.0 / v - self.power / site_var)  # cavity variance
-#             mu_cav = var_cav * (m / v - self.power * site_mean / site_var)  # cav. mean
-#         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
-#         A, b, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp)
-#         # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
-#         # TODO: implement case where A is not invertable
-#         site_mean = A ** -1 * (y - b)  # approx. likelihood (site) mean
-#         _, likelihood_variance = likelihood.conditional_moments(mu_cav, hyp)
-#         site_var = A ** -2 * (omega + likelihood_variance)  # approx. likelihood var.
-#         return log_marg_lik, site_mean, site_var
+class GHKF(GaussHermiteKalmanFilter):
+    pass
 
 
-# class PL(CL):
-#     """
-#     Posterior linearisation (PL)
-#     This is a special case of cavity linearisation, where the power = 0.
-#     """
-#     def __init__(self, site_params=None):
-#         super().__init__(site_params=site_params, power=0.0)
+class UnscentedKalmanFilter(UnscentedKalmanSmoother):
+    """
+    Unscented Kalman filter (UKF)
+    When the Unscented transform is used, the statistical linearisation filter (SLF) is equivalent to the UKF
+    """
+    pass
 
 
-# class PrL(PL):
-#     """
-#     A single forward pass of the PL filter is called the prior linearisation (PrL) filter
-#     """
-#     pass
+class UKF(UnscentedKalmanFilter):
+    pass
 
 
 class VariationalInference(ApproxInf):
@@ -320,9 +231,9 @@ class VariationalInference(ApproxInf):
                          in non-conjugate models in to inference in conjugate models"
         Chang, Wilkinson, Khan & Solin 2020 "Fast variational learning in state space Gaussian process models"
     """
-    def __init__(self, site_params=None, damping=1.):
+    def __init__(self, site_params=None, damping=1., intmethod='GH', num_cub_pts=20):
         self.damping = damping
-        super().__init__(site_params=site_params)
+        super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'variational inference (VI)'
 
     def update(self, likelihood, y, m, v, hyp=None, site_params=None):
@@ -330,19 +241,19 @@ class VariationalInference(ApproxInf):
         The update function takes a likelihood as input, and uses CVI to update the site parameters
         """
         if site_params is None:
-            _, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp)
+            _, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp, self.cubature_func)
             site_var = -0.5 / dE_dv
             site_mean = m + dE_dm * site_var
         else:
             site_mean, site_var = site_params
-            log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp)
+            log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp, self.cubature_func)
             lambda_t_1 = site_mean / site_var
             lambda_t_2 = 1 / site_var
             lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv * m)
             lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
             site_mean = lambda_t_1 / lambda_t_2
             site_var = np.abs(1 / lambda_t_2)
-        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0)
+        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0, self.cubature_func)
         return log_marg_lik, site_mean, site_var
 
 
