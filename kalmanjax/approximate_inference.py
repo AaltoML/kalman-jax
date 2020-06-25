@@ -173,9 +173,19 @@ class SLEP(StatisticallyLinearisedEP):
     pass
 
 
+class GaussHermiteEP(StatisticallyLinearisedEP):
+    def __init__(self, site_params=None, power=1, num_cub_pts=20):
+        super().__init__(site_params=site_params, power=power, intmethod='GH', num_cub_pts=num_cub_pts)
+        self.name = 'Gauss-Hermite expectation propagation'
+
+
+class GHEP(GaussHermiteEP):
+    pass
+
+
 class GaussHermiteKalmanSmoother(StatisticallyLinearisedEP):
     def __init__(self, site_params=None, num_cub_pts=20):
-        super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
+        super().__init__(site_params=site_params, power=0, intmethod='GH', num_cub_pts=num_cub_pts)
         self.name = 'Gauss-Hermite Kalman smoother'
 
 
@@ -183,10 +193,20 @@ class GHKS(GaussHermiteKalmanSmoother):
     pass
 
 
+class UnscentedEP(StatisticallyLinearisedEP):
+    def __init__(self, site_params=None, power=1):
+        super().__init__(site_params=site_params, power=power, intmethod='UT')
+        self.name = 'unscented expectation propagation'
+
+
+class UEP(UnscentedEP):
+    pass
+
+
 class UnscentedKalmanSmoother(StatisticallyLinearisedEP):
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params, power=0, intmethod='UT')
-        self.name = 'Gauss-Hermite Kalman smoother'
+        self.name = 'unscented Kalman smoother'
 
 
 class UKS(UnscentedKalmanSmoother):

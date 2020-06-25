@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, '../')
 import numpy as np
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
@@ -118,7 +120,7 @@ plt.ylim(-lim, lim)
 # x1 = np.linspace(-lim, lim, num=100)
 # x2 = np.linspace(-lim, lim, num=100)
 cmap_ = [[1, 0.498039215686275, 0.0549019607843137], [0.12156862745098, 0.466666666666667, 0.705882352941177]]
-cmap = hsv_to_rgb(interp1d([0., 1.], rgb_to_hsv(cmap_), axis=0)(link_fn(np.linspace(-3.5, 3.5, num=64))))
+cmap = hsv_to_rgb(interp1d([-1., 1.], rgb_to_hsv(cmap_), axis=0)(link_fn(np.linspace(-3.5, 3.5, num=64))))
 newcmp = ListedColormap(cmap)
 
 plt.figure(2)

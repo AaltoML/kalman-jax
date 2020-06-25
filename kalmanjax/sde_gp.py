@@ -108,7 +108,7 @@ class SDEGP(object):
         t_test_train = nnp.concatenate([t_test, t_train])
         t_test_train = t_test_train[~np.isnan(t_test_train[:, 0]), :]
         t, x_ind = nnp.unique(t_test_train, return_inverse=True, axis=0)
-        n_test = t_test[~np.isnan(t_test[:, 0])].shape[0]  # number of test locations
+        n_test = t_test[~np.isnan(t_test[:, 0]), ...].shape[0]  # number of test locations
         test_id = x_ind[:n_test]  # index the test locations
         train_id = x_ind[n_test:]  # index the training locations
         y_all = nnp.nan * nnp.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
