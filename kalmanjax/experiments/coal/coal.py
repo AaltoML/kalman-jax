@@ -10,6 +10,7 @@ import approximate_inference as approx_inf
 import priors
 import likelihoods
 from utils import softplus_list, plot
+import pickle
 
 plot_final = False
 plot_intermediate = False
@@ -136,6 +137,13 @@ posterior_mean, posterior_var, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)
+
+with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
+    pickle.dump(nlpd, fp)
+
+# with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
+#     nlpd_show = pickle.load(fp)
+# print(nlpd_show)
 
 if plot_final:
     x_pred = model.t_all[:, 0]
