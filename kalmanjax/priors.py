@@ -1127,6 +1127,7 @@ class Sum(object):
 
     @partial(jit, static_argnums=0)
     def measurement_model(self, x_space=None, hyperparams=None):
+        hyperparams = softplus_list(self.hyp) if hyperparams is None else hyperparams
         H = self.components[0].measurement_model(x_space, hyperparams[0])
         for i in range(1, len(self.components)):
             H_ = self.components[i].measurement_model(x_space, hyperparams[i])

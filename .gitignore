@@ -76,4 +76,11 @@ kalmanjax/__pycache__*
 *.pyc
 
 kalmanjax/output/
+kalmanjax/experiments/coal/output/
+kalmanjax/experiments/aircraft/output/
+kalmanjax/experiments/banana/output/
+kalmanjax/experiments/binary/output/
+kalmanjax/experiments/motorcycle/output/
+kalmanjax/experiments/rainforest/output/
+kalmanjax/experiments/audio/output/
 
