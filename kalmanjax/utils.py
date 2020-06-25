@@ -263,13 +263,13 @@ def gauss_hermite(dim=1, num_quad_pts=20):
     return sigma_pts, weights
 
 
-def unscented_transform_third_order(dim=1, kappa=None):
+def symmetric_cubature_third_order(dim=1, kappa=None):
     """
-    Return weights and sigma-points for 3rd order
-    UT for dimension dim with parameter kappa (default 1-n).
+    Return weights and sigma-points for the symmetric cubature rule of order 5, for
+    dimension dim with parameter kappa (default 0).
     """
     if kappa is None:
-        # kappa = 1 - n
+        # kappa = 1 - dim
         kappa = 0  # CKF
     if (dim == 1) and (kappa == 0):
         weights = np.array([0., 0.5, 0.5])
@@ -300,3 +300,72 @@ def unscented_transform_third_order(dim=1, kappa=None):
         sigma_pts = np.sqrt(dim + kappa) * sigma_pts
         # u = np.sqrt(n + kappa)
     return sigma_pts, weights  # , u
+
+
+def symmetric_cubature_fifth_order(dim=1):
+    """
+    Return weights and sigma-points for the symmetric cubature rule of order 5
+    """
+    if dim == 1:
+        weights = np.array([0.6667, 0.1667, 0.1667])
+        sigma_pts = np.array([0., 1.7321, -1.7321])
+    elif dim == 2:
+        weights = np.array([0.4444, 0.1111, 0.1111, 0.1111, 0.1111, 0.0278, 0.0278, 0.0278, 0.0278])
+        sigma_pts = np.block([[0., 1.7321, -1.7321, 0., 0., 1.7321, -1.7321, 1.7321, -1.7321],
+                              [0., 0., 0., 1.7321, -1.7321, 1.7321, -1.7321, -1.7321, 1.7321]])
+    elif dim == 3:
+        weights = np.array([0.3333, 0.0556, 0.0556, 0.0556, 0.0556, 0.0556, 0.0556, 0.0278, 0.0278, 0.0278,
+                            0.0278, 0.0278, 0.0278, 0.0278, 0.0278, 0.0278, 0.0278, 0.0278, 0.0278])
+        sigma_pts = np.block([[0., 1.7321, -1.7321, 0., 0., 0., 0., 1.7321, -1.7321, 1.7321, -1.7321, 1.7321,
+                               -1.7321, 1.7321, -1.7321, 0., 0., 0., 0.],
+                              [0., 0., 0., 1.7321, -1.7321, 0., 0., 1.7321, -1.7321, -1.7321, 1.7321, 0., 0., 0.,
+                               0., 1.7321, -1.7321, 1.7321, -1.7321],
+                              [0., 0., 0., 0., 0., 1.7321, -1.7321, 0., 0., 0., 0., 1.7321, -1.7321, -1.7321,
+                               1.7321, 1.7321, -1.7321, -1.7321, 1.7321]])
+    # else:
+    #     # The weights and sigma-points from McNamee & Stenger
+    #     I0 = 1.
+    #     I2 = 1.
+    #     I4 = 3.
+    #     I22 = 1.
+    #     u = np.array(np.sqrt(I4 / I2))
+    #     A0 = I0 - dim * (I2 / I4) ** 2 * (I4 - 0.5 * (dim - 1) * I22)
+    #     A1 = 0.5 * (I2 / I4) ** 2 * (I4 - (dim - 1) * I22)
+    #     A11 = 0.25 * (I2 / I4) ** 2 * I22
+    #     U0 = sym_set(dim)
+    #     U1 = sym_set(dim, u)
+    #     U2 = sym_set(dim, np.block([u, u]))
+    #     sigma_pts = np.block([U0, U1, U2])
+    #     weights = np.block([A0 * np.ones([1, U0.shape[1]]),
+    #                         A1 * np.ones([1, U1.shape[1]]),
+    #                         A11 * np.ones([1, U2.shape[1]])])
+    return sigma_pts, weights
+
+
+# def sym_set(n, gen=None):
+#     # U = sym_set(n, gen)
+#     nonzero = 0
+#     if gen is None:
+#         if nonzero:
+#             U = []
+#         else:
+#             U = np.zeros([n, 1])
+#     else:
+#         U = []
+#         for i in range(n):
+#             u = np.zeros([n, 1])
+#             u[i] = gen[0]
+#             if gen.shape[1] > 1:
+#                 if abs(gen(1) - gen(2)) < 1e-16:
+#                     V = sym_set(n - i, gen[1:])
+#                     for j in range(V.shape[1]):
+#                         u[i:] = V[:, j]
+#                         U = np.block([U, u - u])
+#                 else:
+#                     V = sym_set(n - 1, gen[1:])
+#                     for j in range(V.shape[1]):
+#                         # u([1: i - 1, i + 1: end]) = V(:, j)
+#                         U = np.block([U, u - u])
+#             else:
+#                 U = np.block([U, u - u])
+#     return U

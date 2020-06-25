@@ -242,7 +242,7 @@ class Likelihood(object):
         weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
         # Compute expected log likelihood via quadrature:
         # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                 ≈ ∑ᵢ wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        #                 ≈ ∑ᵢ wᵢ p(yₙ|xᵢ√(2vₙ) + mₙ)
         exp_log_lik = np.sum(
             weighted_log_likelihood_eval
         )

@@ -54,13 +54,13 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         var = H @ P_ @ H.T
         if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
             y_n = np.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
-        log_lik_n, site_mu, site_var = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
+        log_lik_n, site_mu_, site_var_ = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
         if site_params is not None:  # use supplied site parameters to perform the update
-            site_mu, site_var = site_params[0][n], site_params[1][n]
+            site_mu_, site_var_ = site_params[0][n], site_params[1][n]
         # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
-        S = var + site_var
+        S = var + site_var_
         K = solve(S, H @ P_).T  # HP(S^-1)
-        m = m_ + K @ (site_mu - mu)
+        m = m_ + K @ (site_mu_ - mu)
         P = P_ - K @ S @ K.T
         if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
             m = np.where(mask[n], m_, m)
@@ -70,8 +70,8 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         if store:
             filtered_mean = index_add(filtered_mean, index[n, ...], m)
             filtered_cov = index_add(filtered_cov, index[n, ...], P)
-            site_mean = index_add(site_mean, index[n, ...], np.squeeze(site_mu.T))
-            site_var = index_add(site_var, index[n, ...], np.squeeze(site_var.T))
+            site_mean = index_add(site_mean, index[n, ...], np.squeeze(site_mu_.T))
+            site_var = index_add(site_var, index[n, ...], np.squeeze(site_var_.T))
     if store:
         return neg_log_marg_lik, (filtered_mean, filtered_cov, (site_mean, site_var))
     return neg_log_marg_lik

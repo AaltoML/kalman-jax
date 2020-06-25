@@ -25,7 +25,7 @@ y_test = np.sign(f(x_test) + np.math.sqrt(0.05)*np.random.randn(x_test.shape[0])
 
 y_test[y_test == -1] = 0
 
-var_f = 1.0  # GP variance
+var_f = 1.  # GP variance
 len_f = 5.0  # GP lengthscale
 
 theta_prior = [var_f, len_f]
@@ -34,11 +34,12 @@ prior = priors.Matern52(theta_prior)
 
 lik = likelihoods.Bernoulli(link='logit')
 # inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='UT')
-inf_method = approx_inf.VariationalInference(intmethod='UT')
+# inf_method = approx_inf.VariationalInference(intmethod='GH')
+# inf_method = approx_inf.VariationalInference(intmethod='UT')
 # inf_method = approx_inf.ExtendedEP(power=0)
 # inf_method = approx_inf.ExtendedKalmanSmoother()
 # inf_method = approx_inf.GaussHermiteKalmanSmoother()
-# inf_method = approx_inf.StatisticallyLinearisedEP(intmethod='UT')
+inf_method = approx_inf.StatisticallyLinearisedEP(intmethod='UT')
 # inf_method = approx_inf.UnscentedKalmanSmoother()
 
 model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)

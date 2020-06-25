@@ -1,6 +1,6 @@
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor, cho_solve
-from utils import unscented_transform_third_order, gauss_hermite
+from utils import symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite
 pi = 3.141592653589793
 
 
@@ -14,8 +14,10 @@ class ApproxInf(object):
         self.site_params = site_params
         if intmethod is 'GH':
             self.cubature_func = lambda dim: gauss_hermite(dim, num_cub_pts)  # Gauss-Hermite
-        elif intmethod is 'UT':
-            self.cubature_func = lambda dim: unscented_transform_third_order(dim)  # Unscented transform
+        elif intmethod is 'UT3':
+            self.cubature_func = lambda dim: symmetric_cubature_third_order(dim)  # Unscented transform
+        elif (intmethod is 'UT5') or (intmethod is 'UT'):
+            self.cubature_func = lambda dim: symmetric_cubature_fifth_order(dim)  # Unscented transform
         else:
             raise NotImplementedError('integration method not recognised')
 
@@ -174,7 +176,7 @@ class SLEP(StatisticallyLinearisedEP):
 class GaussHermiteKalmanSmoother(StatisticallyLinearisedEP):
     def __init__(self, site_params=None, num_cub_pts=20):
         super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
-        self.name = 'Gauss Hermite Kalman Smoother'
+        self.name = 'Gauss-Hermite Kalman smoother'
 
 
 class GHKS(GaussHermiteKalmanSmoother):
@@ -184,7 +186,7 @@ class GHKS(GaussHermiteKalmanSmoother):
 class UnscentedKalmanSmoother(StatisticallyLinearisedEP):
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params, power=0, intmethod='UT')
-        self.name = 'Gauss Hermite Kalman Smoother'
+        self.name = 'Gauss-Hermite Kalman smoother'
 
 
 class UKS(UnscentedKalmanSmoother):
