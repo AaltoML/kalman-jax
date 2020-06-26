@@ -7,5 +7,5 @@ for method in range(17):
         with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
             method_nlpd[method, fold] = pickle.load(fp)
 
-print(np.nanmean(method_nlpd, axis=1))
-print(np.nanstd(method_nlpd, axis=1))
+print(np.mean(method_nlpd, axis=1))
+print(np.std(method_nlpd, axis=1))

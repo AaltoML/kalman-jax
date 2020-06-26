@@ -31,7 +31,7 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 12
+    method = 11
     fold = 0
 
 print('method number', method)
@@ -122,9 +122,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-num_iters = 300
-if method is 11:  # EP with small power and UT seems a little unstable
-    num_iters = 100
+num_iters = 250
 for j in range(num_iters):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
