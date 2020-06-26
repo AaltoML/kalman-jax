@@ -1,5 +1,7 @@
 # kalman-jax
-Approximate inference for Markov Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by William Wilkinson and Paul Chang in Arno Solin's machine learning group at Aalto University, Finland.
+Approximate inference for Markov Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by **William Wilkinson**.
+
+The Bernoulli likelihood was implemented by **Paul Chang**. We are based in **Arno Solin**'s machine learning group at Aalto University, Finland.
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
 
@@ -16,30 +18,31 @@ Each approximate inference algorithm will call the same underlying Kalman filter
  - [x] ADF - assumed density filtering (single-sweep EP)
  - [x] PEP - power expectation propagation
  - [x] EKF - extended Kalman filtering
- - [ ] UKF - unscented Kalman filtering
+ - [x] UKF - unscented Kalman filtering
  - [x] GHKF - Gauss-Hermite Kalman filtering
  - [x] SLF - statistical linearisation filter
  - [x] EKS - extended Kalman smoothing
- - [ ] UKS - unscented Kalman smoothing
+ - [x] UKS - Unscented Kalman smoothing
  - [x] GHKS - Gauss-Hermite Kalman smoothing
- - [x] EK-EP - Extended Kalman EP
- - [ ] UK-EP - Unscented Kalman EP
- - [x] GHK-EP - Gauss-Hermite Kalman EP
+ - [x] EEP - Extended EP
+ - [x] SLEP - statistically linearised EP
+ - [x] UEP - Unscented EP
+ - [x] GHEP - Gauss-Hermite EP
  - [x] PL - posterior linearisation
- - [x] CL - cavity linearisation
- - [x] CVI - conjugate-computation variational inference
- - [ ] STVI - spatio-temporal variational inference
- - [ ] STEP - spatio-temporal expectation propagation
+ - [x] VI - variational inference (with natural gradients)
+ - [x] STVI - spatio-temporal variational inference
+ - [x] STEP - spatio-temporal expectation propagation
+ - [x] STKS - spatio-temporal iterated smoothers (E, U, GH)
 
 ### Likelihoods
 - [x] Gaussian
-- [x] Probit
-- [x] Poisson
-- [x] Logit
+- [x] Poisson (log-Gaussian Cox process)
+- [x] Logit (Bernoulli classification)
+- [x] Probit (Bernoulli classification)
 
 ### Priors
 - [x] Matern class
-- [x] RBF
+- [ ] RBF
 - [x] Cosine
 - [x] Periodic
 - [x] Quasi-periodic
@@ -47,11 +50,3 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [x] Sum
 - [ ] Product
 - [ ] Latent force models (linear)
-
-### TODO:
-- come up with difficult (bimodal) example to compare the different algorithms
-- allow user to feed in test locations during prediction
-- extend to multi-output/multi-dimensional case
-- make it so that when a filtering method is chosen, run() only runs the forward filter
-- implement getters and setters for parameters that involve softplus mapping
-- PL marginal likelihood approximation
