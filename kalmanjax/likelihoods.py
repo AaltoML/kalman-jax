@@ -360,10 +360,10 @@ class Bernoulli(Likelihood):
     """
     def __init__(self, link):
         super().__init__(hyp=None)
-        if link is 'logit':
+        if link == 'logit':
             self.link_fn = lambda f: 1 / (1 + np.exp(-f))
             self.link = link
-        elif link is 'probit':
+        elif link == 'probit':
             jitter = 1e-10
             self.link_fn = lambda f: 0.5 * (1.0 + erf(f / np.sqrt(2.0))) * (1 - 2 * jitter) + jitter
             self.link = link
@@ -493,9 +493,9 @@ class Poisson(Likelihood):
         :param link: link function, either 'exp' or 'logistic'
         """
         super().__init__(hyp=None)
-        if link is 'exp':
+        if link == 'exp':
             self.link_fn = lambda mu: np.exp(mu)
-        elif link is 'logistic':
+        elif link == 'logistic':
             self.link_fn = lambda mu: np.log(1.0 + np.exp(mu))
         else:
             raise NotImplementedError('link function not implemented')

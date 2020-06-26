@@ -21,11 +21,11 @@ class ApproxInf(object):
     """
     def __init__(self, site_params=None, intmethod='GH', num_cub_pts=20):
         self.site_params = site_params
-        if intmethod is 'GH':
+        if intmethod == 'GH':
             self.cubature_func = lambda dim: gauss_hermite(dim, num_cub_pts)  # Gauss-Hermite
-        elif intmethod is 'UT3':
+        elif intmethod == 'UT3':
             self.cubature_func = lambda dim: symmetric_cubature_third_order(dim)  # Unscented transform
-        elif (intmethod is 'UT5') or (intmethod is 'UT'):
+        elif (intmethod == 'UT5') or (intmethod == 'UT'):
             self.cubature_func = lambda dim: symmetric_cubature_fifth_order(dim)  # Unscented transform
         else:
             raise NotImplementedError('integration method not recognised')
