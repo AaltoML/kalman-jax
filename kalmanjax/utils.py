@@ -45,6 +45,11 @@ def softplus_inv_list(x_):
     return y_
 
 
+def softplus(x_):
+    # return np.log(1 + np.exp(x_))
+    return np.log(1 + np.exp(-np.abs(x_))) + np.maximum(x_, 0)  # safer version
+
+
 def softplus_inv(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.
@@ -52,7 +57,8 @@ def softplus_inv(x_):
     if x_ is None:
         return x_
     else:
-        return np.log(np.exp(x_) - 1)
+        # return np.log(np.exp(x_) - 1)
+        return np.log(1 - np.exp(-np.abs(x_))) + np.maximum(x_, 0)  # safer version
 
 
 def logphi(z):

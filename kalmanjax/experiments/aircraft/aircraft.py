@@ -31,7 +31,6 @@ x_max = np.ceil(np.max(xx))
 x_max_int = x_max-np.mod(x_max-x_min, BIN_WIDTH)
 x = np.linspace(x_min, x_max_int, num=int((x_max_int-x_min)/BIN_WIDTH+1))
 x = np.concatenate([np.min(x)-np.linspace(61, 1, num=61), x])  # pad with zeros to reduce strange edge effects
-x = x
 y, _ = np.histogram(xx, np.concatenate([[-1e10], x[1:]-np.diff(x)/2, [1e10]]))
 N = y.shape[0]
 
@@ -46,7 +45,7 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 0
+    method = 12
     fold = 0
 
 print('method number', method)
@@ -60,12 +59,7 @@ x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
-var_f = 1.0  # GP variance
-len_f = 1.0  # GP lengthscale
-
-theta_prior = [var_f, len_f]
-
-prior_1 = priors.Matern52([5.5e4, 2.])
+prior_1 = priors.Matern52([2., 5.5e4])
 prior_2 = priors.QuasiPeriodicMatern32([1., 2., 365., 1.5e4])  # var, len, per, lem_m
 prior_3 = priors.QuasiPeriodicMatern32([1., 2., 7., 30*365])  # var, len, per, lem_m
 
@@ -114,7 +108,7 @@ elif method == 16:
 
 model = SDEGP(prior=prior, likelihood=lik, x=x_train, y=y_train, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -138,7 +132,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(100):
+for j in range(10):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -157,3 +151,7 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 # with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
 #     nlpd_show = pickle.load(fp)
 # print(nlpd_show)
+
+plt.figure(1)
+plt.plot(posterior_mean)
+plt.show()

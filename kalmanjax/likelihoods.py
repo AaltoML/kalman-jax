@@ -1,9 +1,8 @@
 import jax.numpy as np
-from jax.scipy.special import erf, erfc, gammaln
-from jax.nn import softplus
+from jax.scipy.special import erf, gammaln
 from jax import jit, partial, jacrev, random
 from jax.scipy.linalg import cholesky
-from utils import logphi, gaussian_moment_match, softplus_inv, gauss_hermite
+from utils import softplus, logphi, gaussian_moment_match, softplus_inv, gauss_hermite
 pi = 3.141592653589793
 
 

@@ -136,7 +136,7 @@ class EKF(ExtendedKalmanFilter):
 
 class StatisticallyLinearisedEP(ApproxInf):
     """
-    An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the approximate posterior.
+    An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the cavity.
     """
     def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
@@ -183,9 +183,9 @@ class GHEP(GaussHermiteEP):
     pass
 
 
-class GaussHermiteKalmanSmoother(StatisticallyLinearisedEP):
+class GaussHermiteKalmanSmoother(GaussHermiteEP):
     def __init__(self, site_params=None, num_cub_pts=20):
-        super().__init__(site_params=site_params, power=0, intmethod='GH', num_cub_pts=num_cub_pts)
+        super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
         self.name = 'Gauss-Hermite Kalman smoother'
 
 
@@ -203,9 +203,9 @@ class UEP(UnscentedEP):
     pass
 
 
-class UnscentedKalmanSmoother(StatisticallyLinearisedEP):
+class UnscentedKalmanSmoother(UnscentedEP):
     def __init__(self, site_params=None):
-        super().__init__(site_params=site_params, power=0, intmethod='UT')
+        super().__init__(site_params=site_params, power=0)
         self.name = 'unscented Kalman smoother'
 
 
