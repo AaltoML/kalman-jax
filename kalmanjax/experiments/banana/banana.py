@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '../')
+sys.path.insert(0, '../../')
 import numpy as np
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
@@ -29,9 +29,9 @@ Xtest, Ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
 np.random.seed(99)
 N = X.shape[0]  # number of training points
 
-var_f = 0.3  # GP variance
-len_time = 0.3  # temporal lengthscale
-len_space = 0.3  # spacial lengthscale
+var_f = 1.  # GP variance
+len_time = 1.  # temporal lengthscale
+len_space = 1.  # spacial lengthscale
 
 theta_prior = [var_f, len_time, len_space]
 
