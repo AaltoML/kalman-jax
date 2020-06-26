@@ -108,7 +108,7 @@ elif method == 16:
 
 model = SDEGP(prior=prior, likelihood=lik, x=x_train, y=y_train, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -132,7 +132,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(10):
+for j in range(50):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -152,6 +152,6 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 #     nlpd_show = pickle.load(fp)
 # print(nlpd_show)
 
-plt.figure(1)
-plt.plot(posterior_mean)
-plt.show()
+# plt.figure(1)
+# plt.plot(posterior_mean)
+# plt.show()
