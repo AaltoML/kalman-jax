@@ -103,14 +103,14 @@ class ExtendedEP(ApproxInf):
             cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean, site_cov, power)
         # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
         Jf, Jr = likelihood.analytical_linearisation(cav_mean, hyp)  # evaluated at the mean
-        obs_var = np.eye(y.shape[0])  # observation noise scale is w.l.o.g. 1
+        obs_cov = np.eye(y.shape[0])  # observation noise scale is w.l.o.g. 1
         likelihood_expectation, _ = likelihood.conditional_moments(cav_mean, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
-        sigma = Jr @ obs_var @ Jr.T + power * Jf @ cav_cov @ Jf.T
-        site_cov = inv(Jf.T @ inv(Jr @ obs_var @ Jr.T) @ Jf)
+        sigma = Jr @ obs_cov @ Jr.T + power * Jf @ cav_cov @ Jf.T
+        site_cov = inv(Jf.T @ inv(Jr @ obs_cov @ Jr.T) @ Jf + 1e-10 * np.eye(Jf.shape[1]))
         site_mean = cav_mean + (site_cov + power * cav_cov) @ Jf.T @ inv(sigma) @ residual
         # now compute the marginal likelihood approx.
-        sigma_marg_lik = Jr @ obs_var @ Jr.T + Jf @ cav_cov @ Jf.T
+        sigma_marg_lik = Jr @ obs_cov @ Jr.T + Jf @ cav_cov @ Jf.T
         chol_sigma, low = cho_factor(sigma_marg_lik)
         log_marg_lik = -1 * (
                 .5 * site_cov.shape[0] * np.log(2 * pi)

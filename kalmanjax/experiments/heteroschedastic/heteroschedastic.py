@@ -65,7 +65,7 @@ len_f2 = 1.0  # GP lengthscale
 
 prior1 = priors.Matern32([var_f1, len_f1])
 prior2 = priors.Matern32([var_f2, len_f2])
-prior = priors.Stack([prior1, prior2])
+prior = priors.Independent([prior1, prior2])
 lik = likelihoods.HeteroschedasticNoise()
 
 if method == 0:
@@ -135,7 +135,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(250):
+for j in range(100):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -157,18 +157,18 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 
 if plot_final:
     x_pred = model.t_all[:, 0]
-    lb = posterior_mean[:, 0] - np.sqrt(posterior_var[:, 0]) * 1.96
-    ub = posterior_mean[:, 0] + np.sqrt(posterior_var[:, 0]) * 1.96
+    lb = posterior_mean[:, 0] - np.sqrt(posterior_var[:, 0] + posterior_mean[:, 1]) * 1.96
+    ub = posterior_mean[:, 0] + np.sqrt(posterior_var[:, 0] + posterior_mean[:, 1]) * 1.96
     test_id = model.test_id
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
     plt.clf()
-    plt.plot(X, Y)
-    plt.plot(x_pred, posterior_mean, 'g', label='posterior mean')
+    plt.plot(X, Y, 'k.', label='train')
+    plt.plot(XT, YT, 'r.', label='test')
+    plt.plot(x_pred, posterior_mean[:, 0], 'g', label='posterior mean')
     plt.fill_between(x_pred, lb, ub, color='g', alpha=0.05, label='95% confidence')
-    plt.xlim(model.t_test[0], model.t_test[-1])
-    plt.ylim(0.0)
+    plt.xlim(model.t_all[0], model.t_all[-1])
     plt.legend()
     plt.title('log-Gaussian Cox process via Kalman smoothing (coal mining disasters)')
     plt.xlabel('year')

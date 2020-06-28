@@ -29,7 +29,7 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
     theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
     self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
     if mask is not None:
-        mask = mask[..., np.newaxis, np.newaxis]  # align mask.shape with y.shape
+        mask = mask[..., np.newaxis]  # align mask.shape with y.shape
     N = dt.shape[0]
     neg_log_marg_lik = 0.0  # negative log-marginal likelihood
     m, P = self.minf, self.Pinf
@@ -53,7 +53,8 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         mu = H @ m_
         var = H @ P_ @ H.T
         if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-            y_n = np.where(mask[n], mu, y_n)  # fill in masked obs with prior expectation to prevent NaN grads
+            y_n = np.where(mask[n], mu[:y_n.shape[0]],
+                           y_n)  # fill in masked obs with prior expectation to prevent NaN grads
         log_lik_n, site_mu_, site_var_ = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
         if site_params is not None:  # use supplied site parameters to perform the update
             site_mu_, site_var_ = site_params[0][n], site_params[1][n]
@@ -65,7 +66,7 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
             m = np.where(mask[n], m_, m)
             P = np.where(mask[n], P_, P)
-            log_lik_n = np.where(mask[n][..., 0, 0], np.zeros_like(log_lik_n), log_lik_n)
+            log_lik_n = np.where(mask[n][..., 0], np.zeros_like(log_lik_n), log_lik_n)
         neg_log_marg_lik -= np.sum(log_lik_n)
         if store:
             filtered_mean = index_add(filtered_mean, index[n, ...], m)

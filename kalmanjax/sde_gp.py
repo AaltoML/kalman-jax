@@ -160,6 +160,7 @@ class SDEGP(object):
                                                          posterior_cov[self.test_id],
                                                          softplus_list(params[0]), softplus(params[1]),
                                                          return_full)
+        # nlpd_test = 0
         return posterior_mean, posterior_cov, site_params, nlpd_test
 
     def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):
@@ -188,11 +189,12 @@ class SDEGP(object):
         if site_params is not None and not sampling:
             # construct a vector of site parameters that is the full size of the test data
             # test site parameters are 𝓝(0,∞), and will not be used
-            site_mean, site_var = np.zeros([dt.shape[0], 1]), 1e5 * np.ones([dt.shape[0], 1])
+            site_mean = np.zeros([dt.shape[0], self.func_dim, 1])
+            site_cov = 1e5 * np.tile(np.eye(self.func_dim), (dt.shape[0], 1, 1))
             # replace parameters at training locations with the supplied sites
             site_mean = index_add(site_mean, index[self.train_id], site_params[0])
-            site_var = index_update(site_var, index[self.train_id], site_params[1])
-            site_params = (site_mean, site_var)
+            site_cov = index_update(site_cov, index[self.train_id], site_params[1])
+            site_params = (site_mean, site_cov)
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, x)
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, x)
@@ -356,7 +358,7 @@ class SDEGP(object):
         theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
         if mask is not None:
-            mask = mask[..., np.newaxis, np.newaxis]  # align mask.shape with y.shape
+            mask = mask[..., np.newaxis]  # align mask.shape with y.shape
         N = dt.shape[0]
         with loops.Scope() as s:
             s.neg_log_marg_lik = 0.0  # negative log-marginal likelihood
@@ -381,7 +383,7 @@ class SDEGP(object):
                 predict_mean = H @ m_
                 predict_cov = H @ P_ @ H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    y_n = np.where(mask[n], predict_mean, y_n)  # fill in masked obs with expectation
+                    y_n = np.where(mask[n], predict_mean[:y_n.shape[0]], y_n)  # fill in masked obs with expectation
                 log_lik_n, site_mean, site_cov = self.sites.update(self.likelihood, y_n, predict_mean, predict_cov,
                                                                    theta_lik, None)
                 if site_params is not None:  # use supplied site parameters to perform the update
@@ -394,7 +396,7 @@ class SDEGP(object):
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     s.m = np.where(mask[n], m_, s.m)
                     s.P = np.where(mask[n], P_, s.P)
-                    log_lik_n = np.where(mask[n][..., 0, 0], np.zeros_like(log_lik_n), log_lik_n)
+                    log_lik_n = np.where(mask[n][..., 0], np.zeros_like(log_lik_n), log_lik_n)
                 s.neg_log_marg_lik -= np.sum(log_lik_n)
                 if store:
                     s.filtered_mean = index_add(s.filtered_mean, index[n, ...], s.m)

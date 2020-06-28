@@ -1154,7 +1154,7 @@ class Sum(object):
         return A
 
 
-class Stack(object):
+class Independent(object):
     """
     A stack of independent GP priors. 'components' is a list of GP kernels, and this class stacks
     the state space models such that each component is fed to the likelihood.
@@ -1227,9 +1227,9 @@ class Stack(object):
         return A
 
 
-class Separate(Stack):
+class Separate(Independent):
     pass
 
 
-class Independent(Stack):
+class Stack(Independent):
     pass
