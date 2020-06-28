@@ -108,10 +108,9 @@ def gaussian_moment_match(y, m, v, hyp=None):
     return lZ, site_mean, site_var
 
 
-def sample_gaussian_noise(latent_mean, likelihood_var):
-    lik_std = np.sqrt(likelihood_var)
-    gaussian_sample = latent_mean + lik_std[..., np.newaxis] * random.normal(random.PRNGKey(123),
-                                                                             shape=latent_mean.shape)
+def sample_gaussian_noise(latent_mean, likelihood_cov):
+    lik_std, _ = cho_factor(likelihood_cov)
+    gaussian_sample = latent_mean + lik_std * random.normal(random.PRNGKey(123), shape=latent_mean.shape)
     return gaussian_sample
 
 

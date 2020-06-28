@@ -112,17 +112,17 @@ class Likelihood(object):
         return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
 
     @partial(jit, static_argnums=(0, 4))
-    def statistical_linear_regression_quadrature(self, m, v, hyp=None, cubature_func=None):
+    def statistical_linear_regression_quadrature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
         """
         Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
         We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
         TODO: this currently assumes an additive noise model (ok for our current applications), make more general
         """
         if cubature_func is None:
-            x, w = gauss_hermite(m.shape[0], 20)  # Gauss-Hermite sigma points and weights
+            x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
-            x, w = cubature_func(m.shape[0])
-        sigma_points = np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+            x, w = cubature_func(cav_mean.shape[0])
+        sigma_points = np.sqrt(cav_cov) * x + cav_mean  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
         lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -140,13 +140,13 @@ class Likelihood(object):
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ (fsig -mₙ) (E[yₙ|fsig]-zₙ)'
         C = np.sum(
-            w * (sigma_points - m) * (lik_expectation - mu)
+            w * (sigma_points - cav_mean) * (lik_expectation - mu)
         )
         # Compute derivative of z via quadrature:
         # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #       ≈ ∑ᵢ wᵢ E[yₙ|fsig] vₙ⁻¹ (fsig-mₙ)
         omega = np.sum(
-            w * lik_expectation * v ** -1 * (sigma_points - m)
+            w * lik_expectation * cav_cov ** -1 * (sigma_points - cav_mean)
         )
         return mu, S, C, omega
 
@@ -161,10 +161,10 @@ class Likelihood(object):
     def observation_model(self, f, r, hyp=None):
         """
         The implicit observation model is:
-            h(fₙ,rₙ) = E[yₙ|fₙ] + √Var[yₙ|fₙ] rₙ
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] rₙ
         """
-        conditional_expectation, conditional_variance = self.conditional_moments(f, hyp)
-        obs_model = conditional_expectation + cholesky(conditional_variance) * r
+        conditional_expectation, conditional_covariance = self.conditional_moments(f, hyp)
+        obs_model = conditional_expectation + cholesky(conditional_covariance) * r
         return np.squeeze(obs_model)
 
     @partial(jit, static_argnums=0)
@@ -173,12 +173,12 @@ class Likelihood(object):
         Compute the Jacobian of the state space observation model w.r.t. the
         function fₙ and the noise term rₙ.
         The implicit observation model is:
-            h(fₙ,rₙ) = E[yₙ|fₙ] + √Var[yₙ|fₙ] rₙ
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] rₙ
         The Jacobians are evaluated at the means, fₙ=m, rₙ=0, to be used during
         extended Kalman filtering and extended Kalman EP.
         """
         Jf, Jr = jacrev(self.observation_model, argnums=(0, 1))(m, 0.0, hyp)
-        return Jf, Jr
+        return np.atleast_2d(Jf).T, np.atleast_2d(Jr).T
 
     @partial(jit, static_argnums=(0, 5))
     def variational_expectation_quadrature(self, y, m, v, hyp=None, cubature_func=None):
@@ -287,16 +287,16 @@ class Gaussian(Likelihood):
         hyp = softplus(self.hyp) if hyp is None else hyp
         return f, hyp.reshape(-1, 1)
 
-    @partial(jit, static_argnums=0)
-    def moment_match(self, y, m, v, hyp=None, power=1.0, cubature_func=None):
+    @partial(jit, static_argnums=(0, 6))
+    def moment_match(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
         Closed form Gaussian moment matching.
         Calculates the log partition function of the EP tilted distribution:
             logZₙ = log ∫ 𝓝ᵃ(yₙ|fₙ,σ²) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[𝓝(yₙ|fₙ,σ²)]
         and its derivatives w.r.t. mₙ, which are required for moment matching.
         :param y: observed data (yₙ) [scalar]
-        :param m: cavity mean (mₙ) [scalar]
-        :param v: cavity variance (vₙ) [scalar]
+        :param cav_mean: cavity mean (mₙ) [scalar]
+        :param cav_cov: cavity variance (vₙ) [scalar]
         :param hyp: observation noise variance (σ²) [scalar]
         :param power: EP power / fraction (a) - this is never required for the Gaussian likelihood [scalar]
         :param cubature_func: not used
@@ -306,7 +306,7 @@ class Gaussian(Likelihood):
             d2lZ: second derivative of logZₙ w.r.t. mₙ (if derivatives=True) [scalar]
         """
         hyp = softplus(self.hyp) if hyp is None else hyp
-        return gaussian_moment_match(y, m, v, hyp)
+        return gaussian_moment_match(y, cav_mean, cav_cov, hyp)
 
 
 class Bernoulli(Likelihood):
@@ -523,7 +523,7 @@ class HeteroschedasticNoise(Likelihood):
         if link == 'exp':
             self.link_fn = lambda mu: np.exp(mu-0.5)
         elif link == 'softplus':
-            self.link_fn = lambda mu: np.log(1.0 + np.exp(mu-0.5))
+            self.link_fn = lambda mu: softplus(mu - 0.5)
         else:
             raise NotImplementedError('link function not implemented')
         self.name = 'Heteroschedastic Noise'
@@ -551,4 +551,5 @@ class HeteroschedasticNoise(Likelihood):
             E[yₙ|fₙ] = link(fₙ)
             Var[yₙ|fₙ] = link(fₙ)
         """
-        return f[0], self.link_fn(f[1])
+        # return f[0], self.link_fn(f[1])
+        return np.broadcast_to(f[0], [1, 1]), self.link_fn(np.broadcast_to(f[1], [1, 1]))

@@ -1,16 +1,17 @@
 import jax.numpy as np
-from jax.scipy.linalg import cho_factor, cho_solve
+from jax.scipy.linalg import cho_factor, cho_solve, inv
 from utils import symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite
 pi = 3.141592653589793
 
 
-def compute_cavity(m_post, v_post, m_site, v_site, power):
+def compute_cavity(post_mean, post_cov, site_mean, site_cov, power):
     """
     remove local likelihood approximation  from the posterior to obtain the marginal cavity distribution
     """
-    var_cav = 1.0 / (1.0 / v_post - power / v_site)  # cavity variance
-    mu_cav = var_cav * (m_post / v_post - power * m_site / v_site)  # cav. mean
-    return mu_cav, var_cav
+    post_precision, site_precision = inv(post_cov), inv(site_cov)
+    cav_cov = inv(post_precision - power * site_precision)  # cavity covariance
+    cav_mean = cav_cov @ (post_precision @ post_mean - power * site_precision @ site_mean)  # cavity mean
+    return cav_mean, cav_cov
 
 
 class ApproxInf(object):
@@ -24,9 +25,9 @@ class ApproxInf(object):
         if intmethod == 'GH':
             self.cubature_func = lambda dim: gauss_hermite(dim, num_cub_pts)  # Gauss-Hermite
         elif intmethod == 'UT3':
-            self.cubature_func = lambda dim: symmetric_cubature_third_order(dim)  # Unscented transform
+            self.cubature_func = lambda dim: symmetric_cubature_third_order(dim)  # Unscented transform (3rd order)
         elif (intmethod == 'UT5') or (intmethod == 'UT'):
-            self.cubature_func = lambda dim: symmetric_cubature_fifth_order(dim)  # Unscented transform
+            self.cubature_func = lambda dim: symmetric_cubature_fifth_order(dim)  # Unscented transform (5th order)
         else:
             raise NotImplementedError('integration method not recognised')
 
@@ -43,27 +44,27 @@ class ExpectationPropagation(ApproxInf):
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'expectation propagation (EP)'
 
-    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
+    def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
         The update function takes a likelihood as input, and uses moment matching to update the site parameters
         """
         if site_params is None:
             # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
             # calculate log marginal likelihood and the new sites via moment matching:
-            lml, site_mean, site_var = likelihood.moment_match(y, m, v, hyp, 1.0, self.cubature_func)
-            return lml, site_mean, site_var
+            lml, site_mean, site_cov = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
+            return lml, site_mean, site_cov
         else:
-            site_mean_prev, site_var_prev = site_params  # previous site params
+            site_mean_prev, site_cov_prev = site_params  # previous site params
             # --- Compute the cavity distribution ---
-            mu_cav, var_cav = compute_cavity(m, v, site_mean_prev, site_var_prev, self.power)
+            cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean_prev, site_cov_prev, self.power)
             # check that the cavity variances are positive
-            var_cav = np.where(var_cav > 0, var_cav, 999.)
+            cav_cov = np.where(cav_cov > 0, cav_cov, 999.)
             # calculate log marginal likelihood and the new sites via moment matching:
-            lml, site_mean, site_var = likelihood.moment_match(y, mu_cav, var_cav, hyp, self.power, self.cubature_func)
+            lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
             # don't update entries whose site variance is not positive
-            site_mean = np.where(site_var > 0, site_mean, site_mean_prev)
-            site_var = np.where(site_var > 0, site_var, site_var_prev)
-            return lml, site_mean, site_var
+            site_mean = np.where(site_cov > 0, site_mean, site_mean_prev)
+            site_cov = np.where(site_cov > 0, site_cov, site_cov_prev)
+            return lml, site_mean, site_cov
 
 
 class PowerExpectationPropagation(ExpectationPropagation):
@@ -88,33 +89,34 @@ class ExtendedEP(ApproxInf):
         super().__init__(site_params=site_params)
         self.name = 'extended expectation propagation (EEP)'
 
-    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
+    def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
         The update function takes a likelihood as input, and uses analytical linearisation (first
         order Taylor series expansion) to update the site parameters
         """
         power = 1. if site_params is None else self.power
         if (site_params is None) or (power == 0):  # avoid cavity calc if power is 0
-            mu_cav, var_cav = m, v
+            cav_mean, cav_cov = post_mean, post_cov
         else:
-            site_mean, site_var = site_params
+            site_mean, site_cov = site_params
             # --- Compute the cavity distribution ---
-            mu_cav, var_cav = compute_cavity(m, v, site_mean, site_var, power)
+            cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean, site_cov, power)
         # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
-        Jf, Jr = likelihood.analytical_linearisation(mu_cav, hyp)  # evaluated at the mean
-        var_obs = np.array([[1.0]])  # observation noise scale is w.l.o.g. 1
-        likelihood_expectation, _ = likelihood.conditional_moments(mu_cav, hyp)
+        Jf, Jr = likelihood.analytical_linearisation(cav_mean, hyp)  # evaluated at the mean
+        obs_var = np.eye(y.shape[0])  # observation noise scale is w.l.o.g. 1
+        likelihood_expectation, _ = likelihood.conditional_moments(cav_mean, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
-        sigma = Jr * var_obs * Jr + power * Jf * var_cav * Jf
-        site_var = (Jf * (Jr * var_obs * Jr) ** -1 * Jf) ** -1
-        site_mean = mu_cav + (site_var + power * var_cav) * Jf * sigma**-1 * residual
+        sigma = Jr @ obs_var @ Jr.T + power * Jf @ cav_cov @ Jf.T
+        site_cov = inv(Jf.T @ inv(Jr @ obs_var @ Jr.T) @ Jf)
+        site_mean = cav_mean + (site_cov + power * cav_cov) @ Jf.T @ inv(sigma) @ residual
         # now compute the marginal likelihood approx.
-        chol_sigma, low = cho_factor(sigma)
+        sigma_marg_lik = Jr @ obs_var @ Jr.T + Jf @ cav_cov @ Jf.T
+        chol_sigma, low = cho_factor(sigma_marg_lik)
         log_marg_lik = -1 * (
-                .5 * site_var.shape[0] * np.log(2 * pi)
+                .5 * site_cov.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
                 + .5 * (residual.T @ cho_solve((chol_sigma, low), residual)))
-        return log_marg_lik, site_mean, site_var
+        return log_marg_lik, site_mean, site_cov
 
 
 class EEP(ExtendedEP):
@@ -156,29 +158,29 @@ class StatisticallyLinearisedEP(ApproxInf):
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'statistically linearised expectation propagation (SLEP)'
 
-    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
+    def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
         The update function takes a likelihood as input, and uses statistical linear
         regression (SLR) w.r.t. the cavity distribution to update the site parameters.
         """
         power = 1. if site_params is None else self.power
         # TODO: implement SLR approximate likelihood
-        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0, self.cubature_func)
+        log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
         if (site_params is None) or (power == 0):
-            mu_cav, var_cav = m, v
+            cav_mean, cav_cov = post_mean, post_cov
         else:
-            site_mean, site_var = site_params
+            site_mean, site_cov = site_params
             # --- Compute the cavity distribution ---
-            mu_cav, var_cav = compute_cavity(m, v, site_mean, site_var, power)
+            cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean, site_cov, power)
         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
-        mu, S, C, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp, self.cubature_func)
+        mu, S, C, omega = likelihood.statistical_linear_regression(cav_mean, cav_cov, hyp, self.cubature_func)
         # convert to a Gaussian site (a function of fₙ):
         residual = y - mu
-        sigma = S + (power - 1) * C * var_cav ** -1 * C
+        sigma = S + (power - 1) * C * cav_cov ** -1 * C
         osigo = (omega * sigma ** -1 * omega) ** -1
-        site_mean = mu_cav + osigo * omega * sigma ** -1 * residual  # approx. likelihood (site) mean
-        site_var = -power * var_cav + osigo  # approx. likelihood var.
-        return log_marg_lik, site_mean, site_var
+        site_mean = cav_mean + osigo * omega * sigma ** -1 * residual  # approx. likelihood (site) mean
+        site_cov = -power * cav_cov + osigo  # approx. likelihood var.
+        return log_marg_lik, site_mean, site_cov
 
 
 class SLEP(StatisticallyLinearisedEP):
@@ -270,25 +272,25 @@ class VariationalInference(ApproxInf):
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'variational inference (VI)'
 
-    def update(self, likelihood, y, m, v, hyp=None, site_params=None):
+    def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
         The update function takes a likelihood as input, and uses CVI to update the site parameters
         """
         if site_params is None:
-            _, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp, self.cubature_func)
-            site_var = -0.5 / dE_dv
-            site_mean = m + dE_dm * site_var
+            _, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
+            site_cov = -0.5 / dE_dv
+            site_mean = post_mean + dE_dm * site_cov
         else:
-            site_mean, site_var = site_params
-            log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, m, v, hyp, self.cubature_func)
-            lambda_t_1 = site_mean / site_var
-            lambda_t_2 = 1 / site_var
-            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv * m)
+            site_mean, site_cov = site_params
+            log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
+            lambda_t_1 = site_mean / site_cov
+            lambda_t_2 = 1 / site_cov
+            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv * post_mean)
             lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
             site_mean = lambda_t_1 / lambda_t_2
-            site_var = np.abs(1 / lambda_t_2)
-        log_marg_lik, _, _ = likelihood.moment_match(y, m, v, hyp, 1.0, self.cubature_func)
-        return log_marg_lik, site_mean, site_var
+            site_cov = np.abs(1 / lambda_t_2)
+        log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
+        return log_marg_lik, site_mean, site_cov
 
 
 class VI(VariationalInference):

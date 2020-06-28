@@ -1225,3 +1225,11 @@ class Stack(object):
                 [np.zeros([A_.shape[0], A.shape[0]]), A_]
             ])
         return A
+
+
+class Separate(Stack):
+    pass
+
+
+class Independent(Stack):
+    pass
