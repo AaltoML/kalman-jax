@@ -25,7 +25,6 @@ If you use this code in your research, please cite the paper as follows:
 Each approximate inference algorithm will call the same underlying Kalman filter and smoother methods, and will be distinguished by the way in which the approximate likelihood terms are computed.
 
 ### Approximate inference algorithms
- - [x] ADF - assumed density filtering (single-sweep EP)
  - [x] PEP - power expectation propagation
  - [x] EKF - extended Kalman filtering
  - [x] UKF - unscented Kalman filtering
