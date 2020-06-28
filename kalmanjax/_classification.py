@@ -77,13 +77,13 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+posterior_mean, posterior_cov, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('test NLPD: %1.2f' % nlpd)
 
-lb = posterior_mean[:, 0] - 1.96 * posterior_var[:, 0]**0.5
-ub = posterior_mean[:, 0] + 1.96 * posterior_var[:, 0]**0.5
+lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0] ** 0.5
+ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
 x_pred = model.t_all[:, 0]
 test_id = model.test_id
 link_fn = model.likelihood.link_fn
@@ -99,7 +99,7 @@ plt.figure(1, figsize=(12, 5))
 plt.clf()
 plt.plot(x, y, 'b+', label='training observations')
 plt.plot(x_test, y_test, 'r+', alpha=0.4, label='test observations')
-plt.plot(x_pred, link_fn(posterior_mean), 'm', label='posterior mean')
+plt.plot(x_pred, link_fn(posterior_mean[..., 0]), 'm', label='posterior mean')
 plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='m', alpha=0.05, label='95% confidence')
 plt.plot(model.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
 plt.xlim(model.t_test[0], model.t_test[-1])

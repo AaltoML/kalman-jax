@@ -64,7 +64,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(20):
+for j in range(200):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -72,7 +72,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+posterior_mean, posterior_cov, _, nlpd = model.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 # print('NLPD: %1.2f' % nlpd)
@@ -80,9 +80,9 @@ print('prediction time: %2.2f secs' % (t1-t0))
 x_pred = model.t_all[:, 0]
 link_fn = model.likelihood.link_fn
 scale = num_time_bins / (max(x_pred) - min(x_pred))
-post_mean_lgcp = link_fn(posterior_mean[:, 0] + posterior_var[:, 0] / 2) * scale
-lb_lgcp = link_fn(posterior_mean[:, 0] - np.sqrt(posterior_var[:, 0]) * 1.645) * scale
-ub_lgcp = link_fn(posterior_mean[:, 0] + np.sqrt(posterior_var[:, 0]) * 1.645) * scale
+post_mean_lgcp = link_fn(posterior_mean[:, 0, 0] + posterior_cov[:, 0, 0] / 2) * scale
+lb_lgcp = link_fn(posterior_mean[:, 0, 0] - np.sqrt(posterior_cov[:, 0, 0]) * 1.645) * scale
+ub_lgcp = link_fn(posterior_mean[:, 0, 0] + np.sqrt(posterior_cov[:, 0, 0]) * 1.645) * scale
 test_id = model.test_id
 
 print('sampling from the posterior ...')

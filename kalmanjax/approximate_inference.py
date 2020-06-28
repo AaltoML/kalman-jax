@@ -63,7 +63,7 @@ class ExpectationPropagation(ApproxInf):
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
             # don't update entries whose site variance is not positive
-            site_mean = np.where(site_cov > 0, site_mean, site_mean_prev)
+            # site_mean = np.where(site_cov > 0, site_mean, site_mean_prev)
             site_cov = np.where(site_cov > 0, site_cov, site_cov_prev)
             return lml, site_mean, site_cov
 

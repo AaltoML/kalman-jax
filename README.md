@@ -10,7 +10,7 @@ W. Wilkinson, P. Chang, M. Riis Andersen, A. *Solin. State Space Expectation Pro
 If you use this code in your research, please cite the paper as follows:  
 ```
 @inproceedings{wilkinson2020,
-  title={State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes},
+  title={State Space Expectation Propagation: Efficient Inference Schemes for Temporal {G}aussian Processes},
   author={Wilkinson, William J. and Chang, Paul E. and Andersen, Michael Riis and Solin, Arno},
   booktitle={International Conference on Machine Learning},
   year={2020}
