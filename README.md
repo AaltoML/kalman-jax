@@ -62,5 +62,5 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [x] Subband
 - [x] Sum
 - [ ] Product
-- [x] Stack (multiple independent components) 
+- [x] Independent (multiple stacked components) 
 - [ ] Latent force models (linear)
