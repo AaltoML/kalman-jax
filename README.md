@@ -5,7 +5,7 @@ The Bernoulli likelihood was implemented by **Paul Chang**. We are based in **Ar
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
 
 The methodology is outlined in the following paper:  
-*W. Wilkinson, P. Chang, M. Riis Andersen, A. Solin, State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes. International Conference on Machine Learning (ICML), 2020*
+W. Wilkinson, P. Chang, M. Riis Andersen, A. *Solin. State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes.* International Conference on Machine Learning (ICML), 2020
 
 If you use this code in your research, please cite the paper as follows:  
 ```
