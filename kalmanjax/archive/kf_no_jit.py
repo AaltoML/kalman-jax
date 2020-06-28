@@ -36,8 +36,8 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
     if store:
         filtered_mean = np.zeros([N, self.state_dim, 1])
         filtered_cov = np.zeros([N, self.state_dim, self.state_dim])
-        site_mean = np.zeros([N, self.f_dim])
-        site_var = np.zeros([N, self.f_dim])
+        site_mean = np.zeros([N, self.func_dim, 1])
+        site_var = np.zeros([N, self.func_dim, self.func_dim])
     for n in range(N):
         y_n = y[n]
         # -- KALMAN PREDICT --
@@ -70,8 +70,8 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         if store:
             filtered_mean = index_add(filtered_mean, index[n, ...], m)
             filtered_cov = index_add(filtered_cov, index[n, ...], P)
-            site_mean = index_add(site_mean, index[n, ...], np.squeeze(site_mu_.T))
-            site_var = index_add(site_var, index[n, ...], np.squeeze(site_var_.T))
+            site_mean = index_add(site_mean, index[n, ...], site_mu_)
+            site_var = index_add(site_var, index[n, ...], site_var_)
     if store:
         return neg_log_marg_lik, (filtered_mean, filtered_cov, (site_mean, site_var))
     return neg_log_marg_lik

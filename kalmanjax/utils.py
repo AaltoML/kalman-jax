@@ -13,10 +13,18 @@ pi = 3.141592653589793
 
 def solve(P, Q):
     """
-    Compute P^-1 Q, where P is a covariance matrix, using the Cholesky factoristion
+    Compute P^-1 Q, where P is a PSD matrix, using the Cholesky factoristion
     """
     L = cho_factor(P)
     return cho_solve(L, Q)
+
+
+def inv(P):
+    """
+    Compute the inverse of a PSD matrix using the Cholesky factorisation
+    """
+    L = cho_factor(P)
+    return cho_solve(L, np.eye(P.shape[0]))
 
 
 def softplus_list(x_):
