@@ -19,6 +19,7 @@ class ApproxInf(object):
     The approximate inference class.
     Each approximate inference scheme implements an 'update' method which is called during
     filtering and smoothing in order to update the local likelihood approximation (the sites).
+    See the paper for derivations of each update rule.
     """
     def __init__(self, site_params=None, intmethod='GH', num_cub_pts=20):
         self.site_params = site_params
@@ -82,7 +83,7 @@ class PEP(ExpectationPropagation):
 class ExtendedEP(ApproxInf):
     """
     Extended expectation propagation (EEP). This is equivalent to the extended Kalman smoother (EKS) but with
-    linearisation applied about the cavity mean. Recovers the EKS when power=0.
+    linearisation applied at the cavity mean. Recovers the EKS when power=0.
     """
     def __init__(self, site_params=None, power=1.0):
         self.power = power
@@ -151,7 +152,11 @@ class EKF(ExtendedKalmanFilter):
 
 class StatisticallyLinearisedEP(ApproxInf):
     """
-    An iterated smoothing algorithm based on statistical linear regression (SLR) w.r.t. the cavity.
+    An iterated smoothing algorithm based on statistical linear regression (SLR).
+    This method linearises the likelihood model in the region described by the cavity.
+    When the power is zero, we recover posterior linearisation, i.e. the statistically
+    linearised Kalman smoother. Using Gauss-Hermite / Unscented transform for numerical
+    integration results in Gauss-Hermite EP / Unscented EP.
     """
     def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
