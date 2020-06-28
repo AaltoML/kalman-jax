@@ -17,6 +17,8 @@ If you use this code in your research, please cite the paper as follows:
 }
 ```
 
+![Spatio temporal GP classification](./data/spatio_temporal_classification.gif)
+
 ### We combine two recent advances in the field of probabilistic machine learning:
  - Development of state space methods for linear-time approximate inference in Gaussian processes
  - The ability to JIT compile and autodiff through loops efficiently with JAX
