@@ -1166,7 +1166,7 @@ class Independent(object):
             hyp = hyp + [components[i].hyp]
         self.components = components
         self.hyp = hyp
-        self.name = 'Stack'
+        self.name = 'Independent'
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):

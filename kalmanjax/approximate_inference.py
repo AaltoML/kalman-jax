@@ -42,7 +42,7 @@ class ExpectationPropagation(ApproxInf):
     def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
-        self.name = 'expectation propagation (EP)'
+        self.name = 'Expectation Propagation (EP)'
 
     def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
@@ -87,7 +87,7 @@ class ExtendedEP(ApproxInf):
     def __init__(self, site_params=None, power=1.0):
         self.power = power
         super().__init__(site_params=site_params)
-        self.name = 'extended expectation propagation (EEP)'
+        self.name = 'Extended Expectation Propagation (EEP)'
 
     def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
@@ -129,7 +129,7 @@ class ExtendedKalmanSmoother(ExtendedEP):
     """
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params, power=0)
-        self.name = 'extended Kalman smoother (EKS)'
+        self.name = 'Extended Kalman Smoother (EKS)'
 
 
 class EKS(ExtendedKalmanSmoother):
@@ -156,7 +156,7 @@ class StatisticallyLinearisedEP(ApproxInf):
     def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
-        self.name = 'statistically linearised expectation propagation (SLEP)'
+        self.name = 'Statistically Linearised Expectation Propagation (SLEP)'
 
     def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
@@ -190,7 +190,7 @@ class SLEP(StatisticallyLinearisedEP):
 class GaussHermiteEP(StatisticallyLinearisedEP):
     def __init__(self, site_params=None, power=1, num_cub_pts=20):
         super().__init__(site_params=site_params, power=power, intmethod='GH', num_cub_pts=num_cub_pts)
-        self.name = 'Gauss-Hermite expectation propagation (GHEP'
+        self.name = 'Gauss-Hermite Expectation Propagation (GHEP'
 
 
 class GHEP(GaussHermiteEP):
@@ -200,7 +200,7 @@ class GHEP(GaussHermiteEP):
 class GaussHermiteKalmanSmoother(GaussHermiteEP):
     def __init__(self, site_params=None, num_cub_pts=20):
         super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
-        self.name = 'Gauss-Hermite Kalman smoother'
+        self.name = 'Gauss-Hermite Kalman Smoother'
 
 
 class GHKS(GaussHermiteKalmanSmoother):
@@ -210,7 +210,7 @@ class GHKS(GaussHermiteKalmanSmoother):
 class UnscentedEP(StatisticallyLinearisedEP):
     def __init__(self, site_params=None, power=1):
         super().__init__(site_params=site_params, power=power, intmethod='UT')
-        self.name = 'Unscented expectation propagation (UEP)'
+        self.name = 'Unscented Expectation Propagation (UEP)'
 
 
 class UEP(UnscentedEP):
@@ -220,7 +220,7 @@ class UEP(UnscentedEP):
 class UnscentedKalmanSmoother(UnscentedEP):
     def __init__(self, site_params=None):
         super().__init__(site_params=site_params, power=0)
-        self.name = 'Unscented Kalman smoother (UKS)'
+        self.name = 'Unscented Kalman Smoother (UKS)'
 
 
 class UKS(UnscentedKalmanSmoother):
@@ -270,7 +270,7 @@ class VariationalInference(ApproxInf):
     def __init__(self, site_params=None, damping=1., intmethod='GH', num_cub_pts=20):
         self.damping = damping
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
-        self.name = 'variational inference (VI)'
+        self.name = 'Variational Inference (VI)'
 
     def update(self, likelihood, y, post_mean, post_cov, hyp=None, site_params=None):
         """
