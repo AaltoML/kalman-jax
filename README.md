@@ -1,11 +1,11 @@
 # kalman-jax
-Approximate inference for Markov (i.e temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by **William Wilkinson**.
-The Bernoulli likelihood was implemented by **Paul Chang**. We are based in **Arno Solin**'s machine learning group at Aalto University, Finland.
+Approximate inference for Markov (i.e temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://twitter.com/wil_j_wil).
+The Bernoulli likelihood was implemented by **Paul Chang**. We are based in [**Arno Solin**](https://users.aalto.fi/~asolin/)'s machine learning group at Aalto University, Finland.
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
 
 The methodology is outlined in the following paper:  
-*W. Wilkinson, P. Chang, M. Riis Andersen, A. Solin, State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes. International Conference on Machine Learning (ICML), 2020*
+W. Wilkinson, P. Chang, M. Riis Andersen, A. *Solin. State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes.* International Conference on Machine Learning (ICML), 2020
 
 If you use this code in your research, please cite the paper as follows:  
 ```
@@ -16,6 +16,8 @@ If you use this code in your research, please cite the paper as follows:
   year={2020}
 }
 ```
+
+![Spatio temporal GP classification](./data/spatio_temporal_classification.gif)
 
 ### We combine two recent advances in the field of probabilistic machine learning:
  - Development of state space methods for linear-time approximate inference in Gaussian processes
