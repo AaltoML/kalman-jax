@@ -508,3 +508,47 @@ class Poisson(Likelihood):
             Var[yₙ|fₙ] = link(fₙ)
         """
         return self.link_fn(f), self.link_fn(f)
+
+
+class HeteroschedasticNoise(Likelihood):
+    """
+    The Heteroschedastic Noise likelihood:
+        p(y|f1,f2) = N(y|f1,link(f2))
+    """
+    def __init__(self, link='softplus'):
+        """
+        :param link: link function, either 'exp' or 'softplus' (note that the link is modified with an offset)
+        """
+        super().__init__(hyp=None)
+        if link == 'exp':
+            self.link_fn = lambda mu: np.exp(mu-0.5)
+        elif link == 'softplus':
+            self.link_fn = lambda mu: np.log(1.0 + np.exp(mu-0.5))
+        else:
+            raise NotImplementedError('link function not implemented')
+        self.name = 'Heteroschedastic Noise'
+
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
+        """
+        Evaluate the likelihood
+        """
+        mu, var = f[0], self.link_fn(f[1])
+        return (2 * pi * var) ** -0.5 * np.exp(-0.5 * (y - mu) ** 2 / var)
+
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
+        """
+        Evaluate the log-likelihood
+        """
+        mu, var = f[0], self.link_fn(f[1])
+        return -0.5 * np.log(2 * pi * var) - 0.5 * (y - mu) ** 2 / var
+
+    @partial(jit, static_argnums=0)
+    def conditional_moments(self, f, hyp=None):
+        """
+        The first two conditional moments of a Poisson distribution are equal to the intensity:
+            E[yₙ|fₙ] = link(fₙ)
+            Var[yₙ|fₙ] = link(fₙ)
+        """
+        return f[0], self.link_fn(f[1])

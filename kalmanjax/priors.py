@@ -1152,3 +1152,76 @@ class Sum(object):
                 [np.zeros([A_.shape[0], A.shape[0]]), A_]
             ])
         return A
+
+
+class Stack(object):
+    """
+    A stack of independent GP priors. 'components' is a list of GP kernels, and this class stacks
+    the state space models such that each component is fed to the likelihood.
+    This class differs from Sum only in the measurement model.
+    """
+    def __init__(self, components):
+        hyp = [components[0].hyp]
+        for i in range(1, len(components)):
+            hyp = hyp + [components[i].hyp]
+        self.components = components
+        self.hyp = hyp
+        self.name = 'Stack'
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        hyperparams = softplus_list(self.hyp) if hyperparams is None else hyperparams
+        F, L, Qc, H, Pinf = self.components[0].kernel_to_state_space(hyperparams[0])
+        for i in range(1, len(self.components)):
+            F_, L_, Qc_, H_, Pinf_ = self.components[i].kernel_to_state_space(hyperparams[i])
+            F = np.block([
+                [F, np.zeros([F.shape[0], F_.shape[1]])],
+                [np.zeros([F_.shape[0],   F.shape[1]]), F_]
+            ])
+            L = np.block([
+                [L, np.zeros([L.shape[0], L_.shape[1]])],
+                [np.zeros([L_.shape[0],   L.shape[1]]), L_]
+            ])
+            Qc = np.block([
+                [Qc,                     np.zeros([Qc.shape[0], Qc_.shape[1]])],
+                [np.zeros([Qc_.shape[0], Qc.shape[1]]), Qc_]
+            ])
+            H = np.block([
+                [H, np.zeros([H.shape[0], H_.shape[1]])],
+                [np.zeros([H_.shape[0],   H.shape[1]]), H_]
+            ])
+            Pinf = np.block([
+                [Pinf, np.zeros([Pinf.shape[0],             Pinf_.shape[1]])],
+                [np.zeros([Pinf_.shape[0], Pinf.shape[1]]), Pinf_]
+            ])
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        hyperparams = softplus_list(self.hyp) if hyperparams is None else hyperparams
+        H = self.components[0].measurement_model(x_space, hyperparams[0])
+        for i in range(1, len(self.components)):
+            H_ = self.components[i].measurement_model(x_space, hyperparams[i])
+            H = np.block([
+                [H, np.zeros([H.shape[0], H_.shape[1]])],
+                [np.zeros([H_.shape[0], H.shape[1]]), H_]
+            ])
+        return H
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        """
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for a sum of GPs
+        :param dt: step size(s), Δt = tₙ - tₙ₋₁ [1]
+        :param hyperparams: hyperparameters of the prior: [array]
+        :return: state transition matrix A [D, D]
+        """
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        A = self.components[0].state_transition(dt, hyperparams[0])
+        for i in range(1, len(self.components)):
+            A_ = self.components[i].state_transition(dt, hyperparams[i])
+            A = np.block([
+                [A, np.zeros([A.shape[0], A_.shape[0]])],
+                [np.zeros([A_.shape[0], A.shape[0]]), A_]
+            ])
+        return A
