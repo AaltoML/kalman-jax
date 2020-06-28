@@ -172,7 +172,7 @@ class StatisticallyLinearisedEP(ApproxInf):
             mu_cav, var_cav = compute_cavity(m, v, site_mean, site_var, power)
         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
         mu, S, C, omega = likelihood.statistical_linear_regression(mu_cav, var_cav, hyp, self.cubature_func)
-        # convert to a Gaussian site in fₙ: sₙ(fₙ) = 𝓝(fₙ|(yₙ-b)/A,(Ω+Var[yₙ|fₙ])/√A)
+        # convert to a Gaussian site (a function of fₙ):
         residual = y - mu
         sigma = S + (power - 1) * C * var_cav ** -1 * C
         osigo = (omega * sigma ** -1 * omega) ** -1

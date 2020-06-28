@@ -54,7 +54,7 @@ class Likelihood(object):
         else:
             x, w = cubature_func(m.shape[0])
         # sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
-        sigma_points = np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        sigma_points = np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
         # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
@@ -65,7 +65,7 @@ class Likelihood(object):
 
         # Compute partition function via quadrature:
         # Zₙ = ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #    ≈ ∑ᵢ wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        #    ≈ ∑ᵢ wᵢ pᵃ(yₙ|fsig)
         Z = np.sum(
             weighted_likelihood_eval
         )
@@ -73,7 +73,7 @@ class Likelihood(object):
         Zinv = 1.0 / Z
         # Compute derivative of partition function via quadrature:
         # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fsig)
         dZ = np.sum(
             (sigma_points - m) / v
             * weighted_likelihood_eval
@@ -82,7 +82,7 @@ class Likelihood(object):
         dlZ = Zinv * dZ
         # Compute second derivative of partition function via quadrature:
         # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
+        #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fsig)
         d2Z = np.sum(
             ((sigma_points - m) ** 2 / v ** 2 - 1.0 / v)
             * weighted_likelihood_eval
@@ -111,40 +111,6 @@ class Likelihood(object):
         lik_std = cholesky(np.diag(np.expand_dims(lik_variance, 0)))
         return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
 
-    # @partial(jit, static_argnums=0)
-    # def statistical_linear_regression_quadrature(self, m, v, hyp=None, num_quad_points=20):
-    #     """
-    #     Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
-    #     We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
-    #     """
-    #     x, w = hermgauss(num_quad_points)  # Gauss-Hermite sigma points and weights
-    #     w = w / np.sqrt(pi)  # scale weights by 1/√π
-    #     sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
-    #     lik_expectation, _ = self.conditional_moments(sigma_points, hyp)
-    #     # Compute zₙ via quadrature:
-    #     # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
-    #     #    ≈ ∑ᵢ wᵢ E[yₙ|xᵢ√(2vₙ) + mₙ]
-    #     mu = np.sum(
-    #         w * lik_expectation
-    #     )
-    #     # Compute variance S via quadrature:
-    #     # S = ∫ (E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-    #     #   ≈ ∑ᵢ wᵢ (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
-    #     S = np.sum(
-    #         w * (lik_expectation - mu) * (lik_expectation - mu)
-    #     )
-    #     # Compute cross covariance C via quadrature:
-    #     # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-    #     #   ≈ ∑ᵢ wᵢ (fₙ-mₙ) (E[yₙ|xᵢ√(2vₙ) + mₙ]-zₙ)'
-    #     C = np.sum(
-    #         w * (sigma_points - m) * (lik_expectation - mu)
-    #     )
-    #     # compute likelihood approximation 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
-    #     A = C * v**-1  # the scale
-    #     b = mu - A * m  # the offset
-    #     omega = S - A * v * A  # the linearisation error
-    #     return A, b, omega
-
     @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression_quadrature(self, m, v, hyp=None, cubature_func=None):
         """
@@ -157,8 +123,7 @@ class Likelihood(object):
         else:
             x, w = cubature_func(m.shape[0])
         sigma_points = np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
-        lik_expectation, _ = self.conditional_moments(sigma_points, hyp)
-        _, lik_variance = self.conditional_moments(m, hyp)
+        lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|fsig]
@@ -166,11 +131,11 @@ class Likelihood(object):
             w * lik_expectation
         )
         # Compute variance S via quadrature:
-        # S = ∫ (E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ (E[yₙ|fsig]-zₙ) (E[yₙ|fsig]-zₙ)'
+        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsig]-zₙ) (E[yₙ|fsig]-zₙ)' + Cov[yₙ|fₙ]]
         S = np.sum(
-            w * (lik_expectation - mu) * (lik_expectation - mu)
-        ) + lik_variance
+            w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance)
+        )
         # Compute cross covariance C via quadrature:
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ (fsig -mₙ) (E[yₙ|fsig]-zₙ)'
@@ -236,25 +201,25 @@ class Likelihood(object):
             x, w = gauss_hermite(m.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(m.shape[0])
-        sigma_points = np.sqrt(v) * x + m  # scale locations according to cavity dist.
+        sigma_points = np.sqrt(v) * x + m  # fsig=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
         # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
         # Compute expected log likelihood via quadrature:
         # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                 ≈ ∑ᵢ wᵢ p(yₙ|xᵢ√(2vₙ) + mₙ)
+        #                 ≈ ∑ᵢ wᵢ p(yₙ|fsig)
         exp_log_lik = np.sum(
             weighted_log_likelihood_eval
         )
         # Compute first derivative via quadrature:
         # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|xᵢ√(2vₙ) + mₙ)
+        #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fsig)
         dE_dm = np.sum(
             (sigma_points - m) / v
             * weighted_log_likelihood_eval
         )
         # Compute second derivative via quadrature:
         # dE[log p(yₙ|fₙ)]/dvₙ = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|xᵢ√(2vₙ) + mₙ)
+        #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fsig)
         dE_dv = np.sum(
             (0.5 * (v ** -2) * (sigma_points - m) ** 2 - 0.5 * v ** -1)
             * weighted_log_likelihood_eval
