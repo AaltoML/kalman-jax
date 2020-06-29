@@ -155,11 +155,12 @@ class SDEGP(object):
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, x)
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, x)
-        nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
-                                                         posterior_mean[self.test_id],
-                                                         posterior_cov[self.test_id],
-                                                         softplus_list(params[0]), softplus(params[1]),
-                                                         return_full)
+        # nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+        #                                                  posterior_mean[self.test_id],
+        #                                                  posterior_cov[self.test_id],
+        #                                                  softplus_list(params[0]), softplus(params[1]),
+        #                                                  return_full)
+        nlpd_test = 0.
         return posterior_mean, posterior_cov, site_params, nlpd_test
 
     def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):
@@ -554,6 +555,75 @@ class SDEGP(object):
             site_params = (s.site_mean, s.site_var)
         if store:
             return site_params, s.smoothed_mean, s.smoothed_cov
+        return site_params
+
+    def rauch_tung_striebel_smoother__(self, params, m_filtered, P_filtered, dt, store=False, return_full=False,
+                                     y=None, site_params=None, x=None):
+        """
+        Run the RTS smoother to get p(fₙ|y₁,...,y_N),
+        i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
+        If sites are provided, then it is assumed they are to be updated, which is done by
+        calling the site-specific update() method.
+        :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
+        :param m_filtered: the intermediate distribution means computed during filtering [N, state_dim, 1]
+        :param P_filtered: the intermediate distribution covariances computed during filtering [N, state_dim, state_dim]
+        :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
+        :param y: observed data [N, obs_dim]
+        :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
+        :return:
+            var_exp: the sum of the variational expectations [scalar]
+            smoothed_mean: the posterior marginal means [N, obs_dim]
+            smoothed_var: the posterior marginal variances [N, obs_dim]
+            site_params: the updated sites [2, N, obs_dim]
+        """
+        theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
+        self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
+        N = dt.shape[0]
+        dt = np.concatenate([dt[1:], np.array([0.0])], axis=0)
+        m, P = m_filtered[-1, ...], P_filtered[-1, ...]
+        if return_full:
+            smoothed_mean = np.zeros([N, self.state_dim, 1])
+            smoothed_cov = np.zeros([N, self.state_dim, self.state_dim])
+        else:
+            smoothed_mean = np.zeros([N, self.func_dim, 1])
+            smoothed_cov = np.zeros([N, self.func_dim, self.func_dim])
+        if site_params is not None:
+            site_mean = np.zeros([N, self.func_dim, 1])
+            site_var = np.zeros([N, self.func_dim, self.func_dim])
+        for n in range(N-1, -1, -1):
+            # --- First compute the smoothing distribution: ---
+            A = self.prior.state_transition(dt[n], theta_prior)  # closed form integration of transition matrix
+            m_predicted = A @ m_filtered[n, ...]
+            tmp_gain_cov = A @ P_filtered[n, ...]
+            P_predicted = A @ (P_filtered[n, ...] - self.Pinf) @ A.T + self.Pinf
+            # backward Kalman gain:
+            # G = F * A' * P^{-1}
+            # since both F(iltered) and P(redictive) are cov matrices, thus self-adjoint, we can take the transpose:
+            #   = (P^{-1} * A * F)'
+            G_transpose = solve(P_predicted, tmp_gain_cov)  # (P^-1)AF
+            m = m_filtered[n, ...] + G_transpose.T @ (m - m_predicted)
+            P = P_filtered[n, ...] + G_transpose.T @ (P - P_predicted) @ G_transpose
+            H = self.prior.measurement_model(x[n, 1:], theta_prior)
+            if store:
+                if return_full:
+                    smoothed_mean = index_add(smoothed_mean, index[n, ...], m)
+                    smoothed_cov = index_add(smoothed_cov, index[n, ...], P)
+                else:
+                    smoothed_mean = index_add(smoothed_mean, index[n, ...], H @ m)
+                    smoothed_cov = index_add(smoothed_cov, index[n, ...], H @ P @ H.T)
+            # --- Now update the site parameters: ---
+            if site_params is not None:
+                # extract mean and var from state:
+                post_mean, post_cov = H @ m, H @ P @ H.T
+                # calculate the new sites
+                _, site_mu, site_cov = self.sites.update(self.likelihood, y[n], post_mean, post_cov, theta_lik,
+                                                         (site_params[0][n], site_params[1][n]))
+                site_mean = index_add(site_mean, index[n, ...], site_mu)
+                site_var = index_add(site_var, index[n, ...], site_cov)
+        if site_params is not None:
+            site_params = (site_mean, site_var)
+        if store:
+            return site_params, smoothed_mean, smoothed_cov
         return site_params
 
     def prior_sample(self, num_samps, x=None):

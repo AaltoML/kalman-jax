@@ -16,8 +16,8 @@ from sklearn.preprocessing import StandardScaler
 plot_final = True
 plot_intermediate = False
 
-print('loading coal data ...')
-D = np.loadtxt('mcycle.csv',delimiter=',')
+print('loading data ...')
+D = np.loadtxt('mcycle.csv', delimiter=',')
 X = D[:, 1:2]
 Y = D[:, 2:]
 N = X.shape[0]
@@ -42,7 +42,7 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 0
+    method = 16
     fold = 0
 
 print('method number', method)
@@ -58,10 +58,10 @@ Y = Yall[train, :]
 XT = Xall[test, :]
 YT = Yall[test, :]
 
-var_f1 = 3.0  # GP variance
-len_f1 = 1.0  # GP lengthscale
-var_f2 = 3.0  # GP variance
-len_f2 = 1.0  # GP lengthscale
+var_f1 = 3.  # GP variance
+len_f1 = 1.  # GP lengthscale
+var_f2 = 3.  # GP variance
+len_f2 = 1.  # GP lengthscale
 
 prior1 = priors.Matern32([var_f1, len_f1])
 prior2 = priors.Matern32([var_f2, len_f2])
@@ -110,7 +110,7 @@ elif method == 16:
 
 model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=XT, y_test=YT, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=5e-2)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -135,7 +135,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(100):
+for j in range(1):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -157,8 +157,9 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 
 if plot_final:
     x_pred = model.t_all[:, 0]
-    lb = posterior_mean[:, 0] - np.sqrt(posterior_var[:, 0] + posterior_mean[:, 1]) * 1.96
-    ub = posterior_mean[:, 0] + np.sqrt(posterior_var[:, 0] + posterior_mean[:, 1]) * 1.96
+    link = model.likelihood.link_fn
+    lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0])) * 1.96
+    ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0])) * 1.96
     test_id = model.test_id
 
     print('plotting ...')

@@ -1,5 +1,6 @@
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor, cho_solve
+from jax.scipy.linalg import inv as inv_any
 from utils import inv, symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite
 pi = 3.141592653589793
 
@@ -53,13 +54,14 @@ class ExpectationPropagation(ApproxInf):
             # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
+            site_cov = np.where(np.any(site_cov < 0), 99. * np.eye(site_cov.shape[0]), site_cov)
             return lml, site_mean, site_cov
         else:
             site_mean_prev, site_cov_prev = site_params  # previous site params
             # --- Compute the cavity distribution ---
             cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean_prev, site_cov_prev, self.power)
             # check that the cavity variances are positive
-            cav_cov = np.where(cav_cov > 0, cav_cov, 999.)
+            cav_cov = np.where(cav_cov > 0, cav_cov, 99. * np.eye(cav_cov.shape[0]))
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
             # don't update entries whose site variance is not positive
@@ -283,17 +285,19 @@ class VariationalInference(ApproxInf):
         """
         if site_params is None:
             _, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
-            site_cov = -0.5 / dE_dv
-            site_mean = post_mean + dE_dm * site_cov
+            dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
+            site_cov = -0.5 * inv_any(dE_dv)
+            site_mean = post_mean + site_cov @ dE_dm
         else:
             site_mean, site_cov = site_params
             log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
-            lambda_t_1 = site_mean / site_cov
-            lambda_t_2 = 1 / site_cov
-            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv * post_mean)
+            dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
+            lambda_t_1 = inv_any(site_cov) @ site_mean
+            lambda_t_2 = inv_any(site_cov)
+            lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv @ post_mean)
             lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
-            site_mean = lambda_t_1 / lambda_t_2
-            site_cov = np.abs(1 / lambda_t_2)
+            site_mean = inv_any(lambda_t_2) @ lambda_t_1
+            site_cov = inv_any(lambda_t_2)
         log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
         return log_marg_lik, site_mean, site_cov
 
