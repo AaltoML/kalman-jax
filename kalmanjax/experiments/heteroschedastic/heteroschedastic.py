@@ -4,7 +4,6 @@ import numpy as np
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
-import pandas as pd
 from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
@@ -13,7 +12,7 @@ from utils import softplus_list, plot
 import pickle
 from sklearn.preprocessing import StandardScaler
 
-plot_final = True
+plot_final = False
 plot_intermediate = False
 
 print('loading data ...')
@@ -41,8 +40,8 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 6
-    fold = 0
+    method = 15
+    fold = 1
 
 print('method number', method)
 print('batch number', fold)
@@ -89,21 +88,35 @@ elif method == 8:
     inf_method = approx_inf.GHKS()
 
 elif method == 9:
-    inf_method = approx_inf.EP(power=1, intmethod='UT')
+    if fold in [2, 4, 8]:  # for cases where the method fails, set damping parameter to be lower
+        inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.1)
+    else:
+        inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.5)
 elif method == 10:
-    inf_method = approx_inf.EP(power=0.5, intmethod='UT')
+    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.5)
 elif method == 11:
-    inf_method = approx_inf.EP(power=0.01, intmethod='UT')
+    inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.5)
 
 elif method == 12:
-    inf_method = approx_inf.EP(power=1, intmethod='GH')
+    if fold in [0, 5]:
+        inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.25)
+    else:
+        inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.5)
 elif method == 13:
-    inf_method = approx_inf.EP(power=0.5, intmethod='GH')
+    inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.5)
 elif method == 14:
-    inf_method = approx_inf.EP(power=0.01, intmethod='GH')
+    if fold in [4]:
+        inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.1)
+    else:
+        inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.5)
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
+    if fold in [1]:
+        inf_method = approx_inf.VI(intmethod='UT', damping=0.03)
+    elif fold in [3, 8]:
+        inf_method = approx_inf.VI(intmethod='UT', damping=0.05)
+    else:
+        inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH', damping=0.5)
 

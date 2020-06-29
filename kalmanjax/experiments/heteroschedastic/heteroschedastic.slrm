@@ -6,7 +6,7 @@
 #SBATCH --array=0-16
 #SBATCH -o heteroschedastic-%a.out
 module load miniconda
-source activate virtualenv
+source activate venv
 
 START_NUM=0
 END_NUM=9
