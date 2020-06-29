@@ -668,9 +668,6 @@ class HeteroschedasticNoise(Likelihood):
     @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
         """
-        The first two conditional moments of a Poisson distribution are equal to the intensity:
-            E[yₙ|fₙ] = link(fₙ)
-            Var[yₙ|fₙ] = link(fₙ)
         """
         return f[0][None, ...], self.link_fn(f[1][None, ...]) ** 2
 
@@ -719,7 +716,8 @@ class HeteroschedasticNoise(Likelihood):
         sigma_points = np.sqrt(cav_var[1]) * x + cav_mean[1]
         f2 = self.link_fn(sigma_points) ** 2. / power
         obs_var = f2 + cav_var[0]
-        normpdf = (2 * pi * obs_var) ** -0.5 * np.exp(-0.5 * (y - cav_mean[0]) ** 2 / obs_var)
+        const = power ** -0.5 * (2 * pi * self.link_fn(sigma_points) ** 2.) ** (0.5 - 0.5 * power)
+        normpdf = const * (2 * pi * obs_var) ** -0.5 * np.exp(-0.5 * (y - cav_mean[0]) ** 2 / obs_var)
         Z = np.sum(w * normpdf)
         lZ = np.log(Z + 1e-8)
         return lZ
@@ -826,3 +824,76 @@ class HeteroschedasticNoise(Likelihood):
         #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
         omega = np.block([[1., 0.]])
         return mu, S, C, omega
+
+
+class AudioAmplitudeDemodulation(Likelihood):
+    """
+    The Audio Amplitude Demodulation likelihood
+    """
+    def __init__(self, hyp=0.1):
+        """
+        param hyp: observation noise
+        """
+        super().__init__(hyp=hyp)
+        self.name = 'Audio Amplitude Demodulation'
+
+    @partial(jit, static_argnums=0)
+    def evaluate_likelihood(self, y, f, hyp=None):
+        """
+        Evaluate the likelihood
+        """
+        mu, var = self.conditional_moments(f, hyp)
+        return (2 * pi * var) ** -0.5 * np.exp(-0.5 * (y - mu) ** 2 / var)
+
+    @partial(jit, static_argnums=0)
+    def evaluate_log_likelihood(self, y, f, hyp=None):
+        """
+        Evaluate the log-likelihood
+        """
+        mu, var = self.conditional_moments(f, hyp)
+        return -0.5 * np.log(2 * pi * var) - 0.5 * (y - mu) ** 2 / var
+
+    @partial(jit, static_argnums=0)
+    def conditional_moments(self, f, hyp=None):
+        """
+        """
+        obs_noise_var = hyp if hyp is not None else self.hyp
+        num_components = f.shape[0] / 2
+        subbands, modulators = f[:num_components], softplus(f[num_components:])
+        return np.sum(subbands * modulators), obs_noise_var
+
+    @partial(jit, static_argnums=0)
+    def log_expected_likelihood(self, y, x, w, cav_mean, cav_cov, hyp, power):
+        num_components = int(cav_mean.shape[0] / 2)
+        subband_mean, modulator_mean = cav_mean[:num_components], softplus(cav_mean[num_components:])
+        subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:, num_components:]
+        sigma_points = cholesky(modulator_cov) @ x + modulator_mean[..., None]
+        const = power ** -0.5 * (2 * pi * hyp) ** (0.5 - 0.5 * power)
+        mu = np.sum(subband_mean[..., None] * softplus(sigma_points), axis=0)
+        var = hyp + np.sum(np.diag(subband_cov)[..., None] * softplus(sigma_points) ** 2, axis=0)
+        normpdf = const * (2 * pi * var) ** -0.5 * np.exp(-0.5 * (y - mu) ** 2 / var)
+        Z = np.sum(w * normpdf)
+        lZ = np.log(Z + 1e-8)
+        return lZ
+
+    @partial(jit, static_argnums=0)
+    def dlZ_dm(self, y, x, w, cav_mean, cav_cov, hyp, power):
+        return jacrev(self.log_expected_likelihood, argnums=3)(y, x, w, cav_mean, cav_cov, hyp, power)
+
+    @partial(jit, static_argnums=(0, 6))
+    def moment_match(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
+        """
+        """
+        num_components = cav_mean.shape[0] / 2
+        if cubature_func is None:
+            x, w = gauss_hermite(num_components, 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(num_components)
+        lZ = self.log_expected_likelihood(y, x, w, np.squeeze(cav_mean), cav_cov, hyp, power)
+        dlZ = self.dlZ_dm(y, x, w, np.squeeze(cav_mean), cav_cov, hyp, power)[:, None]
+        d2lZ = jacrev(self.dlZ_dm, argnums=3)(y, x, w, np.squeeze(cav_mean), cav_cov, hyp, power)
+        d2lZ = np.diag(np.diag(d2lZ))  # discard the cross covariances for stability
+        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
+        return lZ, site_mean, site_cov
