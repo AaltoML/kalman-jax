@@ -8,6 +8,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 from matplotlib.colors import hsv_to_rgb, rgb_to_hsv, ListedColormap
 from numpy.polynomial.hermite import hermgauss
+import itertools
 pi = 3.141592653589793
 
 
@@ -266,13 +267,51 @@ def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
     return plot_num, mu_plot
 
 
+def mvhermgauss(H: int, D: int):
+    """
+    This function is taken from GPflow: https://github.com/GPflow/GPflow
+    Copied here rather than imported so that users don't need to install gpflow to use kalman-jax
+
+    LICENSE:
+
+        Copyright The Contributors to the GPflow Project. All Rights Reserved.
+
+        Licensed under the Apache License, Version 2.0 (the "License");
+        you may not use this file except in compliance with the License.
+        You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+        Unless required by applicable law or agreed to in writing, software
+        distributed under the License is distributed on an "AS IS" BASIS,
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        See the License for the specific language governing permissions and
+        limitations under the License.
+
+    Return the evaluation locations 'xn', and weights 'wn' for a multivariate
+    Gauss-Hermite quadrature.
+
+    The outputs can be used to approximate the following type of integral:
+    int exp(-x)*f(x) dx ~ sum_i w[i,:]*f(x[i,:])
+
+    :param H: Number of Gauss-Hermite evaluation points.
+    :param D: Number of input dimensions. Needs to be known at call-time.
+    :return: eval_locations 'x' (H**DxD), weights 'w' (H**D)
+    """
+    gh_x, gh_w = hermgauss(H)
+    x = np.array(list(itertools.product(*(gh_x,) * D)))  # H**DxD
+    w = np.prod(np.array(list(itertools.product(*(gh_w,) * D))), 1)  # H**D
+    return x, w
+
+
 def gauss_hermite(dim=1, num_quad_pts=20):
     """
     Return weights and sigma-points for Gauss-Hermite cubature
     """
-    sigma_pts, weights = hermgauss(num_quad_pts)  # Gauss-Hermite sigma points and weights
-    sigma_pts = np.sqrt(2) * sigma_pts
-    weights = weights / np.sqrt(pi)  # scale weights by 1/√π
+    # sigma_pts, weights = hermgauss(num_quad_pts)  # Gauss-Hermite sigma points and weights
+    sigma_pts, weights = mvhermgauss(num_quad_pts, dim)
+    sigma_pts = np.sqrt(2) * sigma_pts.T
+    weights = weights.T / np.sqrt(pi)  # scale weights by 1/√π
     return sigma_pts, weights
 
 

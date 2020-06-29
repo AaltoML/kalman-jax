@@ -201,7 +201,7 @@ class SLEP(StatisticallyLinearisedEP):
 class GaussHermiteEP(StatisticallyLinearisedEP):
     def __init__(self, site_params=None, power=1, num_cub_pts=20):
         super().__init__(site_params=site_params, power=power, intmethod='GH', num_cub_pts=num_cub_pts)
-        self.name = 'Gauss-Hermite Expectation Propagation (GHEP'
+        self.name = 'Gauss-Hermite Expectation Propagation (GHEP)'
 
 
 class GHEP(GaussHermiteEP):
@@ -211,7 +211,7 @@ class GHEP(GaussHermiteEP):
 class GaussHermiteKalmanSmoother(GaussHermiteEP):
     def __init__(self, site_params=None, num_cub_pts=20):
         super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
-        self.name = 'Gauss-Hermite Kalman Smoother'
+        self.name = 'Gauss-Hermite Kalman Smoother (GHKS)'
 
 
 class GHKS(GaussHermiteKalmanSmoother):
