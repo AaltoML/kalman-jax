@@ -15,6 +15,12 @@ def compute_cavity(post_mean, post_cov, site_mean, site_cov, power):
     return cav_mean, cav_cov
 
 
+def ensure_positive_variance(K):
+    K = np.where(np.any(np.diag(K) < 0), np.diag(np.diag(K)), K)
+    K = np.where(K < 0, 99., K)
+    return K
+
+
 class ApproxInf(object):
     """
     The approximate inference class.
@@ -54,24 +60,17 @@ class ExpectationPropagation(ApproxInf):
             # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
-            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
-            site_cov = np.where(site_cov < 0, 99., site_cov)
+            site_cov = ensure_positive_variance(site_cov)
             return lml, site_mean, site_cov
         else:
             site_mean_prev, site_cov_prev = site_params  # previous site params
             # --- Compute the cavity distribution ---
             cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean_prev, site_cov_prev, self.power)
             # check that the cavity variances are positive
-            # cav_cov = np.where(cav_cov > 0, cav_cov, 99. * np.eye(cav_cov.shape[0]))
-            cav_cov = np.where(np.any(np.diag(cav_cov) < 0), np.diag(np.diag(cav_cov)), cav_cov)
-            cav_cov = np.where(cav_cov < 0, 99., cav_cov)
+            cav_cov = ensure_positive_variance(cav_cov)
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
-            # don't update entries whose site variance is not positive
-            # site_mean = np.where(site_cov > 0, site_mean, site_mean_prev)
-            # site_cov = np.where(site_cov > 0, site_cov, site_cov_prev)
-            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
-            site_cov = np.where(site_cov < 0, 99., site_cov)
+            site_cov = ensure_positive_variance(site_cov)
             return lml, site_mean, site_cov
 
 
@@ -188,9 +187,9 @@ class StatisticallyLinearisedEP(ApproxInf):
         mu, S, C, omega = likelihood.statistical_linear_regression(cav_mean, cav_cov, hyp, self.cubature_func)
         # convert to a Gaussian site (a function of fₙ):
         residual = y - mu
-        sigma = S + (power - 1) * C * cav_cov ** -1 * C
-        osigo = (omega * sigma ** -1 * omega) ** -1
-        site_mean = cav_mean + osigo * omega * sigma ** -1 * residual  # approx. likelihood (site) mean
+        sigma = S + (power - 1) * C.T @ inv(cav_cov) @ C
+        osigo = inv(omega.T @ inv(sigma) @ omega + 1e-10 * np.eye(omega.shape[1]))
+        site_mean = cav_mean + osigo @ omega.T @ inv(sigma) @ residual  # approx. likelihood (site) mean
         site_cov = -power * cav_cov + osigo  # approx. likelihood var.
         return log_marg_lik, site_mean, site_cov
 
@@ -293,8 +292,7 @@ class VariationalInference(ApproxInf):
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
             site_cov = -0.5 * inv_any(dE_dv + 1e-10 * np.eye(dE_dv.shape[0]))
             site_mean = post_mean + site_cov @ dE_dm
-            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
-            site_cov = np.where(site_cov < 0, 99., site_cov)
+            site_cov = ensure_positive_variance(site_cov)
         else:
             site_mean, site_cov = site_params
             log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
@@ -310,8 +308,7 @@ class VariationalInference(ApproxInf):
             lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
             site_cov = inv_any(lambda_t_2 + 1e-10 * np.eye(site_cov.shape[0]))
             site_mean = site_cov @ lambda_t_1
-            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
-            site_cov = np.where(site_cov < 0, 99., site_cov)
+            site_cov = ensure_positive_variance(site_cov)
         log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
         return log_marg_lik, site_mean, site_cov
 

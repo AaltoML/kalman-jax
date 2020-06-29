@@ -41,7 +41,7 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 16
+    method = 3
     fold = 0
 
 print('method number', method)

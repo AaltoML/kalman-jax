@@ -233,6 +233,45 @@ class Likelihood(object):
         return mu, S, C, omega
 
     @partial(jit, static_argnums=(0, 4))
+    def statistical_linear_regression_quadrature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
+        """
+        Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
+        We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
+        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
+        """
+        if cubature_func is None:
+            x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(cav_mean.shape[0])
+        sigma_points = cholesky(cav_cov) @ np.atleast_2d(x) + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
+        # Compute zₙ via quadrature:
+        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
+        mu = np.sum(
+            w * lik_expectation, axis=-1
+        )[:, None]
+        # Compute variance S via quadrature:
+        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
+        S = np.sum(
+            w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance), axis=-1
+        )[:, None]
+        # Compute cross covariance C via quadrature:
+        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
+        C = np.sum(
+            w * (sigma_points - cav_mean) * (lik_expectation - mu), axis=-1
+        )[:, None]
+        # Compute derivative of z via quadrature:
+        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
+        omega = np.sum(
+            w * lik_expectation * (inv(cav_cov) @ (sigma_points - cav_mean)), axis=-1
+        )[None, :]
+        return mu, S, C, omega
+
+    @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression(self, m, v, hyp=None, cubature_func=None):
         """
         If no custom SLR method is provided, we use Gauss-Hermite quadrature.
@@ -750,3 +789,40 @@ class HeteroschedasticNoise(Likelihood):
         dE_dv = np.block([[dE_dv1, 0],
                           [0., dE_dv2]])
         return exp_log_lik, dE_dm, dE_dv
+
+    @partial(jit, static_argnums=(0, 4))
+    def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
+        """
+        Perform statistical linear regression (SLR) using quadrature.
+        We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
+        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
+        """
+        if cubature_func is None:
+            x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(cav_mean.shape[0])
+        m0, m1, v0, v1 = cav_mean[0, 0], cav_mean[1, 0], cav_cov[0, 0], cav_cov[1, 1]
+        sigma_points = cholesky(cav_cov) @ x + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        var = self.link_fn(sigma_points[1]) ** 2
+        # Compute zₙ via quadrature:
+        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
+        mu = m0.reshape(1, 1)
+        # Compute variance S via quadrature:
+        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
+        S = v0 + np.sum(
+            w * var
+        )
+        S = S.reshape(1, 1)
+        # Compute cross covariance C via quadrature:
+        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
+        C = np.sum(
+            w * (sigma_points - cav_mean) * (sigma_points[0] - m0), axis=-1
+        ).reshape(2, 1)
+        # Compute derivative of z via quadrature:
+        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
+        omega = np.block([[1., 0.]])
+        return mu, S, C, omega
