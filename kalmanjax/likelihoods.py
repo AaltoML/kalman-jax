@@ -652,7 +652,7 @@ class HeteroschedasticNoise(Likelihood):
         normpdf = (2 * pi * obs_var) ** -0.5 * np.exp(-0.5 * (y - cav_mean[0, 0]) ** 2 / obs_var)
         Z = np.sum(w * normpdf)
         Zinv = 1. / np.maximum(Z, 1e-8)
-        lZ = np.log(Z)
+        lZ = np.log(np.maximum(Z, 1e-8))
 
         dZ_integrand1 = (y - cav_mean[0, 0]) / obs_var * normpdf
         dlZ1 = Zinv * np.sum(w * dZ_integrand1)
@@ -670,8 +670,9 @@ class HeteroschedasticNoise(Likelihood):
                         [dlZ2]])
         d2lZ = np.block([[d2lZ1, 0],
                          [0., d2lZ2]])
-        site_mean = cav_mean - inv_any(d2lZ) @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + inv_any(d2lZ))  # approx. likelihood (site) variance
+        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=(0, 5))

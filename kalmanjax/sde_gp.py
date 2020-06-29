@@ -155,12 +155,11 @@ class SDEGP(object):
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, x)
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, x)
-        # nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
-        #                                                  posterior_mean[self.test_id],
-        #                                                  posterior_cov[self.test_id],
-        #                                                  softplus_list(params[0]), softplus(params[1]),
-        #                                                  return_full)
-        nlpd_test = 0.
+        nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+                                                         posterior_mean[self.test_id],
+                                                         posterior_cov[self.test_id],
+                                                         softplus_list(params[0]), softplus(params[1]),
+                                                         return_full)
         return posterior_mean, posterior_cov, site_params, nlpd_test
 
     def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, x=None):

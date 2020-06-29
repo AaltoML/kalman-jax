@@ -42,7 +42,7 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 16
+    method = 12
     fold = 0
 
 print('method number', method)
@@ -135,7 +135,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(1):
+for j in range(100):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -167,11 +167,11 @@ if plot_final:
     plt.clf()
     plt.plot(X, Y, 'k.', label='train')
     plt.plot(XT, YT, 'r.', label='test')
-    plt.plot(x_pred, posterior_mean[:, 0], 'g', label='posterior mean')
-    plt.fill_between(x_pred, lb, ub, color='g', alpha=0.05, label='95% confidence')
+    plt.plot(x_pred, posterior_mean[:, 0], 'c', label='posterior mean')
+    plt.fill_between(x_pred, lb, ub, color='c', alpha=0.05, label='95% confidence')
     plt.xlim(model.t_all[0], model.t_all[-1])
     plt.legend()
-    plt.title('log-Gaussian Cox process via Kalman smoothing (coal mining disasters)')
-    plt.xlabel('year')
-    plt.ylabel('accident intensity')
+    plt.title('Heteroschedastic Noise Model via Kalman smoothing (motorcycle crash data)')
+    plt.xlabel('time')
+    plt.ylabel('acceleration')
     plt.show()

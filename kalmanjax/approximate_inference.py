@@ -54,19 +54,24 @@ class ExpectationPropagation(ApproxInf):
             # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
-            site_cov = np.where(np.any(site_cov < 0), 99. * np.eye(site_cov.shape[0]), site_cov)
+            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
+            site_cov = np.where(site_cov < 0, 99., site_cov)
             return lml, site_mean, site_cov
         else:
             site_mean_prev, site_cov_prev = site_params  # previous site params
             # --- Compute the cavity distribution ---
             cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean_prev, site_cov_prev, self.power)
             # check that the cavity variances are positive
-            cav_cov = np.where(cav_cov > 0, cav_cov, 99. * np.eye(cav_cov.shape[0]))
+            # cav_cov = np.where(cav_cov > 0, cav_cov, 99. * np.eye(cav_cov.shape[0]))
+            cav_cov = np.where(np.any(np.diag(cav_cov) < 0), np.diag(np.diag(cav_cov)), cav_cov)
+            cav_cov = np.where(cav_cov < 0, 99., cav_cov)
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
             # don't update entries whose site variance is not positive
             # site_mean = np.where(site_cov > 0, site_mean, site_mean_prev)
-            site_cov = np.where(site_cov > 0, site_cov, site_cov_prev)
+            # site_cov = np.where(site_cov > 0, site_cov, site_cov_prev)
+            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
+            site_cov = np.where(site_cov < 0, 99., site_cov)
             return lml, site_mean, site_cov
 
 
