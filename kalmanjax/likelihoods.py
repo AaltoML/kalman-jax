@@ -709,54 +709,40 @@ class HeteroschedasticNoise(Likelihood):
     @partial(jit, static_argnums=(0, 5))
     def variational_expectation(self, y, m, v, hyp=None, cubature_func=None):
         """
-        Computes the "variational expectation" via Gauss-Hermite quadrature, i.e. the
-        expected log-likelihood, and its derivatives w.r.t. the posterior mean
-            E[log p(yₙ|fₙ)] = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        with EP power a.
-        :param y: observed data (yₙ) [scalar]
-        :param m: posterior mean (mₙ) [scalar]
-        :param v: posterior variance (vₙ) [scalar]
-        :param hyp: likelihood hyperparameter [scalar]
-        :param cubature_func: the function to compute sigma points and weights to use during cubature
-        :return:
-            exp_log_lik: the expected log likelihood, E[log p(yₙ|fₙ)]  [scalar]
-            dE_dm: derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
-            dE_dv: derivative of E[log p(yₙ|fₙ)] w.r.t. vₙ  [scalar]
         """
         if cubature_func is None:
             x, w = gauss_hermite(1, 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(1)
-        sigma_points = np.sqrt(v[1, 1]) * x + m[1, 0]  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        m0, m1, v0, v1 = m[0, 0], m[1, 0], v[0, 0], v[1, 1]
+        sigma_points = np.sqrt(v1) * x + m1  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
         # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
-        mu = m[0, 0]
-        var = self.link_fn(sigma_points) ** 2 + v[0, 0]
-        log_lik = -0.5 * np.log(2 * pi * var) - 0.5 * (y - mu) ** 2 / var
+        var = self.link_fn(sigma_points) ** 2
+        log_lik = np.log(var) + var ** -1 * ((y - m0) ** 2 + v0)
         weighted_log_likelihood_eval = w * log_lik
         # Compute expected log likelihood via quadrature:
         # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                 ≈ ∑ᵢ wᵢ p(yₙ|fsigᵢ)
-        exp_log_lik = np.sum(
+        exp_log_lik = -0.5 * np.log(2 * pi) - 0.5 * np.sum(
             weighted_log_likelihood_eval
         )
         # Compute first derivative via quadrature:
         dE_dm1 = np.sum(
-            (-0.5 * np.log(var) + 0.5 * var ** -1 * (y - mu)) * w
+            (var ** -1 * (y - m0 + v0)) * w
         )
         # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fsigᵢ)
-        dE_dm2 = np.sum(
-            (sigma_points - m[1, 0]) / v[1, 1]
-            * weighted_log_likelihood_eval
+        dE_dm2 = - 0.5 * np.sum(
+            weighted_log_likelihood_eval * v1 ** -1 * (sigma_points - m1)
         )
-        # Compute second derivative via quadrature:
-        dE_dv1 = np.sum(
-            (-0.5 * var ** -1 + 0.5 * var ** -2 * (y - mu) ** 2) * w
+        # Compute derivative w.r.t. variance:
+        dE_dv1 = -0.5 * np.sum(
+            var ** -1 * w
         )
         # dE[log p(yₙ|fₙ)]/dvₙ = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fsigᵢ)
-        dE_dv2 = np.sum(
-            (0.5 * (v[1, 1] ** -2) * (sigma_points - m[1, 0]) ** 2 - 0.5 * v[1, 1] ** -1)
+        dE_dv2 = -0.25 * np.sum(
+            (v1 ** -2 * (sigma_points - m1) ** 2 - v1 ** -1)
             * weighted_log_likelihood_eval
         )
         dE_dm = np.block([[dE_dm1],

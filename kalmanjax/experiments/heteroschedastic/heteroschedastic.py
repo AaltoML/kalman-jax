@@ -41,7 +41,7 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
 else:
-    method = 12
+    method = 16
     fold = 0
 
 print('method number', method)
@@ -103,9 +103,9 @@ elif method == 14:
     inf_method = approx_inf.EP(power=0.01, intmethod='GH')
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT')
+    inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
 elif method == 16:
-    inf_method = approx_inf.VI(intmethod='GH')
+    inf_method = approx_inf.VI(intmethod='GH', damping=0.5)
 
 model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=XT, y_test=YT, approx_inf=inf_method)
 

@@ -291,18 +291,27 @@ class VariationalInference(ApproxInf):
         if site_params is None:
             _, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
-            site_cov = -0.5 * inv_any(dE_dv)
+            site_cov = -0.5 * inv_any(dE_dv + 1e-10 * np.eye(dE_dv.shape[0]))
             site_mean = post_mean + site_cov @ dE_dm
+            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
+            site_cov = np.where(site_cov < 0, 99., site_cov)
         else:
             site_mean, site_cov = site_params
             log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
-            lambda_t_1 = inv_any(site_cov) @ site_mean
-            lambda_t_2 = inv_any(site_cov)
+            # site_cov = -0.5 * inv_any(dE_dv + 1e-10 * np.eye(dE_dv.shape[0]))
+            # site_mean = post_mean + site_cov @ dE_dm
+            # site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
+            # site_cov = np.where(site_cov < 0, 99., site_cov)
+
+            lambda_t_2 = inv_any(site_cov + 1e-10 * np.eye(site_cov.shape[0]))
+            lambda_t_1 = lambda_t_2 @ site_mean
             lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv @ post_mean)
             lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
-            site_mean = inv_any(lambda_t_2) @ lambda_t_1
-            site_cov = inv_any(lambda_t_2)
+            site_cov = inv_any(lambda_t_2 + 1e-10 * np.eye(site_cov.shape[0]))
+            site_mean = site_cov @ lambda_t_1
+            site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
+            site_cov = np.where(site_cov < 0, 99., site_cov)
         log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
         return log_marg_lik, site_mean, site_cov
 
