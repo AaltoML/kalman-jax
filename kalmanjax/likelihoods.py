@@ -147,8 +147,8 @@ class Likelihood(object):
         Z = np.sum(
             weighted_likelihood_eval, axis=-1
         )
-        lZ = np.log(Z)
-        Zinv = 1.0 / Z
+        lZ = np.log(np.maximum(Z, 1e-8))
+        Zinv = 1.0 / np.maximum(Z, 1e-8)
 
         # Compute derivative of partition function via quadrature:
         # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -172,8 +172,9 @@ class Likelihood(object):
         #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
         #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
         d2lZ = -dlZ @ dlZ.T + Zinv * d2Z
-        site_mean = cav_mean - inv_any(d2lZ) @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + inv_any(d2lZ))  # approx. likelihood (site) variance
+        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=(0, 6))
@@ -644,12 +645,11 @@ class HeteroschedasticNoise(Likelihood):
             x, w = cubature_func(1)
         # sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
         sigma_points = np.sqrt(cav_cov[1, 1]) * x + cav_mean[1]  # fsigᵢ=xᵢ√cₙ + mₙ: scale locations according to cavity
-        # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
-        # weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
         f2 = self.link_fn(sigma_points) ** 2. / power
         obs_var = f2 + cav_cov[0, 0]
-        normpdf = (2 * pi * obs_var) ** -0.5 * np.exp(-0.5 * (y - cav_mean[0, 0]) ** 2 / obs_var)
+        const = power ** -0.5 * (2 * pi * self.link_fn(sigma_points) ** 2.) ** (0.5 - 0.5 * power)
+        normpdf = const * (2 * pi * obs_var) ** -0.5 * np.exp(-0.5 * (y - cav_mean[0, 0]) ** 2 / obs_var)
         Z = np.sum(w * normpdf)
         Zinv = 1. / np.maximum(Z, 1e-8)
         lZ = np.log(np.maximum(Z, 1e-8))
@@ -670,6 +670,37 @@ class HeteroschedasticNoise(Likelihood):
                         [dlZ2]])
         d2lZ = np.block([[d2lZ1, 0],
                          [0., d2lZ2]])
+        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
+        return lZ, site_mean, site_cov
+
+    @partial(jit, static_argnums=0)
+    def log_expected_likelihood(self, y, x, w, cav_mean, cav_var, power):
+        sigma_points = np.sqrt(cav_var[1]) * x + cav_mean[1]
+        f2 = self.link_fn(sigma_points) ** 2. / power
+        obs_var = f2 + cav_var[0]
+        normpdf = (2 * pi * obs_var) ** -0.5 * np.exp(-0.5 * (y - cav_mean[0]) ** 2 / obs_var)
+        Z = np.sum(w * normpdf)
+        lZ = np.log(Z + 1e-8)
+        return lZ
+
+    @partial(jit, static_argnums=0)
+    def dlZ_dm(self, y, x, w, cav_mean, cav_var, power):
+        return jacrev(self.log_expected_likelihood, argnums=3)(y, x, w, cav_mean, cav_var, power)
+
+    @partial(jit, static_argnums=(0, 6))
+    def moment_match_unstable(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
+        """
+        """
+        if cubature_func is None:
+            x, w = gauss_hermite(1, 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(1)
+        lZ = self.log_expected_likelihood(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)
+        dlZ = self.dlZ_dm(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)[:, None]
+        d2lZ = jacrev(self.dlZ_dm, argnums=3)(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)
+        # d2lZ = np.diag(np.diag(d2lZ))
         id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
         site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
         site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance

@@ -36,7 +36,6 @@ nt = np.floor(cvind.shape[0]/10).astype(int)
 cvind = np.reshape(cvind[:10*nt], (10, nt))
 
 np.random.seed(123)
-# meanval = np.log(len(disaster_timings)/num_time_bins)  # TODO: incorporate mean
 
 if len(sys.argv) > 1:
     method = int(sys.argv[1])
@@ -135,7 +134,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(100):
+for j in range(200):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -158,8 +157,8 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 if plot_final:
     x_pred = model.t_all[:, 0]
     link = model.likelihood.link_fn
-    lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0])) * 1.96
-    ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0])) * 1.96
+    lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
+    ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
     test_id = model.test_id
 
     print('plotting ...')
