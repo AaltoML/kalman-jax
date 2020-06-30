@@ -13,7 +13,7 @@ import pickle
 from numpy import pi
 from scipy.io import loadmat
 
-plot_final = False
+plot_final = True
 plot_intermediate = False
 
 print('loading data ...')
@@ -34,8 +34,9 @@ ind_split = np.stack(np.split(ind_shuffled, 10))  # 10 random batches of data in
 if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
+    plot_final = False
 else:
-    method = 9
+    method = 11
     fold = 6
 
 print('method number', method)
@@ -49,12 +50,12 @@ x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
-sub1 = priors.SubbandExponential([1., 15., 4 * pi])  # omega = 2pi / freq
-sub2 = priors.SubbandExponential([1., 15., 2 * pi])
-sub3 = priors.SubbandExponential([1., 15., 1 * pi])
-mod1 = priors.Matern52([3., 25.])
-mod2 = priors.Matern52([3., 25.])
-mod3 = priors.Matern52([3., 25.])
+sub1 = priors.SubbandExponential([.1, 15., 4 * pi])  # omega = 2pi / freq
+sub2 = priors.SubbandExponential([.1, 15., 2 * pi])
+sub3 = priors.SubbandExponential([.1, 15., 1 * pi])
+mod1 = priors.Matern52([3., 20.])
+mod2 = priors.Matern52([3., 20.])
+mod3 = priors.Matern52([3., 20.])
 
 # sub1 = priors.SubbandExponential([.1, 20., 10 * pi])  # omega = 2pi / freq
 # sub2 = priors.SubbandExponential([.1, 20., 5 * pi])

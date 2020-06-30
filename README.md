@@ -50,8 +50,8 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [x] Poisson (log-Gaussian Cox process)
 - [x] Logit (Bernoulli classification)
 - [x] Probit (Bernoulli classification)
-- [ ] Heteroschedastic Noise
-- [ ] Product (audio amplitude demodulation)
+- [x] Heteroschedastic Noise
+- [x] Product (audio amplitude demodulation)
 
 ### Priors
 - [x] Matern class
