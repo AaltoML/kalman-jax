@@ -688,7 +688,7 @@ class Poisson(Likelihood):
 class HeteroschedasticNoise(Likelihood):
     """
     The Heteroschedastic Noise likelihood:
-        p(y|f1,f2) = N(y|f1,link(f2))
+        p(y|f1,f2) = N(y|f1,link(f2)^2)
     """
     def __init__(self, link='softplus'):
         """
