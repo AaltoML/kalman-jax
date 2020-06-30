@@ -862,38 +862,42 @@ class AudioAmplitudeDemodulation(Likelihood):
         subbands, modulators = f[:num_components], softplus(f[num_components:])
         return np.sum(subbands * modulators), obs_noise_var
 
-    @partial(jit, static_argnums=0)
-    def log_expected_likelihood(self, y, x, w, cav_mean, cav_cov, hyp, power):
-        num_components = int(cav_mean.shape[0] / 2)
-        subband_mean, modulator_mean = cav_mean[:num_components], softplus(cav_mean[num_components:])
-        subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:, num_components:]
-        sigma_points = cholesky(modulator_cov) @ x + modulator_mean[..., None]
-        const = power ** -0.5 * (2 * pi * hyp) ** (0.5 - 0.5 * power)
-        mu = np.sum(subband_mean[..., None] * softplus(sigma_points), axis=0)
-        var = hyp + np.sum(np.diag(subband_cov)[..., None] * softplus(sigma_points) ** 2, axis=0)
-        normpdf = const * (2 * pi * var) ** -0.5 * np.exp(-0.5 * (y - mu) ** 2 / var)
-        Z = np.sum(w * normpdf)
-        lZ = np.log(Z + 1e-8)
-        return lZ
-
-    @partial(jit, static_argnums=0)
-    def dlZ_dm(self, y, x, w, cav_mean, cav_cov, hyp, power):
-        return jacrev(self.log_expected_likelihood, argnums=3)(y, x, w, cav_mean, cav_cov, hyp, power)
-
     @partial(jit, static_argnums=(0, 6))
     def moment_match(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
         """
-        num_components = cav_mean.shape[0] / 2
+        num_components = int(cav_mean.shape[0] / 2)
         if cubature_func is None:
             x, w = gauss_hermite(num_components, 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(num_components)
-        lZ = self.log_expected_likelihood(y, x, w, np.squeeze(cav_mean), cav_cov, hyp, power)
-        dlZ = self.dlZ_dm(y, x, w, np.squeeze(cav_mean), cav_cov, hyp, power)[:, None]
-        d2lZ = jacrev(self.dlZ_dm, argnums=3)(y, x, w, np.squeeze(cav_mean), cav_cov, hyp, power)
-        d2lZ = np.diag(np.diag(d2lZ))  # discard the cross covariances for stability
+
+        subband_mean, modulator_mean = cav_mean[:num_components], softplus(cav_mean[num_components:])
+        subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:, num_components:]
+        sigma_points = cholesky(modulator_cov) @ x + modulator_mean
+        const = power ** -0.5 * (2 * pi * hyp) ** (0.5 - 0.5 * power)
+        mu = (softplus(sigma_points).T @ subband_mean)[:, 0]
+        var = hyp / power + (softplus(sigma_points).T ** 2 @ np.diag(subband_cov)[..., None])[:, 0]
+        normpdf = const * (2 * pi * var) ** -0.5 * np.exp(-0.5 * (y - mu) ** 2 / var)
+        Z = np.sum(w * normpdf)
+        Zinv = 1. / (Z + 1e-8)
+        lZ = np.log(Z + 1e-8)
+
+        dZ1 = np.sum(w * softplus(sigma_points) * (y - mu) / var * normpdf, axis=-1)
+        dZ2 = np.sum(w * (sigma_points - modulator_mean) * np.diag(modulator_cov)[..., None] ** -1 * normpdf, axis=-1)
+        dlZ = Zinv * np.block([dZ1, dZ2])
+
+        d2Z1 = np.sum(w * softplus(sigma_points) ** 2 * (
+            ((y - mu) / var) ** 2
+            - var ** -1
+        ) * normpdf, axis=-1)
+        d2Z2 = np.sum(w * (
+            ((sigma_points - modulator_mean) * np.diag(modulator_cov)[..., None] ** -1) ** 2
+            - np.diag(modulator_cov)[..., None] ** -1
+        ) * normpdf, axis=-1)
+        d2lZ = np.diag(-dlZ ** 2 + Zinv * np.block([d2Z1, d2Z2]))
+
         id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
-        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_mean = cav_mean - id2lZ @ dlZ[..., None]  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
         site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov

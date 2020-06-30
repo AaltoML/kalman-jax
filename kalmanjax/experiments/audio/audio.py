@@ -26,11 +26,10 @@ yTrain = y / normaliser  # rescale the input to unit variance
 N = y.shape[0]
 x = np.linspace(0., N, num=N) / 100.  # arbitrary evenly spaced inputs inputs
 
+np.random.seed(123)
 # 10-fold cross-validation setup
 ind_shuffled = np.random.permutation(N)
 ind_split = np.stack(np.split(ind_shuffled, 10))  # 10 random batches of data indices
-
-np.random.seed(123)
 
 if len(sys.argv) > 1:
     method = int(sys.argv[1])
@@ -50,21 +49,23 @@ x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
-var_f1 = 3.  # GP variance
-len_f1 = 1.  # GP lengthscale
-var_f2 = 3.  # GP variance
-len_f2 = 1.  # GP lengthscale
+sub1 = priors.SubbandExponential([1., 15., 4 * pi])  # omega = 2pi / freq
+sub2 = priors.SubbandExponential([1., 15., 2 * pi])
+sub3 = priors.SubbandExponential([1., 15., 1 * pi])
+mod1 = priors.Matern52([3., 25.])
+mod2 = priors.Matern52([3., 25.])
+mod3 = priors.Matern52([3., 25.])
 
-sub1 = priors.SubbandExponential([.1, 15., 10 * pi])
-sub2 = priors.SubbandExponential([.1, 15., 5 * pi])
-sub3 = priors.SubbandExponential([.1, 15., 2.5 * pi])
-mod1 = priors.Matern52([2., 60.])
-mod2 = priors.Matern52([2., 60.])
-mod3 = priors.Matern52([2., 60.])
+# sub1 = priors.SubbandExponential([.1, 20., 10 * pi])  # omega = 2pi / freq
+# sub2 = priors.SubbandExponential([.1, 20., 5 * pi])
+# sub3 = priors.SubbandExponential([.1, 20., 2.5 * pi])
+# mod1 = priors.Matern52([2.5, 40.])
+# mod2 = priors.Matern52([2.5, 40.])
+# mod3 = priors.Matern52([2.5, 40.])
 
 prior = priors.Independent([sub1, sub2, sub3, mod1, mod2, mod3])
 
-lik = likelihoods.AudioAmplitudeDemodulation(hyp=2.)
+lik = likelihoods.AudioAmplitudeDemodulation(hyp=0.3)
 
 if method == 0:
     inf_method = approx_inf.EEP(power=1)
@@ -119,14 +120,14 @@ def gradient_step(i, state, mod):
     mod.likelihood.hyp = params[1]
 
     # grad(Filter) + Smoother:
-    neg_log_marg_lik, gradients = mod.run()
+    neg_log_marg_lik, gradients = mod.run_two_stage()
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var1=%1.2f len1=%1.2f om1=%1.2f var2=%1.2f len2=%1.2f om2=%1.2f var3=%1.2f len3=%1.2f om3=%1.2f '
           'vary=%1.2f, nlml=%2.2f' %
           (i, prior_params[0][0], prior_params[0][1], prior_params[0][2],
            prior_params[1][0], prior_params[1][1], prior_params[1][2],
-           prior_params[1][0], prior_params[1][1], prior_params[1][2],
+           prior_params[2][0], prior_params[2][1], prior_params[2][2],
            softplus(params[1]), neg_log_marg_lik))
 
     if plot_intermediate:
@@ -137,7 +138,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(25):
+for j in range(50):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -147,8 +148,8 @@ print('calculating the posterior predictive distribution ...')
 t0 = time.time()
 posterior_mean, posterior_var, _, nlpd = model.predict()
 t1 = time.time()
-print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)
+print('prediction time: %2.2f secs' % (t1-t0))
 
 with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
     pickle.dump(nlpd, fp)
@@ -159,20 +160,34 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 
 if plot_final:
     x_pred = model.t_all[:, 0]
-    link = model.likelihood.link_fn
-    lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0]) * 1.96
-    ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0]) * 1.96
+    # link = model.likelihood.link_fn
+    # lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0]) * 1.96
+    # ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0]) * 1.96
     test_id = model.test_id
+
+    posterior_mean_subbands = posterior_mean[:, :3, 0]
+    posterior_mean_modulators = softplus(posterior_mean[:, 3:, 0])
+    posterior_mean_sig = np.sum(posterior_mean_subbands * posterior_mean_modulators, axis=-1)
+    posterior_var_subbands = posterior_var[:, :3, 0]
+    posterior_var_modulators = softplus(posterior_var[:, 3:, 0])
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
     plt.clf()
-    plt.plot(x, y, 'k', label='signal')
-    plt.plot(x_test, y_test, 'r*', label='test')
-    plt.plot(x_pred, posterior_mean[:, 0], 'r', label='posterior mean')
-    plt.fill_between(x_pred, lb, ub, color='r', alpha=0.05, label='95% confidence')
+    plt.plot(x, y, 'k', label='signal', linewidth=0.6)
+    plt.plot(x_test, y_test, 'g.', label='test', markersize=4)
+    plt.plot(x_pred, posterior_mean_sig, 'r', label='posterior mean', linewidth=0.6)
+    # plt.fill_between(x_pred, lb, ub, color='r', alpha=0.05, label='95% confidence')
     plt.xlim(model.t_all[0], model.t_all[-1])
     plt.legend()
     plt.title('Audio Signal Processing via Kalman smoothing (human speech signal)')
     plt.xlabel('time')
+
+    plt.figure(2, figsize=(10, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(x_pred, posterior_mean_subbands, linewidth=0.6)
+    plt.xlim(model.t_all[0], model.t_all[-1])
+    plt.subplot(2, 1, 2)
+    plt.plot(x_pred, posterior_mean_modulators, linewidth=0.6)
+    plt.xlim(model.t_all[0], model.t_all[-1])
     plt.show()
