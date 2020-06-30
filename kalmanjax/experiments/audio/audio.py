@@ -13,7 +13,7 @@ import pickle
 from numpy import pi
 from scipy.io import loadmat
 
-plot_final = True
+plot_final = False
 plot_intermediate = False
 
 print('loading data ...')
@@ -89,23 +89,23 @@ elif method == 8:
     inf_method = approx_inf.GHKS()
 
 elif method == 9:
-    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.5)
+    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.25)
 elif method == 10:
-    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.5)
+    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.25)
 elif method == 11:
-    inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.5)
+    inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.25)
 
 elif method == 12:
-    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.5)
+    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.25)
 elif method == 13:
-    inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.5)
+    inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.25)
 elif method == 14:
-    inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.5)
+    inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.25)
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
+    inf_method = approx_inf.VI(intmethod='UT', damping=0.25)
 elif method == 16:
-    inf_method = approx_inf.VI(intmethod='GH', damping=0.5, num_cub_pts=3)
+    inf_method = approx_inf.VI(intmethod='GH', damping=0.25, num_cub_pts=3)
 
 model = SDEGP(prior=prior, likelihood=lik, x=x_train, y=y_train, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
@@ -138,7 +138,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(50):
+for j in range(100):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
