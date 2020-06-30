@@ -349,6 +349,59 @@ class Likelihood(object):
         return exp_log_lik, dE_dm, dE_dv
 
     @partial(jit, static_argnums=(0, 5))
+    def variational_expectation_quadrature(self, y, post_mean, post_cov, hyp=None, cubature_func=None):
+        """
+        Computes the "variational expectation" via Gauss-Hermite quadrature, i.e. the
+        expected log-likelihood, and its derivatives w.r.t. the posterior mean
+            E[log p(yₙ|fₙ)] = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        with EP power a.
+        :param y: observed data (yₙ) [scalar]
+        :param post_mean: posterior mean (mₙ) [scalar]
+        :param post_cov: posterior variance (vₙ) [scalar]
+        :param hyp: likelihood hyperparameter [scalar]
+        :param cubature_func: the function to compute sigma points and weights to use during cubature
+        :return:
+            exp_log_lik: the expected log likelihood, E[log p(yₙ|fₙ)]  [scalar]
+            dE_dm: derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
+            dE_dv: derivative of E[log p(yₙ|fₙ)] w.r.t. vₙ  [scalar]
+        """
+        if cubature_func is None:
+            x, w = gauss_hermite(post_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(post_mean.shape[0])
+        sigma_points = cholesky(post_cov) @ np.atleast_2d(x) + post_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
+        weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
+        # Compute expected log likelihood via quadrature:
+        # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #                 ≈ ∑ᵢ wᵢ p(yₙ|fsigᵢ)
+        exp_log_lik = np.sum(
+            weighted_log_likelihood_eval
+        )
+        # Compute first derivative via quadrature:
+        # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fsigᵢ)
+        # invC = inv(post_cov)
+        # dE_dm = np.sum(
+        #     invC @ (sigma_points - post_mean)
+        #     * weighted_log_likelihood_eval, axis=-1
+        # )[:, None]
+        invv = np.diag(post_cov)[:, None] ** -1
+        dE_dm = np.sum(
+            invv * (sigma_points - post_mean)
+            * weighted_log_likelihood_eval, axis=-1
+        )[:, None]
+        # Compute second derivative via quadrature:
+        # dE[log p(yₙ|fₙ)]/dvₙ = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fsigᵢ)
+        dE_dv = np.sum(
+            (0.5 * (invv ** 2 * (sigma_points - post_mean) ** 2) - 0.5 * invv)
+            * weighted_log_likelihood_eval, axis=-1
+        )
+        dE_dv = np.diag(dE_dv)
+        return exp_log_lik, dE_dm, dE_dv
+
+    @partial(jit, static_argnums=(0, 5))
     def variational_expectation(self, y, m, v, hyp=None, cubature_func=None):
         """
         If no custom variational expectation method is provided, we use Gauss-Hermite quadrature.
@@ -861,7 +914,7 @@ class AudioAmplitudeDemodulation(Likelihood):
         obs_noise_var = hyp if hyp is not None else self.hyp
         num_components = int(f.shape[0] / 2)
         subbands, modulators = f[:num_components], softplus(f[num_components:])
-        return np.atleast_2d(subbands.T @ modulators), np.atleast_2d(obs_noise_var)
+        return np.atleast_2d(np.sum(subbands * modulators, axis=0)), np.atleast_2d(obs_noise_var)
         # return np.atleast_2d(np.sum(subbands * modulators)), np.atleast_2d(obs_noise_var)
 
     @partial(jit, static_argnums=(0, 6))
@@ -914,3 +967,82 @@ class AudioAmplitudeDemodulation(Likelihood):
         Jf = np.block([[modulators], [subbands * sigmoid(m[num_components:])]])  # sigmoid is derivative of softplus
         Jr = np.array([[np.sqrt(obs_noise_var)]])  # TODO: check whether this should be sqrt()
         return np.atleast_2d(Jf).T, np.atleast_2d(Jr).T
+
+    @partial(jit, static_argnums=(0, 4))
+    def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
+        """
+        """
+        num_components = int(cav_mean.shape[0] / 2)
+        if cubature_func is None:
+            x, w = gauss_hermite(num_components, 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(num_components)
+
+        subband_mean, modulator_mean = cav_mean[:num_components], softplus(cav_mean[num_components:])
+        subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:, num_components:]
+        sigma_points = cholesky(modulator_cov) @ x + modulator_mean
+
+        # Compute zₙ via quadrature:
+        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
+        mu = np.sum(subband_mean.T @ softplus(sigma_points) * w).reshape(1, 1)
+        # Compute variance S via quadrature:
+        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
+        S = hyp + np.sum(
+            (subband_mean.T @ softplus(sigma_points) - mu) ** 2
+        )
+        S = S.reshape(1, 1)
+        # Compute cross covariance C via quadrature:
+        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
+        C = np.sum(
+            w * (np.block([[sigma_points], [sigma_points]]) - cav_mean) * (subband_mean.T @ softplus(sigma_points) - mu), axis=-1
+        ).reshape(cav_mean.shape[0], 1)
+        # Compute derivative of z via quadrature:
+        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
+        omega_1 = np.sum(softplus(sigma_points) * w, axis=-1)
+        omega_2 = np.sum(subband_mean.T @ softplus(sigma_points) * (sigma_points - modulator_mean) * np.diag(modulator_cov)[:, None] ** -1 * w, axis=-1)
+        omega = np.block([[omega_1, omega_2]])
+        return mu, S, C, omega
+
+    @partial(jit, static_argnums=(0, 4))
+    def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
+        """
+        Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
+        We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
+        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
+        """
+        if cubature_func is None:
+            x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
+        else:
+            x, w = cubature_func(cav_mean.shape[0])
+        sigma_points = cholesky(cav_cov) @ np.atleast_2d(
+            x) + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
+        # Compute zₙ via quadrature:
+        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
+        mu = np.sum(
+            w * lik_expectation, axis=-1
+        )[:, None]
+        # Compute variance S via quadrature:
+        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
+        S = np.sum(
+            w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance), axis=-1
+        )[:, None]
+        # Compute cross covariance C via quadrature:
+        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
+        C = np.sum(
+            w * (sigma_points - cav_mean) * (lik_expectation - mu), axis=-1
+        )[:, None]
+        # Compute derivative of z via quadrature:
+        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
+        omega = np.sum(
+            w * lik_expectation * (inv(cav_cov) @ (sigma_points - cav_mean)), axis=-1
+        )[None, :]
+        return mu, S, C, omega
