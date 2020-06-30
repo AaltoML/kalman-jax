@@ -8,8 +8,8 @@
 module load miniconda
 source activate venv
 
-START_NUM=0
-END_NUM=4
+START_NUM=5
+END_NUM=9
 
 # Print the task and run range
 echo This is task $SLURM_ARRAY_TASK_ID, which will do runs $START_NUM to $END_NUM
