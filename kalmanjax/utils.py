@@ -59,6 +59,10 @@ def softplus(x_):
     return np.log(1 + np.exp(-np.abs(x_))) + np.maximum(x_, 0)  # safer version
 
 
+def sigmoid(x_):
+    return np.exp(x_) / (np.exp(x_) + 1.)
+
+
 def softplus_inv(x_):
     """
     Inverse of the softplus positiviy mapping, used for transforming parameters.

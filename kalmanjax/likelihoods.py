@@ -1,9 +1,9 @@
 import jax.numpy as np
 from jax.scipy.special import erf, gammaln
 from jax import jit, partial, jacrev, random, vmap
-from jax.scipy.linalg import cholesky, solve_triangular, cho_factor, cho_solve
+from jax.scipy.linalg import cholesky, cho_factor, cho_solve
 from jax.scipy.linalg import inv as inv_any
-from utils import inv, softplus, logphi, gaussian_moment_match, softplus_inv, gauss_hermite
+from utils import inv, softplus, sigmoid, logphi, gaussian_moment_match, softplus_inv, gauss_hermite
 pi = 3.141592653589793
 
 
@@ -291,6 +291,7 @@ class Likelihood(object):
     @partial(jit, static_argnums=0)
     def analytical_linearisation(self, m, hyp=None):
         """
+        TODO: check I have the square root correct for the variance term
         Compute the Jacobian of the state space observation model w.r.t. the
         function fₙ and the noise term rₙ.
         The implicit observation model is:
@@ -858,9 +859,10 @@ class AudioAmplitudeDemodulation(Likelihood):
         """
         """
         obs_noise_var = hyp if hyp is not None else self.hyp
-        num_components = f.shape[0] / 2
+        num_components = int(f.shape[0] / 2)
         subbands, modulators = f[:num_components], softplus(f[num_components:])
-        return np.sum(subbands * modulators), obs_noise_var
+        return np.atleast_2d(subbands.T @ modulators), np.atleast_2d(obs_noise_var)
+        # return np.atleast_2d(np.sum(subbands * modulators)), np.atleast_2d(obs_noise_var)
 
     @partial(jit, static_argnums=(0, 6))
     def moment_match(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
@@ -901,3 +903,14 @@ class AudioAmplitudeDemodulation(Likelihood):
         site_mean = cav_mean - id2lZ @ dlZ[..., None]  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
         site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
+
+    @partial(jit, static_argnums=0)
+    def analytical_linearisation(self, m, hyp=None):
+        """
+        """
+        obs_noise_var = hyp if hyp is not None else self.hyp
+        num_components = int(m.shape[0] / 2)
+        subbands, modulators = m[:num_components], softplus(m[num_components:])
+        Jf = np.block([[modulators], [subbands * sigmoid(m[num_components:])]])  # sigmoid is derivative of softplus
+        Jr = np.array([[np.sqrt(obs_noise_var)]])  # TODO: check whether this should be sqrt()
+        return np.atleast_2d(Jf).T, np.atleast_2d(Jr).T
