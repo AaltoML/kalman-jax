@@ -76,6 +76,7 @@ def gradient_step(i, state, mod):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var_f1=%1.2f len_f1=%1.2f var_f2=%1.2f len_f2=%1.2f, nlml=%2.2f' %
