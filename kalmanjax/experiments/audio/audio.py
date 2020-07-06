@@ -36,7 +36,7 @@ if len(sys.argv) > 1:
     fold = int(sys.argv[2])
     plot_final = False
 else:
-    method = 11
+    method = 15
     fold = 6
 
 print('method number', method)
@@ -104,9 +104,9 @@ elif method == 14:
     inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.25)
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT', damping=0.25)
+    inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
 elif method == 16:
-    inf_method = approx_inf.VI(intmethod='GH', damping=0.1, num_cub_pts=3)
+    inf_method = approx_inf.VI(intmethod='GH', damping=0.1)
 
 model = SDEGP(prior=prior, likelihood=lik, x=x_train, y=y_train, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
