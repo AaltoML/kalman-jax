@@ -429,8 +429,8 @@ class SubbandMatern12(Prior):
     A      = exp(-Δt/l) ( cos(ωΔt)   -sin(ωΔt)
                           sin(ωΔt)    cos(ωΔt) )
     """
-    def __init__(self, variance=1.0, lengthscale=1.0, frequency=1.0):
-        hyp = [variance, lengthscale, frequency]
+    def __init__(self, variance=1.0, lengthscale=1.0, radial_frequency=1.0):
+        hyp = [variance, lengthscale, radial_frequency]
         super().__init__(hyp=hyp)
         self.name = 'Subband Matern-1/2'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
@@ -444,7 +444,7 @@ class SubbandMatern12(Prior):
         return softplus(self.hyp[1])
 
     @property
-    def frequency(self):
+    def radial_frequency(self):
         return softplus(self.hyp[2])
 
     @partial(jit, static_argnums=0)
@@ -529,8 +529,8 @@ class SubbandMatern32(Prior):
                      -Δtλ²R    (1-Δtλ)R )
     """
 
-    def __init__(self, variance=1.0, lengthscale=1.0, frequency=1.0):
-        hyp = [variance, lengthscale, frequency]
+    def __init__(self, variance=1.0, lengthscale=1.0, radial_frequency=1.0):
+        hyp = [variance, lengthscale, radial_frequency]
         super().__init__(hyp=hyp)
         self.name = 'Subband Matern-3/2'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
@@ -544,7 +544,7 @@ class SubbandMatern32(Prior):
         return softplus(self.hyp[1])
 
     @property
-    def frequency(self):
+    def radial_frequency(self):
         return softplus(self.hyp[2])
 
     @partial(jit, static_argnums=0)
@@ -641,8 +641,8 @@ class SubbandMatern52(Prior):
                      1/2Δtλ³(-2+Δtλ)R     Δt²(-3+Δtλ)R       1/2(2+Δtλ(-4+Δtλ))R )
     """
 
-    def __init__(self, variance=1.0, lengthscale=1.0, frequency=1.0):
-        hyp = [variance, lengthscale, frequency]
+    def __init__(self, variance=1.0, lengthscale=1.0, radial_frequency=1.0):
+        hyp = [variance, lengthscale, radial_frequency]
         super().__init__(hyp=hyp)
         self.name = 'Subband Matern-5/2'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
@@ -656,7 +656,7 @@ class SubbandMatern52(Prior):
         return softplus(self.hyp[1])
 
     @property
-    def frequency(self):
+    def radial_frequency(self):
         return softplus(self.hyp[2])
 
     @partial(jit, static_argnums=0)
@@ -1321,3 +1321,108 @@ class Separate(Independent):
 
 class Stack(Independent):
     pass
+
+
+class SubbandExponentialFixedVar(Prior):
+    def __init__(self, variance=1.0, lengthscale=1.0, radial_frequency=1.0):
+        hyp = [lengthscale, radial_frequency]
+        self.variance = variance
+        super().__init__(hyp=hyp)
+        self.name = 'Subband Matern-1/2'
+        self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def radial_frequency(self):
+        return softplus(self.hyp[1])
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell, omega = hyperparams
+        var = self.variance
+        F_mat = np.array([[-1.0 / ell]])
+        L_mat = np.array([[1.0]])
+        Qc_mat = np.array([[2.0 * var / ell]])
+        H_mat = np.array([[1.0]])
+        Pinf_mat = np.array([[var]])
+        F_cos = np.array([[0.0, -omega],
+                           [omega, 0.0]])
+        H_cos = np.array([[1.0, 0.0]])
+        # F = (-1/l -ω
+        #      ω    -1/l)
+        F = np.kron(F_mat, np.eye(2)) + F_cos
+        L = np.kron(L_mat, np.eye(2))
+        Qc = np.kron(np.eye(2), Qc_mat)
+        H = np.kron(H_mat, H_cos)
+        Pinf = np.kron(Pinf_mat, np.eye(2))
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H_mat = np.array([[1.0]])
+        H_cos = np.array([[1.0, 0.0]])
+        H = np.kron(H_mat, H_cos)
+        return H
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell, omega = hyperparams[0], hyperparams[1]
+        R = rotation_matrix(dt, omega)
+        A = np.exp(-dt / ell) * R  # [2, 2]
+        return A
+
+
+class Matern52FixedVar(Prior):
+    def __init__(self, variance=1.0, lengthscale=1.0):
+        hyp = lengthscale
+        self.variance = variance
+        super().__init__(hyp=hyp)
+        self.name = 'Matern-5/2'
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp)
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        # uses variance and lengthscale hyperparameters to construct the state space model
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell = hyperparams
+        var = self.variance
+        lam = 5.0**0.5 / ell
+        F = np.array([[0.0, 1.0, 0.0],
+                       [0.0, 0.0, 1.0],
+                       [-lam**3.0, -3.0*lam**2.0, -3.0*lam]])
+        L = np.array([[0.0],
+                       [0.0],
+                       [1.0]])
+        Qc = np.array([[var * 400.0 * 5.0 ** 0.5 / 3.0 / ell ** 5.0]])
+        H = np.array([[1.0, 0.0, 0.0]])
+        kappa = 5.0 / 3.0 * var / ell**2.0
+        Pinf = np.array([[var,    0.0,   -kappa],
+                          [0.0,    kappa, 0.0],
+                          [-kappa, 0.0,   25.0*var / ell**4.0]])
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space=None, hyperparams=None):
+        H = np.array([[1.0, 0.0, 0.0]])
+        return H
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell = hyperparams
+        lam = np.sqrt(5.0) / ell
+        dtlam = dt * lam
+        A = np.exp(-dtlam) \
+            * (dt * np.array([[lam * (0.5 * dtlam + 1.0),      dtlam + 1.0,            0.5 * dt],
+                               [-0.5 * dtlam * lam ** 2,        lam * (1.0 - dtlam),    1.0 - 0.5 * dtlam],
+                               [lam ** 3 * (0.5 * dtlam - 1.0), lam ** 2 * (dtlam - 3), lam * (0.5 * dtlam - 2.0)]])
+               + np.eye(3))
+        return A

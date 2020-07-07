@@ -288,7 +288,7 @@ class SDEGP(object):
     def run_two_stage(self, params=None):
         """
         Note: This 2-stage version has been replaced by the more elegant implementation above, however we
-        keep this method because it is more accurate, and faster in practice.
+        keep this method because it is more accurate, and faster in practice for small datasets.
         A single parameter update step - to be fed to a gradient-based optimiser.
          - we first update the site parameters (site mean and variance)
          - then compute the marginal lilelihood and its gradient w.r.t. the hyperparameters

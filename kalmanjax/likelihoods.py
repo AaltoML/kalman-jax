@@ -1070,20 +1070,21 @@ class AudioAmplitudeDemodulation(Likelihood):
                                                                                  num_components:]
         sigma_points = cholesky(modulator_cov) @ x + modulator_mean
 
+        modulator_var = np.diag(subband_cov)[..., None]
         mu = (softplus(sigma_points).T @ subband_mean)[:, 0]
         lognormpdf = -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - mu) ** 2 / hyp
-        const = -0.5 / hyp * (softplus(sigma_points).T ** 2 @ np.diag(subband_cov)[..., None])[:, 0]
+        const = -0.5 / hyp * (softplus(sigma_points).T ** 2 @ modulator_var)[:, 0]
         exp_log_lik = np.sum(w * (lognormpdf + const))
 
         dE1 = np.sum(w * softplus(sigma_points) * (y - mu) / hyp, axis=-1)
-        dE2 = np.sum(w * (sigma_points - modulator_mean) * np.diag(modulator_cov)[..., None] ** -1
+        dE2 = np.sum(w * (sigma_points - modulator_mean) * modulator_var ** -1
                      * (lognormpdf + const), axis=-1)
         dE_dm = np.block([dE1, dE2])[..., None]
 
         d2E1 = np.sum(w * - 0.5 * softplus(sigma_points) ** 2 / hyp, axis=-1)
         d2E2 = np.sum(w * 0.5 * (
-                ((sigma_points - modulator_mean) * np.diag(modulator_cov)[..., None] ** -1) ** 2
-                - np.diag(modulator_cov)[..., None] ** -1
+                ((sigma_points - modulator_mean) * modulator_var ** -1) ** 2
+                - modulator_var ** -1
         ) * (lognormpdf + const), axis=-1)
         dE_dv = np.diag(np.block([d2E1, d2E2]))
         return exp_log_lik, dE_dm, dE_dv

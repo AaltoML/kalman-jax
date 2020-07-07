@@ -16,15 +16,17 @@ from scipy.io import loadmat
 plot_final = True
 plot_intermediate = False
 
+
 print('loading data ...')
 y = loadmat('speech_female')['y']
-fs = 44100  # desired sampling rate
+fs = 44100  # sampling rate
+scale = 1000  # convert to milliseconds
 
 normaliser = 0.5 * np.sqrt(np.var(y))
 yTrain = y / normaliser  # rescale the input to unit variance
 
 N = y.shape[0]
-x = np.linspace(0., N, num=N) / 100.  # arbitrary evenly spaced inputs inputs
+x = np.linspace(0., N, num=N) / fs * scale  # arbitrary evenly spaced inputs inputs
 
 np.random.seed(123)
 # 10-fold cross-validation setup
@@ -50,12 +52,20 @@ x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
-sub1 = priors.SubbandExponential(variance=.1, lengthscale=15., frequency=4.*pi)  # omega = 2pi / freq
-sub2 = priors.SubbandExponential(variance=.1, lengthscale=15., frequency=2.*pi)
-sub3 = priors.SubbandExponential(variance=.1, lengthscale=15., frequency=1.*pi)
-mod1 = priors.Matern52(variance=3., lengthscale=20.)
-mod2 = priors.Matern52(variance=3., lengthscale=20.)
-mod3 = priors.Matern52(variance=3., lengthscale=20.)
+fundamental_freq = 220  # Hz
+radial_freq = 2 * pi * fundamental_freq / scale  # radial freq = 2pi * f / scale
+# sub1 = priors.SubbandExponential(variance=.1, lengthscale=75., radial_frequency=radial_freq)
+# sub2 = priors.SubbandExponential(variance=.1, lengthscale=75., radial_frequency=2 * radial_freq)  # 1st harmonic
+# sub3 = priors.SubbandExponential(variance=.1, lengthscale=75., radial_frequency=3 * radial_freq)  # 2nd harmonic
+sub1 = priors.SubbandExponentialFixedVar(variance=.1, lengthscale=75., radial_frequency=radial_freq)
+sub2 = priors.SubbandExponentialFixedVar(variance=.1, lengthscale=75., radial_frequency=2 * radial_freq)  # 1st harmonic
+sub3 = priors.SubbandExponentialFixedVar(variance=.1, lengthscale=75., radial_frequency=3 * radial_freq)  # 2nd harmonic
+# mod1 = priors.Matern52(variance=.5, lengthscale=15.)
+# mod2 = priors.Matern52(variance=.5, lengthscale=15.)
+# mod3 = priors.Matern52(variance=.5, lengthscale=15.)
+mod1 = priors.Matern52FixedVar(variance=.5, lengthscale=10.)
+mod2 = priors.Matern52FixedVar(variance=.5, lengthscale=10.)
+mod3 = priors.Matern52FixedVar(variance=.5, lengthscale=10.)
 
 prior = priors.Independent([sub1, sub2, sub3, mod1, mod2, mod3])
 
@@ -97,9 +107,9 @@ elif method == 14:
     inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.25)
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
+    inf_method = approx_inf.VI(intmethod='UT', damping=0.01)
 elif method == 16:
-    inf_method = approx_inf.VI(intmethod='GH', damping=0.1)
+    inf_method = approx_inf.VI(intmethod='GH', damping=0.01)
 
 model = SDEGP(prior=prior, likelihood=lik, x=x_train, y=y_train, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
@@ -118,11 +128,35 @@ def gradient_step(i, state, mod):
     neg_log_marg_lik, gradients = mod.run_two_stage()
 
     prior_params = softplus_list(params[0])
-    print('iter %2d: var1=%1.2f len1=%1.2f om1=%1.2f var2=%1.2f len2=%1.2f om2=%1.2f var3=%1.2f len3=%1.2f om3=%1.2f '
+    # print('iter %2d: var1=%1.2f len1=%1.2f om1=%1.2f var2=%1.2f len2=%1.2f om2=%1.2f var3=%1.2f len3=%1.2f om3=%1.2f '
+    #       'var4=%1.2f len4=%1.2f var5=%1.2f len5=%1.2f var6=%1.2f len6=%1.2f '
+    #       'vary=%1.2f, nlml=%2.2f' %
+    #       (i, prior_params[0][0], prior_params[0][1], prior_params[0][2],
+    #        prior_params[1][0], prior_params[1][1], prior_params[1][2],
+    #        prior_params[2][0], prior_params[2][1], prior_params[2][2],
+    #        prior_params[3][0], prior_params[3][1],
+    #        prior_params[4][0], prior_params[4][1],
+    #        prior_params[5][0], prior_params[5][1],
+    #        softplus(params[1]), neg_log_marg_lik))
+    # print('iter %2d: len1=%1.2f om1=%1.2f len2=%1.2f om2=%1.2f len3=%1.2f om3=%1.2f '
+    #       'var4=%1.2f len4=%1.2f var5=%1.2f len5=%1.2f var6=%1.2f len6=%1.2f '
+    #       'vary=%1.2f, nlml=%2.2f' %
+    #       (i, prior_params[0][0], prior_params[0][1],
+    #        prior_params[1][0], prior_params[1][1],
+    #        prior_params[2][0], prior_params[2][1],
+    #        prior_params[3][0], prior_params[3][1],
+    #        prior_params[4][0], prior_params[4][1],
+    #        prior_params[5][0], prior_params[5][1],
+    #        softplus(params[1]), neg_log_marg_lik))
+    print('iter %2d: len1=%1.2f om1=%1.2f len2=%1.2f om2=%1.2f len3=%1.2f om3=%1.2f '
+          'len4=%1.2f len5=%1.2f len6=%1.2f '
           'vary=%1.2f, nlml=%2.2f' %
-          (i, prior_params[0][0], prior_params[0][1], prior_params[0][2],
-           prior_params[1][0], prior_params[1][1], prior_params[1][2],
-           prior_params[2][0], prior_params[2][1], prior_params[2][2],
+          (i, prior_params[0][0], prior_params[0][1],
+           prior_params[1][0], prior_params[1][1],
+           prior_params[2][0], prior_params[2][1],
+           prior_params[3],
+           prior_params[4],
+           prior_params[5],
            softplus(params[1]), neg_log_marg_lik))
 
     if plot_intermediate:
@@ -133,7 +167,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(100):
+for j in range(1):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -176,13 +210,16 @@ if plot_final:
     plt.xlim(model.t_all[0], model.t_all[-1])
     plt.legend()
     plt.title('Audio Signal Processing via Kalman smoothing (human speech signal)')
-    plt.xlabel('time')
+    plt.xlabel('time (milliseconds)')
 
-    plt.figure(2, figsize=(10, 8))
+    plt.figure(2, figsize=(12, 8))
     plt.subplot(2, 1, 1)
     plt.plot(x_pred, posterior_mean_subbands, linewidth=0.6)
     plt.xlim(model.t_all[0], model.t_all[-1])
+    plt.title('subbands')
     plt.subplot(2, 1, 2)
     plt.plot(x_pred, posterior_mean_modulators, linewidth=0.6)
     plt.xlim(model.t_all[0], model.t_all[-1])
+    plt.xlabel('time (milliseconds)')
+    plt.title('amplitude modulators')
     plt.show()
