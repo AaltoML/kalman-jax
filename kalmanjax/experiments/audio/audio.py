@@ -19,7 +19,7 @@ plot_intermediate = False
 
 print('loading data ...')
 y = loadmat('speech_female')['y']
-fs = 44100  # sampling rate
+fs = 44100  # sampling rate (Hz)
 scale = 1000  # convert to milliseconds
 
 normaliser = 0.5 * np.sqrt(np.var(y))
@@ -38,7 +38,7 @@ if len(sys.argv) > 1:
     fold = int(sys.argv[2])
     plot_final = False
 else:
-    method = 9
+    method = 3
     fold = 6
 
 print('method number', method)
@@ -167,7 +167,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(250):
+for j in range(1):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))

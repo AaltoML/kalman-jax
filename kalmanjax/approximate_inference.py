@@ -123,7 +123,7 @@ class ExtendedEP(ApproxInf):
         sigma = Jr @ obs_cov @ Jr.T + power * Jf @ cav_cov @ Jf.T
         site_cov = inv(Jf.T @ inv(Jr @ obs_cov @ Jr.T) @ Jf + 1e-10 * np.eye(Jf.shape[1]))
         site_mean = cav_mean + (site_cov + power * cav_cov) @ Jf.T @ inv(sigma) @ residual
-        site_cov = ensure_positive_variance(site_cov)
+        # site_cov = ensure_positive_variance(site_cov)
         # now compute the marginal likelihood approx.
         sigma_marg_lik = Jr @ obs_cov @ Jr.T + Jf @ cav_cov @ Jf.T
         chol_sigma, low = cho_factor(sigma_marg_lik)
@@ -199,7 +199,7 @@ class StatisticallyLinearisedEP(ApproxInf):
         osigo = inv(omega.T @ inv(sigma) @ omega + 1e-10 * np.eye(omega.shape[1]))
         site_mean = cav_mean + osigo @ omega.T @ inv(sigma) @ residual  # approx. likelihood (site) mean
         site_cov = -power * cav_cov + osigo  # approx. likelihood var.
-        site_cov = ensure_positive_variance(site_cov)
+        # site_cov = ensure_positive_variance(site_cov)
         return log_marg_lik, site_mean, site_cov
 
 
