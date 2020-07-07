@@ -61,8 +61,8 @@ len_f1 = 1.  # GP lengthscale
 var_f2 = 3.  # GP variance
 len_f2 = 1.  # GP lengthscale
 
-prior1 = priors.Matern32([var_f1, len_f1])
-prior2 = priors.Matern32([var_f2, len_f2])
+prior1 = priors.Matern32(variance=var_f1, lengthscale=len_f1)
+prior2 = priors.Matern32(variance=var_f2, lengthscale=len_f2)
 prior = priors.Independent([prior1, prior2])
 lik = likelihoods.HeteroschedasticNoise()
 
@@ -134,6 +134,7 @@ def gradient_step(i, state, mod):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var_f1=%1.2f len_f1=%1.2f var_f2=%1.2f len_f2=%1.2f, nlml=%2.2f' %

@@ -47,7 +47,7 @@ class ExpectationPropagation(ApproxInf):
     """
     Expectation propagation (EP)
     """
-    def __init__(self, site_params=None, damping=1., power=1.0, intmethod='GH', num_cub_pts=20):
+    def __init__(self, site_params=None, damping=1.0, power=1.0, intmethod='GH', num_cub_pts=20):
         self.damping = damping
         self.power = power
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
@@ -61,6 +61,7 @@ class ExpectationPropagation(ApproxInf):
             # if no site is provided, use the predictions/posterior as the cavity with ep_fraction=1
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
+            site_mean, site_cov = np.atleast_2d(site_mean), np.atleast_2d(site_cov)
             site_cov = ensure_positive_variance(site_cov)
             return lml, site_mean, site_cov
         else:
@@ -71,6 +72,7 @@ class ExpectationPropagation(ApproxInf):
             cav_cov = ensure_positive_variance(cav_cov)
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
+            site_mean, site_cov = np.atleast_2d(site_mean), np.atleast_2d(site_cov)
             site_cov = ensure_positive_variance(site_cov)
             site_nat2, site_nat2_prev = inv(site_cov), inv(site_cov_prev)
             site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev

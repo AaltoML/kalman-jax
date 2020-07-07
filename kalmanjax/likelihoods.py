@@ -414,15 +414,19 @@ class Gaussian(Likelihood):
     The Gaussian likelihood:
         p(yₙ|fₙ) = 𝓝(yₙ|fₙ,σ²)
     """
-    def __init__(self, hyp):
+    def __init__(self, variance=0.1):
         """
-        :param hyp: The observation noise variance, σ²
+        :param variance: The observation noise variance, σ²
         """
-        super().__init__(hyp=hyp)
+        super().__init__(hyp=variance)
         if self.hyp is None:
             print('using default likelihood parameter since none was supplied')
             self.hyp = 0.1
         self.name = 'Gaussian'
+
+    @property
+    def variance(self):
+        return softplus(self.hyp)
 
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
@@ -884,12 +888,16 @@ class AudioAmplitudeDemodulation(Likelihood):
     """
     The Audio Amplitude Demodulation likelihood
     """
-    def __init__(self, hyp=0.1):
+    def __init__(self, variance=0.1):
         """
         param hyp: observation noise
         """
-        super().__init__(hyp=hyp)
+        super().__init__(hyp=variance)
         self.name = 'Audio Amplitude Demodulation'
+
+    @property
+    def variance(self):
+        return softplus(self.hyp)
 
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):

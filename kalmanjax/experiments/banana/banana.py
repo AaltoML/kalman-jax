@@ -95,9 +95,7 @@ var_f = 1.  # GP variance
 len_time = 1.  # temporal lengthscale
 len_space = 1.  # spacial lengthscale
 
-theta_prior = [var_f, len_time, len_space]
-
-prior = priors.SpatioTemporalMatern52(theta_prior)
+prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time, lengthscale_space=len_space)
 
 lik = likelihoods.Bernoulli(link='logit')
 
@@ -115,6 +113,7 @@ def gradient_step(i, state, mod, plot_num_, mu_prev_):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var=%1.2f len_time=%1.2f len_space=%1.2f, nlml=%2.2f' %

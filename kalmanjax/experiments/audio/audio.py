@@ -50,23 +50,16 @@ x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
-sub1 = priors.SubbandExponential([.1, 15., 4 * pi])  # omega = 2pi / freq
-sub2 = priors.SubbandExponential([.1, 15., 2 * pi])
-sub3 = priors.SubbandExponential([.1, 15., 1 * pi])
-mod1 = priors.Matern52([3., 20.])
-mod2 = priors.Matern52([3., 20.])
-mod3 = priors.Matern52([3., 20.])
-
-# sub1 = priors.SubbandExponential([.1, 20., 10 * pi])  # omega = 2pi / freq
-# sub2 = priors.SubbandExponential([.1, 20., 5 * pi])
-# sub3 = priors.SubbandExponential([.1, 20., 2.5 * pi])
-# mod1 = priors.Matern52([2.5, 40.])
-# mod2 = priors.Matern52([2.5, 40.])
-# mod3 = priors.Matern52([2.5, 40.])
+sub1 = priors.SubbandExponential(variance=.1, lengthscale=15., frequency=4.*pi)  # omega = 2pi / freq
+sub2 = priors.SubbandExponential(variance=.1, lengthscale=15., frequency=2.*pi)
+sub3 = priors.SubbandExponential(variance=.1, lengthscale=15., frequency=1.*pi)
+mod1 = priors.Matern52(variance=3., lengthscale=20.)
+mod2 = priors.Matern52(variance=3., lengthscale=20.)
+mod3 = priors.Matern52(variance=3., lengthscale=20.)
 
 prior = priors.Independent([sub1, sub2, sub3, mod1, mod2, mod3])
 
-lik = likelihoods.AudioAmplitudeDemodulation(hyp=0.3)
+lik = likelihoods.AudioAmplitudeDemodulation(variance=0.3)
 
 if method == 0:
     inf_method = approx_inf.EEP(power=1)
@@ -121,6 +114,7 @@ def gradient_step(i, state, mod):
     mod.likelihood.hyp = params[1]
 
     # grad(Filter) + Smoother:
+    # neg_log_marg_lik, gradients = mod.run()
     neg_log_marg_lik, gradients = mod.run_two_stage()
 
     prior_params = softplus_list(params[0])

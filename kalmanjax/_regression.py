@@ -32,12 +32,9 @@ var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
 var_y = 0.5  # observation noise
 
-theta_prior = [var_f, len_f]
-theta_lik = var_y
-
-prior = priors.Matern52(theta_prior)
+prior = priors.Matern52(variance=var_f, lengthscale=len_f)
 # prior_ = priors.QuasiPeriodicMatern32([var_f, len_f, 20., 50.])
-lik = likelihoods.Gaussian(theta_lik)
+lik = likelihoods.Gaussian(variance=var_y)
 inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKS()
 # inf_method = approx_inf.EEP()
@@ -57,6 +54,7 @@ def gradient_step(i, state, mod):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()  # <-- less elegant but reduces compile time
 
     prior_params, lik_param = softplus_list(params[0]), softplus(params[1])
     print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %

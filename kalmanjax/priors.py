@@ -59,12 +59,18 @@ class Exponential(Prior):
     H      = 1
     Pinf   = σ²
     """
-    def __init__(self, hyp=None):
+    def __init__(self, variance=1.0, lengthscale=1.0):
+        hyp = [variance, lengthscale]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = [1.0, 1.0]
         self.name = 'Exponential'
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -118,12 +124,19 @@ class Matern32(Prior):
     Pinf   = (σ²  0
               0   λ²σ²)
     """
-    def __init__(self, hyp=None):
+
+    def __init__(self, variance=1.0, lengthscale=1.0):
+        hyp = [variance, lengthscale]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = [1.0, 1.0]
         self.name = 'Matern-3/2'
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -182,15 +195,19 @@ class Matern52(Prior):
                0   κ   0
               -κ   0   λ⁴σ²)
     """
-    def __init__(self, hyp=None):
+
+    def __init__(self, variance=1.0, lengthscale=1.0):
+        hyp = [variance, lengthscale]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = [1.0, 1.0]
         self.name = 'Matern-5/2'
 
-    def set_hyperparams(self, hyp):
-        self.hyp = hyp
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -261,12 +278,19 @@ class Matern72(Prior):
                0   κ   0  -κ₂
                0  -κ₂  0   343σ²/l⁶)
     """
-    def __init__(self, hyp=None):
+
+    def __init__(self, variance=1.0, lengthscale=1.0):
+        hyp = [variance, lengthscale]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = [1.0, 1.0]
         self.name = 'Matern-7/2'
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -329,7 +353,7 @@ class Cosine(Prior):
     """
     Cosine kernel in SDE form.
     Hyperparameters:
-        frequency, ω
+        radial frequency, ω
     The associated continuous-time state space model matrices are:
     F      = ( 0   -ω
                ω    0 )
@@ -342,13 +366,14 @@ class Cosine(Prior):
     A      = ( cos(ωΔt)   -sin(ωΔt)
                sin(ωΔt)    cos(ωΔt) )
     """
-    def __init__(self, hyp=None):
-        super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = [1.0]
+    def __init__(self, frequency=1.0):
+        super().__init__(hyp=frequency)
         self.name = 'Cosine'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @property
+    def frequency(self):
+        return softplus(self.hyp)
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -388,7 +413,7 @@ class SubbandMatern12(Prior):
     Hyperparameters:
         variance, σ²
         lengthscale, l
-        frequency, ω
+        radial frequency, ω
     The associated continuous-time state space model matrices are constructed via
     kronecker sums and products of the exponential and cosine components:
     F      = F_exp ⊕ F_cos  =  ( -1/l  -ω
@@ -404,13 +429,23 @@ class SubbandMatern12(Prior):
     A      = exp(-Δt/l) ( cos(ωΔt)   -sin(ωΔt)
                           sin(ωΔt)    cos(ωΔt) )
     """
-    def __init__(self, hyp=None):
+    def __init__(self, variance=1.0, lengthscale=1.0, frequency=1.0):
+        hyp = [variance, lengthscale, frequency]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = np.array([1.0, 1.0, 1.0])
         self.name = 'Subband Matern-1/2'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def frequency(self):
+        return softplus(self.hyp[2])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -468,7 +503,7 @@ class SubbandMatern32(Prior):
     Hyperparameters:
         variance, σ²
         lengthscale, l
-        frequency, ω
+        radial frequency, ω
     The associated continuous-time state space model matrices are constructed via
     kronecker sums and products of the Matern3/2 and cosine components:
     letting λ = √3 / l
@@ -493,13 +528,24 @@ class SubbandMatern32(Prior):
     A = exp(-Δt/l) ( (1+Δtλ)R   ΔtR
                      -Δtλ²R    (1-Δtλ)R )
     """
-    def __init__(self, hyp=None):
+
+    def __init__(self, variance=1.0, lengthscale=1.0, frequency=1.0):
+        hyp = [variance, lengthscale, frequency]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = np.array([1.0, 1.0, 1.0])
         self.name = 'Subband Matern-3/2'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def frequency(self):
+        return softplus(self.hyp[2])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -561,7 +607,7 @@ class SubbandMatern52(Prior):
     Hyperparameters:
         variance, σ²
         lengthscale, l
-        frequency, ω
+        radial frequency, ω
     The associated continuous-time state space model matrices are constructed via
     kronecker sums and products of the Matern5/2 and cosine components:
     letting λ = √5/l
@@ -594,13 +640,24 @@ class SubbandMatern52(Prior):
                     -1/2Δt²λ³R           (1+Δtλ(1-Δtλ))R    -1/2Δt(-2+Δtλ)R
                      1/2Δtλ³(-2+Δtλ)R     Δt²(-3+Δtλ)R       1/2(2+Δtλ(-4+Δtλ))R )
     """
-    def __init__(self, hyp=None):
+
+    def __init__(self, variance=1.0, lengthscale=1.0, frequency=1.0):
+        hyp = [variance, lengthscale, frequency]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = np.array([1.0, 1.0, 1.0])
         self.name = 'Subband Matern-5/2'
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def frequency(self):
+        return softplus(self.hyp[2])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -673,14 +730,12 @@ class Periodic(Prior):
     The associated continuous-time state space model matrices are constructed via
     a sum of cosines.
     """
-    def __init__(self, hyp=None, N=6):
+    def __init__(self, variance=1.0, lengthscale=1.0, period=1.0, order=6):
+        hyp = [variance, lengthscale, period]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = np.array([1.0, 1.0, 1.0])
         self.name = 'Periodic'
-        self.N = N
-        self.K = np.meshgrid(np.arange(self.N + 1), np.arange(self.N + 1))[1]
+        self.order = order
+        self.K = np.meshgrid(np.arange(self.order + 1), np.arange(self.order + 1))[1]
         factorial_mesh_K = np.array([[1., 1., 1., 1., 1., 1., 1.],
                                      [1., 1., 1., 1., 1., 1., 1.],
                                      [2., 2., 2., 2., 2., 2., 2.],
@@ -698,6 +753,18 @@ class Periodic(Prior):
         self.b_fmK_2K = b * (1. / factorial_mesh_K) * (2. ** -self.K)
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
 
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def period(self):
+        return softplus(self.hyp[2])
+
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
@@ -707,16 +774,16 @@ class Periodic(Prior):
         # The angular frequency
         omega = 2 * np.pi / period
         # The model
-        F = np.kron(np.diag(np.arange(self.N + 1)), np.array([[0., -omega], [omega, 0.]]))
-        L = np.eye(2 * (self.N + 1))
-        Qc = np.zeros(2 * (self.N + 1))
+        F = np.kron(np.diag(np.arange(self.order + 1)), np.array([[0., -omega], [omega, 0.]]))
+        L = np.eye(2 * (self.order + 1))
+        Qc = np.zeros(2 * (self.order + 1))
         Pinf = np.kron(np.diag(q2), np.eye(2))
-        H = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
     def measurement_model(self, x_space=None, hyperparams=None):
-        H = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         return H
 
     @partial(jit, static_argnums=0)
@@ -732,7 +799,7 @@ class Periodic(Prior):
         ell, period = hyperparams[1], hyperparams[2]
         # The angular frequency
         omega = 2 * np.pi / period
-        harmonics = np.arange(self.N + 1) * omega
+        harmonics = np.arange(self.order + 1) * omega
         R0 = rotation_matrix(dt, harmonics[0])
         R1 = rotation_matrix(dt, harmonics[1])
         R2 = rotation_matrix(dt, harmonics[2])
@@ -763,14 +830,12 @@ class QuasiPeriodicMatern12(Prior):
     The associated continuous-time state space model matrices are constructed via
     a sum of cosines times a Matern-1/2.
     """
-    def __init__(self, hyp=None, N=6):
+    def __init__(self, variance=1.0, lengthscale_periodic=1.0, period=1.0, lengthscale_matern=1.0, order=6):
+        hyp = [variance, lengthscale_periodic, period, lengthscale_matern]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = np.array([1.0, 1.0, 1.0, 1.0])
         self.name = 'Quasi-Periodic Exponential'
-        self.N = N
-        self.K = np.meshgrid(np.arange(self.N + 1), np.arange(self.N + 1))[1]
+        self.order = order
+        self.K = np.meshgrid(np.arange(self.order + 1), np.arange(self.order + 1))[1]
         factorial_mesh_K = np.array([[1., 1., 1., 1., 1., 1., 1.],
                                      [1., 1., 1., 1., 1., 1., 1.],
                                      [2., 2., 2., 2., 2., 2., 2.],
@@ -785,10 +850,26 @@ class QuasiPeriodicMatern12(Prior):
                       [6., 0., 8., 0., 2., 0., 0.],
                       [0., 20., 0., 10., 0., 2., 0.],
                       [20., 0., 30., 0., 12., 0., 2.]])
-        factorial_mesh_K = factorial_mesh_K[:self.N + 1, :self.N + 1]
-        b = b[:self.N + 1, :self.N + 1]
+        factorial_mesh_K = factorial_mesh_K[:self.order + 1, :self.order + 1]
+        b = b[:self.order + 1, :self.order + 1]
         self.b_fmK_2K = b * (1. / factorial_mesh_K) * (2. ** -self.K)
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale_periodic(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def period(self):
+        return softplus(self.hyp[2])
+
+    @property
+    def lengthscale_matern(self):
+        return softplus(self.hyp[3])
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -800,17 +881,17 @@ class QuasiPeriodicMatern12(Prior):
         # The angular frequency
         omega = 2 * np.pi / period
         # The model
-        F_p = np.kron(np.diag(np.arange(self.N + 1)), np.array([[0., -omega], [omega, 0.]]))
-        L_p = np.eye(2 * (self.N + 1))
+        F_p = np.kron(np.diag(np.arange(self.order + 1)), np.array([[0., -omega], [omega, 0.]]))
+        L_p = np.eye(2 * (self.order + 1))
         # Qc_p = np.zeros(2 * (self.N + 1))
         Pinf_p = np.kron(np.diag(q2), np.eye(2))
-        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H_p = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         F_m = np.array([[-1.0 / ell_m]])
         L_m = np.array([[1.0]])
         Qc_m = np.array([[2.0 * var / ell_m]])
         H_m = np.array([[1.0]])
         Pinf_m = np.array([[var]])
-        F = np.kron(F_m, np.eye(2 * (self.N + 1))) + F_p
+        F = np.kron(F_m, np.eye(2 * (self.order + 1))) + F_p
         L = np.kron(L_m, L_p)
         Qc = np.kron(Pinf_p, Qc_m)
         H = np.kron(H_m, H_p)
@@ -819,7 +900,7 @@ class QuasiPeriodicMatern12(Prior):
 
     @partial(jit, static_argnums=0)
     def measurement_model(self, x_space=None, hyperparams=None):
-        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H_p = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         H_m = np.array([[1.0]])
         H = np.kron(H_m, H_p)
         return H
@@ -837,8 +918,7 @@ class QuasiPeriodicMatern12(Prior):
         period, ell_m = hyperparams[2], hyperparams[3]
         # The angular frequency
         omega = 2 * np.pi / period
-        # harmonics = np.arange(self.N + 1) * omega
-        harmonics = np.arange(7) * omega
+        harmonics = np.arange(self.order + 1) * omega
         R0 = rotation_matrix(dt, harmonics[0])
         R1 = rotation_matrix(dt, harmonics[1])
         R2 = rotation_matrix(dt, harmonics[2])
@@ -873,14 +953,12 @@ class QuasiPeriodicMatern32(Prior):
     The associated continuous-time state space model matrices are constructed via
     a sum of cosines times a Matern-3/2.
     """
-    def __init__(self, hyp=None):
+    def __init__(self, variance=1.0, lengthscale_periodic=1.0, period=1.0, lengthscale_matern=1.0, order=6):
+        hyp = [variance, lengthscale_periodic, period, lengthscale_matern]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = np.array([1.0, 1.0, 1.0, 1.0])
         self.name = 'Periodic'
-        self.N = 6
-        self.K = np.meshgrid(np.arange(self.N + 1), np.arange(self.N + 1))[1]
+        self.order = order
+        self.K = np.meshgrid(np.arange(self.order + 1), np.arange(self.order + 1))[1]
         factorial_mesh_K = np.array([[1., 1., 1., 1., 1., 1., 1.],
                                      [1., 1., 1., 1., 1., 1., 1.],
                                      [2., 2., 2., 2., 2., 2., 2.],
@@ -898,6 +976,22 @@ class QuasiPeriodicMatern32(Prior):
         self.b_fmK_2K = b * (1. / factorial_mesh_K) * (2. ** -self.K)
         self.F, self.L, self.Qc, self.H, self.Pinf = self.kernel_to_state_space(self.hyp)
 
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale_periodic(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def period(self):
+        return softplus(self.hyp[2])
+
+    @property
+    def lengthscale_matern(self):
+        return softplus(self.hyp[3])
+
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
@@ -908,11 +1002,11 @@ class QuasiPeriodicMatern32(Prior):
         # The angular frequency
         omega = 2 * np.pi / period
         # The model
-        F_p = np.kron(np.diag(np.arange(self.N + 1)), np.array([[0., -omega], [omega, 0.]]))
-        L_p = np.eye(2 * (self.N + 1))
+        F_p = np.kron(np.diag(np.arange(self.order + 1)), np.array([[0., -omega], [omega, 0.]]))
+        L_p = np.eye(2 * (self.order + 1))
         # Qc_p = np.zeros(2 * (self.N + 1))
         Pinf_p = np.kron(np.diag(q2), np.eye(2))
-        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H_p = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         lam = 3.0 ** 0.5 / ell_m
         F_m = np.array([[0.0, 1.0],
                         [-lam ** 2, -2 * lam]])
@@ -923,7 +1017,7 @@ class QuasiPeriodicMatern32(Prior):
         Pinf_m = np.array([[var, 0.0],
                            [0.0, 3.0 * var / ell_m ** 2.0]])
         # F = np.kron(F_p, np.eye(2)) + np.kron(np.eye(14), F_m)
-        F = np.kron(F_m, np.eye(2 * (self.N + 1))) + np.kron(np.eye(2), F_p)
+        F = np.kron(F_m, np.eye(2 * (self.order + 1))) + np.kron(np.eye(2), F_p)
         L = np.kron(L_m, L_p)
         Qc = np.kron(Qc_m, Pinf_p)
         H = np.kron(H_m, H_p)
@@ -941,7 +1035,7 @@ class QuasiPeriodicMatern32(Prior):
 
     @partial(jit, static_argnums=0)
     def measurement_model(self, x_space=None, hyperparams=None):
-        H_p = np.kron(np.ones([1, self.N + 1]), np.array([1., 0.]))
+        H_p = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         H_m = np.array([[1.0, 0.0]])
         H = np.kron(H_m, H_p)
         return H
@@ -960,7 +1054,7 @@ class QuasiPeriodicMatern32(Prior):
         lam = np.sqrt(3.0) / ell_m
         # The angular frequency
         omega = 2 * np.pi / period
-        harmonics = np.arange(self.N + 1) * omega
+        harmonics = np.arange(self.order + 1) * omega
         R0 = self.subband_mat32(dt, lam, harmonics[0])
         R1 = self.subband_mat32(dt, lam, harmonics[1])
         R2 = self.subband_mat32(dt, lam, harmonics[2])
@@ -994,34 +1088,28 @@ class SpatioTemporalMatern52(Prior):
     Spatio-Temporal Matern-5/2 kernel in SDE form.
     Hyperparameters:
         variance, σ²
-        lengthscale, l
-    The associated continuous-time state space model matrices are:
-    letting λ = √5/l
-    F      = ( 0    1    0
-               0    0    1
-              -λ³ -3λ² -3λ)
-    L      = (0
-              0
-              1)
-    Qc     = 16λ⁵σ²/3
-    H      = (1  0  0)
-    letting κ = λ²σ²/3,
-    Pinf   = ( σ²  0  -κ
-               0   κ   0
-              -κ   0   λ⁴σ²)
+        temporal lengthscale, lt
+        spatial lengthscale, ls
     """
-    def __init__(self, hyp=None, z=None):
+    def __init__(self, variance=1.0, lengthscale_time=1.0, lengthscale_space=1.0, z=None):
+        hyp = [variance, lengthscale_time, lengthscale_space]
         super().__init__(hyp=hyp)
-        if self.hyp is None:
-            print('using default kernel parameters since none were supplied')
-            self.hyp = [1.0, 1.0, 1.0]
         if z is None:
             self.z = np.linspace(-3., 3., num=15).reshape(-1, 1)
         self.M = self.z.shape[0]
         self.name = 'Spatio-Temporal Matern-5/2'
 
-    def set_hyperparams(self, hyp):
-        self.hyp = hyp
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale_time(self):
+        return softplus(self.hyp[1])
+
+    @property
+    def lengthscale_space(self):
+        return softplus(self.hyp[2])
 
     @staticmethod
     def spatial_covariance(z, z_prime, ell):

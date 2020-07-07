@@ -31,9 +31,7 @@ var_f = 0.3  # GP variance
 len_time = 0.3  # temporal lengthscale
 len_space = 0.3  # spacial lengthscale
 
-theta_prior = [var_f, len_time, len_space]
-
-prior = priors.SpatioTemporalMatern52(theta_prior)
+prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time, lengthscale_space=len_space)
 lik = likelihoods.Probit()
 inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.PL()
@@ -55,6 +53,7 @@ def gradient_step(i, state, mod, plot_num_, mu_prev_):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()  # <-- less elegant but reduces compile time
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var=%1.2f len_time=%1.2f len_space=%1.2f, nlml=%2.2f' %
@@ -137,13 +136,4 @@ plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False
 plt.xlim(-lim, lim)
 plt.ylim(-lim, lim)
 # plt.savefig('output/output_%04d.png' % 1600)
-# plt.savefig('output/output_%04d.png' % 1601)
-# plt.savefig('output/output_%04d.png' % 1602)
-# plt.savefig('output/output_%04d.png' % 1603)
-# plt.savefig('output/output_%04d.png' % 1604)
-# plt.savefig('output/output_%04d.png' % 1605)
-# plt.savefig('output/output_%04d.png' % 1606)
-# plt.savefig('output/output_%04d.png' % 1607)
-# plt.savefig('output/output_%04d.png' % 1608)
-# plt.savefig('output/output_%04d.png' % 1609)
 plt.show()

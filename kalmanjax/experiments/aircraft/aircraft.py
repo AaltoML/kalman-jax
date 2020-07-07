@@ -59,9 +59,9 @@ x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
-prior_1 = priors.Matern52([2., 5.5e4])
-prior_2 = priors.QuasiPeriodicMatern32([1., 2., 365., 1.5e4])  # var, len, per, lem_m
-prior_3 = priors.QuasiPeriodicMatern32([1., 2., 7., 30*365])  # var, len, per, lem_m
+prior_1 = priors.Matern52(variance=2., lengthscale=5.5e4)
+prior_2 = priors.QuasiPeriodicMatern32(variance=1., lengthscale_periodic=2., period=365., lengthscale_matern=1.5e4)
+prior_3 = priors.QuasiPeriodicMatern32(variance=1., lengthscale_periodic=2., period=7., lengthscale_matern=30*365.)
 
 prior = priors.Sum([prior_1, prior_2, prior_3])
 lik = likelihoods.Poisson()

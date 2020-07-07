@@ -28,9 +28,7 @@ y_test[y_test == -1] = 0
 var_f = 1.  # GP variance
 len_f = 5.0  # GP lengthscale
 
-theta_prior = [var_f, len_f]
-
-prior = priors.Matern52(theta_prior)
+prior = priors.Matern52(variance=var_f, lengthscale=len_f)
 
 lik = likelihoods.Bernoulli(link='logit')
 inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='UT')
@@ -56,6 +54,7 @@ def gradient_step(i, state, mod):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()  # <-- less elegant but reduces compile time
 
     prior_params = softplus_list(params[0])
     print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
