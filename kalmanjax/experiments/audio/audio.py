@@ -40,7 +40,7 @@ if len(sys.argv) > 1:
     save_result = True
     num_iters = 250
 else:
-    method = 15
+    method = 3
     fold = 6
     save_result = False
     num_iters = 50
@@ -58,15 +58,9 @@ y_test = y[ind_test]
 
 fundamental_freq = 220  # Hz
 radial_freq = 2 * pi * fundamental_freq / scale  # radial freq = 2pi * f / scale
-# sub1 = priors.SubbandExponential(variance=.1, lengthscale=75., radial_frequency=radial_freq)
-# sub2 = priors.SubbandExponential(variance=.1, lengthscale=75., radial_frequency=2 * radial_freq)  # 1st harmonic
-# sub3 = priors.SubbandExponential(variance=.1, lengthscale=75., radial_frequency=3 * radial_freq)  # 2nd harmonic
 sub1 = priors.SubbandExponentialFixedVar(variance=.1, lengthscale=75., radial_frequency=radial_freq)
 sub2 = priors.SubbandExponentialFixedVar(variance=.1, lengthscale=75., radial_frequency=2 * radial_freq)  # 1st harmonic
 sub3 = priors.SubbandExponentialFixedVar(variance=.1, lengthscale=75., radial_frequency=3 * radial_freq)  # 2nd harmonic
-# mod1 = priors.Matern52(variance=.5, lengthscale=15.)
-# mod2 = priors.Matern52(variance=.5, lengthscale=15.)
-# mod3 = priors.Matern52(variance=.5, lengthscale=15.)
 mod1 = priors.Matern52FixedVar(variance=.5, lengthscale=10.)
 mod2 = priors.Matern52FixedVar(variance=.5, lengthscale=10.)
 mod3 = priors.Matern52FixedVar(variance=.5, lengthscale=10.)

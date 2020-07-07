@@ -192,7 +192,6 @@ class StatisticallyLinearisedEP(ApproxInf):
         regression (SLR) w.r.t. the cavity distribution to update the site parameters.
         """
         power = 1. if site_params is None else self.power
-        # TODO: implement SLR approximate likelihood
         log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
         if (site_params is None) or (power == 0):
             cav_mean, cav_cov = post_mean, post_cov
@@ -204,7 +203,7 @@ class StatisticallyLinearisedEP(ApproxInf):
         mu, S, C, omega = likelihood.statistical_linear_regression(cav_mean, cav_cov, hyp, self.cubature_func)
         # convert to a Gaussian site (a function of fₙ):
         residual = y - mu
-        sigma = S + (power - 1) * C.T @ inv(cav_cov) @ C
+        sigma = S + (power - 1) * C.T @ inv(cav_cov + 1e-10 * np.eye(cav_cov.shape[0])) @ C
         osigo = inv(omega.T @ inv(sigma) @ omega + 1e-10 * np.eye(omega.shape[1]))
         site_mean = cav_mean + osigo @ omega.T @ inv(sigma) @ residual  # approx. likelihood (site) mean
         site_cov = -power * cav_cov + osigo  # approx. likelihood var.

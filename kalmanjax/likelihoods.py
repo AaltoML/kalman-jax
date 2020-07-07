@@ -922,7 +922,8 @@ class AudioAmplitudeDemodulation(Likelihood):
         obs_noise_var = hyp if hyp is not None else self.hyp
         num_components = int(f.shape[0] / 2)
         subbands, modulators = f[:num_components], softplus(f[num_components:])
-        return np.atleast_2d(modulators.T @ subbands),  np.atleast_2d(obs_noise_var)
+        return np.atleast_2d(np.sum(subbands * modulators, axis=0)), np.atleast_2d(obs_noise_var)
+        # return np.atleast_2d(modulators.T @ subbands),  np.atleast_2d(obs_noise_var)
 
     @partial(jit, static_argnums=(0, 6))
     def moment_match(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
@@ -1049,8 +1050,11 @@ class AudioAmplitudeDemodulation(Likelihood):
         # Compute derivative of z via quadrature:
         # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
+        # omega = np.sum(
+        #     w * lik_expectation * (inv(cav_cov) @ (sigma_points - cav_mean)), axis=-1
+        # )[None, :]
         omega = np.sum(
-            w * lik_expectation * (inv(cav_cov) @ (sigma_points - cav_mean)), axis=-1
+            w * lik_expectation * (np.diag(cav_cov)[..., None] ** -1 * (sigma_points - cav_mean)), axis=-1
         )[None, :]
         return mu, S, C, omega
 
