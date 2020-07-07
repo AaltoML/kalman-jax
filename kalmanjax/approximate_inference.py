@@ -74,10 +74,11 @@ class ExpectationPropagation(ApproxInf):
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
             site_mean, site_cov = np.atleast_2d(site_mean), np.atleast_2d(site_cov)
             site_cov = ensure_positive_variance(site_cov)
-            site_nat2, site_nat2_prev = inv(site_cov), inv(site_cov_prev)
-            site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev
-            site_cov = inv((1. - self.damping) * site_nat2_prev + self.damping * site_nat2)
-            site_mean = site_cov @ ((1. - self.damping) * site_nat1_prev + self.damping * site_nat1)
+            if self.damping != 1.:
+                site_nat2, site_nat2_prev = inv(site_cov), inv(site_cov_prev)
+                site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev
+                site_cov = inv((1. - self.damping) * site_nat2_prev + self.damping * site_nat2)
+                site_mean = site_cov @ ((1. - self.damping) * site_nat1_prev + self.damping * site_nat1)
             return lml, site_mean, site_cov
 
 
@@ -98,8 +99,9 @@ class ExtendedEP(ApproxInf):
     Extended expectation propagation (EEP). This is equivalent to the extended Kalman smoother (EKS) but with
     linearisation applied at the cavity mean. Recovers the EKS when power=0.
     """
-    def __init__(self, site_params=None, power=1.0):
+    def __init__(self, site_params=None, power=1.0, damping=1.0):
         self.power = power
+        self.damping = damping
         super().__init__(site_params=site_params)
         self.name = 'Extended Expectation Propagation (EEP)'
 
@@ -121,9 +123,9 @@ class ExtendedEP(ApproxInf):
         likelihood_expectation, _ = likelihood.conditional_moments(cav_mean, hyp)
         residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr @ obs_cov @ Jr.T + power * Jf @ cav_cov @ Jf.T
-        site_cov = inv(Jf.T @ inv(Jr @ obs_cov @ Jr.T) @ Jf + 1e-10 * np.eye(Jf.shape[1]))
+        site_nat2 = Jf.T @ inv(Jr @ obs_cov @ Jr.T) @ Jf
+        site_cov = inv(site_nat2 + 1e-10 * np.eye(Jf.shape[1]))
         site_mean = cav_mean + (site_cov + power * cav_cov) @ Jf.T @ inv(sigma) @ residual
-        # site_cov = ensure_positive_variance(site_cov)
         # now compute the marginal likelihood approx.
         sigma_marg_lik = Jr @ obs_cov @ Jr.T + Jf @ cav_cov @ Jf.T
         chol_sigma, low = cho_factor(sigma_marg_lik)
@@ -131,6 +133,12 @@ class ExtendedEP(ApproxInf):
                 .5 * site_cov.shape[0] * np.log(2 * pi)
                 + np.sum(np.log(np.diag(chol_sigma)))
                 + .5 * (residual.T @ cho_solve((chol_sigma, low), residual)))
+        if (site_params is not None) and (self.damping != 1.):
+            site_mean_prev, site_cov_prev = site_params  # previous site params
+            site_nat2_prev = inv(site_cov_prev + 1e-10 * np.eye(Jf.shape[1]))
+            site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev
+            site_cov = inv((1. - self.damping) * site_nat2_prev + self.damping * site_nat2 + 1e-10 * np.eye(Jf.shape[1]))
+            site_mean = site_cov @ ((1. - self.damping) * site_nat1_prev + self.damping * site_nat1)
         return log_marg_lik, site_mean, site_cov
 
 
@@ -142,8 +150,8 @@ class ExtendedKalmanSmoother(ExtendedEP):
     """
     Extended Kalman smoother (EKS). Equivalent to EEP when power = 0.
     """
-    def __init__(self, site_params=None):
-        super().__init__(site_params=site_params, power=0)
+    def __init__(self, site_params=None, damping=1.0):
+        super().__init__(site_params=site_params, power=0, damping=damping)
         self.name = 'Extended Kalman Smoother (EKS)'
 
 
@@ -172,8 +180,9 @@ class StatisticallyLinearisedEP(ApproxInf):
     linearised Kalman smoother. Using Gauss-Hermite / Unscented transform for numerical
     integration results in Gauss-Hermite EP / Unscented EP.
     """
-    def __init__(self, site_params=None, power=1.0, intmethod='GH', num_cub_pts=20):
+    def __init__(self, site_params=None, power=1.0, damping=1.0, intmethod='GH', num_cub_pts=20):
         self.power = power
+        self.damping = damping
         super().__init__(site_params=site_params, intmethod=intmethod, num_cub_pts=num_cub_pts)
         self.name = 'Statistically Linearised Expectation Propagation (SLEP)'
 
@@ -188,9 +197,9 @@ class StatisticallyLinearisedEP(ApproxInf):
         if (site_params is None) or (power == 0):
             cav_mean, cav_cov = post_mean, post_cov
         else:
-            site_mean, site_cov = site_params
+            site_mean_prev, site_cov_prev = site_params  # previous site params
             # --- Compute the cavity distribution ---
-            cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean, site_cov, power)
+            cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean_prev, site_cov_prev, power)
         # SLR gives a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ])
         mu, S, C, omega = likelihood.statistical_linear_regression(cav_mean, cav_cov, hyp, self.cubature_func)
         # convert to a Gaussian site (a function of fₙ):
@@ -199,7 +208,12 @@ class StatisticallyLinearisedEP(ApproxInf):
         osigo = inv(omega.T @ inv(sigma) @ omega + 1e-10 * np.eye(omega.shape[1]))
         site_mean = cav_mean + osigo @ omega.T @ inv(sigma) @ residual  # approx. likelihood (site) mean
         site_cov = -power * cav_cov + osigo  # approx. likelihood var.
-        # site_cov = ensure_positive_variance(site_cov)
+        if (site_params is not None) and (self.damping != 1.):
+            jitter = 1e-10 * np.eye(site_cov.shape[0])
+            site_nat2, site_nat2_prev = inv(site_cov + jitter), inv(site_cov_prev + jitter)
+            site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev
+            site_cov = inv((1. - self.damping) * site_nat2_prev + self.damping * site_nat2 + jitter)
+            site_mean = site_cov @ ((1. - self.damping) * site_nat1_prev + self.damping * site_nat1)
         return log_marg_lik, site_mean, site_cov
 
 
@@ -208,8 +222,8 @@ class SLEP(StatisticallyLinearisedEP):
 
 
 class GaussHermiteEP(StatisticallyLinearisedEP):
-    def __init__(self, site_params=None, power=1, num_cub_pts=20):
-        super().__init__(site_params=site_params, power=power, intmethod='GH', num_cub_pts=num_cub_pts)
+    def __init__(self, site_params=None, power=1, damping=1, num_cub_pts=20):
+        super().__init__(site_params=site_params, power=power, damping=damping, intmethod='GH', num_cub_pts=num_cub_pts)
         self.name = 'Gauss-Hermite Expectation Propagation (GHEP)'
 
 
@@ -218,8 +232,8 @@ class GHEP(GaussHermiteEP):
 
 
 class GaussHermiteKalmanSmoother(GaussHermiteEP):
-    def __init__(self, site_params=None, num_cub_pts=20):
-        super().__init__(site_params=site_params, power=0, num_cub_pts=num_cub_pts)
+    def __init__(self, site_params=None, damping=1, num_cub_pts=20):
+        super().__init__(site_params=site_params, power=0, damping=damping, num_cub_pts=num_cub_pts)
         self.name = 'Gauss-Hermite Kalman Smoother (GHKS)'
 
 
@@ -228,8 +242,8 @@ class GHKS(GaussHermiteKalmanSmoother):
 
 
 class UnscentedEP(StatisticallyLinearisedEP):
-    def __init__(self, site_params=None, power=1):
-        super().__init__(site_params=site_params, power=power, intmethod='UT')
+    def __init__(self, site_params=None, power=1, damping=1):
+        super().__init__(site_params=site_params, power=power, damping=damping, intmethod='UT')
         self.name = 'Unscented Expectation Propagation (UEP)'
 
 
@@ -238,8 +252,8 @@ class UEP(UnscentedEP):
 
 
 class UnscentedKalmanSmoother(UnscentedEP):
-    def __init__(self, site_params=None):
-        super().__init__(site_params=site_params, power=0)
+    def __init__(self, site_params=None, damping=1):
+        super().__init__(site_params=site_params, power=0, damping=damping)
         self.name = 'Unscented Kalman Smoother (UKS)'
 
 
@@ -306,11 +320,6 @@ class VariationalInference(ApproxInf):
             site_mean, site_cov = site_params
             log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
-            # site_cov = -0.5 * inv_any(dE_dv + 1e-10 * np.eye(dE_dv.shape[0]))
-            # site_mean = post_mean + site_cov @ dE_dm
-            # site_cov = np.where(np.any(np.diag(site_cov) < 0), np.diag(np.diag(site_cov)), site_cov)
-            # site_cov = np.where(site_cov < 0, 99., site_cov)
-
             lambda_t_2 = inv_any(site_cov + 1e-10 * np.eye(site_cov.shape[0]))
             lambda_t_1 = lambda_t_2 @ site_mean
             lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv @ post_mean)

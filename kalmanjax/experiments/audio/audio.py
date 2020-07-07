@@ -23,7 +23,7 @@ fs = 44100  # sampling rate (Hz)
 scale = 1000  # convert to milliseconds
 
 normaliser = 0.5 * np.sqrt(np.var(y))
-yTrain = y / normaliser  # rescale the input to unit variance
+yTrain = y / normaliser  # rescale the data
 
 N = y.shape[0]
 x = np.linspace(0., N, num=N) / fs * scale  # arbitrary evenly spaced inputs inputs
@@ -37,9 +37,13 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
     plot_final = False
+    save_result = True
+    num_iters = 250
 else:
-    method = 3
+    method = 15
     fold = 6
+    save_result = False
+    num_iters = 50
 
 print('method number', method)
 print('batch number', fold)
@@ -72,25 +76,25 @@ prior = priors.Independent([sub1, sub2, sub3, mod1, mod2, mod3])
 lik = likelihoods.AudioAmplitudeDemodulation(variance=0.3)
 
 if method == 0:
-    inf_method = approx_inf.EEP(power=1)
+    inf_method = approx_inf.EEP(power=1, damping=0.05)
 elif method == 1:
-    inf_method = approx_inf.EEP(power=0.5)
+    inf_method = approx_inf.EEP(power=0.5, damping=0.05)
 elif method == 2:
-    inf_method = approx_inf.EKS()
+    inf_method = approx_inf.EKS(damping=0.05)
 
 elif method == 3:
-    inf_method = approx_inf.UEP(power=1)
+    inf_method = approx_inf.UEP(power=1, damping=0.05)
 elif method == 4:
-    inf_method = approx_inf.UEP(power=0.5)
+    inf_method = approx_inf.UEP(power=0.5, damping=0.05)
 elif method == 5:
-    inf_method = approx_inf.UKS()
+    inf_method = approx_inf.UKS(damping=0.05)
 
 elif method == 6:
-    inf_method = approx_inf.GHEP(power=1)
+    inf_method = approx_inf.GHEP(power=1, damping=0.05)
 elif method == 7:
-    inf_method = approx_inf.GHEP(power=0.5)
+    inf_method = approx_inf.GHEP(power=0.5, damping=0.05)
 elif method == 8:
-    inf_method = approx_inf.GHKS()
+    inf_method = approx_inf.GHKS(damping=0.05)
 
 elif method == 9:
     inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.05)
@@ -167,7 +171,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(1):
+for j in range(num_iters):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -180,12 +184,13 @@ t1 = time.time()
 print('NLPD: %1.2f' % nlpd)
 print('prediction time: %2.2f secs' % (t1-t0))
 
-with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
-    pickle.dump(nlpd, fp)
+if save_result:
+    with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
+        pickle.dump(nlpd, fp)
 
-# with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
-#     nlpd_show = pickle.load(fp)
-# print(nlpd_show)
+    # with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
+    #     nlpd_show = pickle.load(fp)
+    # print(nlpd_show)
 
 if plot_final:
     x_pred = model.t_all[:, 0]
