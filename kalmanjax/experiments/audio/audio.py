@@ -38,7 +38,7 @@ if len(sys.argv) > 1:
     fold = int(sys.argv[2])
     plot_final = False
 else:
-    method = 15
+    method = 9
     fold = 6
 
 print('method number', method)
@@ -93,27 +93,27 @@ elif method == 8:
     inf_method = approx_inf.GHKS()
 
 elif method == 9:
-    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.25)
+    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.05)
 elif method == 10:
-    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.25)
+    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.05)
 elif method == 11:
-    inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.25)
+    inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.05)
 
 elif method == 12:
-    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.25)
+    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.05)
 elif method == 13:
-    inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.25)
+    inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.05)
 elif method == 14:
-    inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.25)
+    inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.05)
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT', damping=0.01)
+    inf_method = approx_inf.VI(intmethod='UT', damping=0.05)
 elif method == 16:
-    inf_method = approx_inf.VI(intmethod='GH', damping=0.01)
+    inf_method = approx_inf.VI(intmethod='GH', damping=0.05)
 
 model = SDEGP(prior=prior, likelihood=lik, x=x_train, y=y_train, x_test=x_test, y_test=y_test, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=5e-2)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -167,7 +167,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(1):
+for j in range(250):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
