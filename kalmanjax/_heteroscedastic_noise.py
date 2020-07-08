@@ -24,7 +24,7 @@ Xall = X_scaler.transform(X)
 Yall = y_scaler.transform(Y)
 
 # Load cross-validation indices
-cvind = np.loadtxt('experiments/heteroschedastic/cvind.csv').astype(int)
+cvind = np.loadtxt('experiments/heteroscedastic/cvind.csv').astype(int)
 
 # 10-fold cross-validation setup
 nt = np.floor(cvind.shape[0]/10).astype(int)
@@ -51,7 +51,7 @@ len_f2 = 1.  # GP lengthscale
 prior1 = priors.Matern32(variance=var_f1, lengthscale=len_f1)
 prior2 = priors.Matern32(variance=var_f2, lengthscale=len_f2)
 prior = priors.Independent([prior1, prior2])
-lik = likelihoods.HeteroschedasticNoise()
+lik = likelihoods.HeteroscedasticNoise()
 
 inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='UT')
 # inf_method = approx_inf.VariationalInference(intmethod='GH')

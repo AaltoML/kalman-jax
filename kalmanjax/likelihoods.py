@@ -689,9 +689,9 @@ class Poisson(Likelihood):
         return self.link_fn(f), self.link_fn(f)
 
 
-class HeteroschedasticNoise(Likelihood):
+class HeteroscedasticNoise(Likelihood):
     """
-    The Heteroschedastic Noise likelihood:
+    The Heteroscedastic Noise likelihood:
         p(y|f1,f2) = N(y|f1,link(f2)^2)
     """
     def __init__(self, link='softplus'):
@@ -705,7 +705,7 @@ class HeteroschedasticNoise(Likelihood):
             self.link_fn = lambda mu: softplus(mu-0.5) + 1e-10
         else:
             raise NotImplementedError('link function not implemented')
-        self.name = 'Heteroschedastic Noise'
+        self.name = 'Heteroscedastic Noise'
 
     @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
