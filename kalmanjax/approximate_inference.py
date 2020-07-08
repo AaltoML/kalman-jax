@@ -204,10 +204,13 @@ class StatisticallyLinearisedEP(ApproxInf):
         # convert to a Gaussian site (a function of fₙ):
         residual = y - mu
         sigma = S + (power - 1) * C.T @ inv(cav_cov + 1e-10 * np.eye(cav_cov.shape[0])) @ C
-        osigo = inv(omega.T @ inv(sigma) @ omega + 1e-10 * np.eye(omega.shape[1]))
+        om_sig_om = omega.T @ inv(sigma) @ omega
+        om_sig_om = np.diag(np.diag(om_sig_om))  # discard cross terms
+        osigo = inv(om_sig_om + 1e-10 * np.eye(omega.shape[1]))
         site_mean = cav_mean + osigo @ omega.T @ inv(sigma) @ residual  # approx. likelihood (site) mean
         site_cov = -power * cav_cov + osigo  # approx. likelihood var.
         if (site_params is not None) and (self.damping != 1.):
+            site_mean_prev, site_cov_prev = site_params  # previous site params
             jitter = 1e-10 * np.eye(site_cov.shape[0])
             site_nat2, site_nat2_prev = inv(site_cov + jitter), inv(site_cov_prev + jitter)
             site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev

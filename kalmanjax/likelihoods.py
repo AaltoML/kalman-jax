@@ -787,6 +787,8 @@ class HeteroschedasticNoise(Likelihood):
     @partial(jit, static_argnums=(0, 6))
     def moment_match_unstable(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
+        An attempt to compute the full site covariance, including cross terms. However, using these cross
+        terms makes things somewhat unstable.
         """
         if cubature_func is None:
             x, w = gauss_hermite(1, 20)  # Gauss-Hermite sigma points and weights
@@ -795,7 +797,7 @@ class HeteroschedasticNoise(Likelihood):
         lZ = self.log_expected_likelihood(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)
         dlZ = self.dlZ_dm(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)[:, None]
         d2lZ = jacrev(self.dlZ_dm, argnums=3)(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)
-        # d2lZ = np.diag(np.diag(d2lZ))
+        # d2lZ = np.diag(np.diag(d2lZ))  # discard cross terms
         id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
         site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
         site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
@@ -894,6 +896,8 @@ class AudioAmplitudeDemodulation(Likelihood):
         """
         super().__init__(hyp=variance)
         self.name = 'Audio Amplitude Demodulation'
+        self.link_fn = lambda f: softplus(f)
+        self.dlink_fn = lambda f: sigmoid(f)  # derivative of the link function
 
     @property
     def variance(self):
@@ -921,7 +925,7 @@ class AudioAmplitudeDemodulation(Likelihood):
         """
         obs_noise_var = hyp if hyp is not None else self.hyp
         num_components = int(f.shape[0] / 2)
-        subbands, modulators = f[:num_components], softplus(f[num_components:])
+        subbands, modulators = f[:num_components], self.link_fn(f[num_components:])
         return np.atleast_2d(np.sum(subbands * modulators, axis=0)), np.atleast_2d(obs_noise_var)
         # return np.atleast_2d(modulators.T @ subbands),  np.atleast_2d(obs_noise_var)
 
@@ -935,22 +939,22 @@ class AudioAmplitudeDemodulation(Likelihood):
         else:
             x, w = cubature_func(num_components)
 
-        subband_mean, modulator_mean = cav_mean[:num_components], softplus(cav_mean[num_components:])
+        subband_mean, modulator_mean = cav_mean[:num_components], self.link_fn(cav_mean[num_components:])
         subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:, num_components:]
         sigma_points = cholesky(modulator_cov) @ x + modulator_mean
         const = power ** -0.5 * (2 * pi * hyp) ** (0.5 - 0.5 * power)
-        mu = (softplus(sigma_points).T @ subband_mean)[:, 0]
-        var = hyp / power + (softplus(sigma_points).T ** 2 @ np.diag(subband_cov)[..., None])[:, 0]
+        mu = (self.link_fn(sigma_points).T @ subband_mean)[:, 0]
+        var = hyp / power + (self.link_fn(sigma_points).T ** 2 @ np.diag(subband_cov)[..., None])[:, 0]
         normpdf = const * (2 * pi * var) ** -0.5 * np.exp(-0.5 * (y - mu) ** 2 / var)
         Z = np.sum(w * normpdf)
         Zinv = 1. / (Z + 1e-8)
         lZ = np.log(Z + 1e-8)
 
-        dZ1 = np.sum(w * softplus(sigma_points) * (y - mu) / var * normpdf, axis=-1)
+        dZ1 = np.sum(w * self.link_fn(sigma_points) * (y - mu) / var * normpdf, axis=-1)
         dZ2 = np.sum(w * (sigma_points - modulator_mean) * np.diag(modulator_cov)[..., None] ** -1 * normpdf, axis=-1)
         dlZ = Zinv * np.block([dZ1, dZ2])
 
-        d2Z1 = np.sum(w * softplus(sigma_points) ** 2 * (
+        d2Z1 = np.sum(w * self.link_fn(sigma_points) ** 2 * (
             ((y - mu) / var) ** 2
             - var ** -1
         ) * normpdf, axis=-1)
@@ -971,14 +975,15 @@ class AudioAmplitudeDemodulation(Likelihood):
         """
         obs_noise_var = hyp if hyp is not None else self.hyp
         num_components = int(m.shape[0] / 2)
-        subbands, modulators = m[:num_components], softplus(m[num_components:])
-        Jf = np.block([[modulators], [subbands * sigmoid(m[num_components:])]])  # sigmoid is derivative of softplus
-        Jr = np.array([[np.sqrt(obs_noise_var)]])  # TODO: check whether this should be sqrt()
+        subbands, modulators = m[:num_components], self.link_fn(m[num_components:])
+        Jf = np.block([[modulators], [subbands * self.dlink_fn(m[num_components:])]])
+        Jr = np.array([[np.sqrt(obs_noise_var)]])
         return np.atleast_2d(Jf).T, np.atleast_2d(Jr).T
 
     @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
         """
+        This gives the same result as above - delete
         """
         num_components = int(cav_mean.shape[0] / 2)
         if cubature_func is None:
@@ -986,51 +991,13 @@ class AudioAmplitudeDemodulation(Likelihood):
         else:
             x, w = cubature_func(num_components)
 
-        subband_mean, modulator_mean = cav_mean[:num_components], softplus(cav_mean[num_components:])
-        subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:, num_components:]
+        subband_mean, modulator_mean = cav_mean[:num_components], self.link_fn(cav_mean[num_components:])
+        subband_cov, modulator_cov = cav_cov[:num_components, :num_components], cav_cov[num_components:,
+                                                                                        num_components:]
         sigma_points = cholesky(modulator_cov) @ x + modulator_mean
-
+        lik_expectation, lik_covariance = (self.link_fn(sigma_points).T @ subband_mean).T, hyp
         # Compute zₙ via quadrature:
-        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
-        mu = np.sum(subband_mean.T @ softplus(sigma_points) * w).reshape(1, 1)
-        # Compute variance S via quadrature:
-        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
-        S = hyp + np.sum(
-            (subband_mean.T @ softplus(sigma_points) - mu) ** 2
-        )
-        S = S.reshape(1, 1)
-        # Compute cross covariance C via quadrature:
-        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
-        C = np.sum(
-            w * (np.block([[sigma_points], [sigma_points]]) - cav_mean) * (subband_mean.T @ softplus(sigma_points) - mu), axis=-1
-        ).reshape(cav_mean.shape[0], 1)
-        # Compute derivative of z via quadrature:
-        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
-        omega_1 = np.sum(softplus(sigma_points) * w, axis=-1)
-        omega_2 = np.sum(subband_mean.T @ softplus(sigma_points) * (sigma_points - modulator_mean) * np.diag(modulator_cov)[:, None] ** -1 * w, axis=-1)
-        omega = np.block([[omega_1, omega_2]])
-        return mu, S, C, omega
-
-    @partial(jit, static_argnums=(0, 4))
-    def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
-        """
-        Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
-        We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
-        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
-        """
-        if cubature_func is None:
-            x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
-        else:
-            x, w = cubature_func(cav_mean.shape[0])
-        sigma_points = cholesky(cav_cov) @ np.atleast_2d(
-            x) + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
-        lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
-        # Compute zₙ via quadrature:
-        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
+        # muₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
         mu = np.sum(
             w * lik_expectation, axis=-1
@@ -1045,16 +1012,13 @@ class AudioAmplitudeDemodulation(Likelihood):
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
         C = np.sum(
-            w * (sigma_points - cav_mean) * (lik_expectation - mu), axis=-1
+            w * np.block([[self.link_fn(sigma_points) * np.diag(subband_cov)[..., None]],
+                          [sigma_points - modulator_mean]]) * (lik_expectation - mu), axis=-1
         )[:, None]
-        # Compute derivative of z via quadrature:
-        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
-        # omega = np.sum(
-        #     w * lik_expectation * (inv(cav_cov) @ (sigma_points - cav_mean)), axis=-1
-        # )[None, :]
+        # Compute derivative of mu via quadrature:
         omega = np.sum(
-            w * lik_expectation * (np.diag(cav_cov)[..., None] ** -1 * (sigma_points - cav_mean)), axis=-1
+            w * np.block([[self.link_fn(sigma_points)],
+                          [np.diag(modulator_cov)[..., None] ** -1 * (sigma_points - modulator_mean) * lik_expectation]]), axis=-1
         )[None, :]
         return mu, S, C, omega
 
@@ -1068,23 +1032,23 @@ class AudioAmplitudeDemodulation(Likelihood):
         else:
             x, w = cubature_func(num_components)
 
-        subband_mean, modulator_mean = post_mean[:num_components], softplus(post_mean[num_components:])
+        subband_mean, modulator_mean = post_mean[:num_components], self.link_fn(post_mean[num_components:])
         subband_cov, modulator_cov = post_cov[:num_components, :num_components], post_cov[num_components:,
                                                                                  num_components:]
         sigma_points = cholesky(modulator_cov) @ x + modulator_mean
 
         modulator_var = np.diag(subband_cov)[..., None]
-        mu = (softplus(sigma_points).T @ subband_mean)[:, 0]
+        mu = (self.link_fn(sigma_points).T @ subband_mean)[:, 0]
         lognormpdf = -0.5 * np.log(2 * pi * hyp) - 0.5 * (y - mu) ** 2 / hyp
-        const = -0.5 / hyp * (softplus(sigma_points).T ** 2 @ modulator_var)[:, 0]
+        const = -0.5 / hyp * (self.link_fn(sigma_points).T ** 2 @ modulator_var)[:, 0]
         exp_log_lik = np.sum(w * (lognormpdf + const))
 
-        dE1 = np.sum(w * softplus(sigma_points) * (y - mu) / hyp, axis=-1)
+        dE1 = np.sum(w * self.link_fn(sigma_points) * (y - mu) / hyp, axis=-1)
         dE2 = np.sum(w * (sigma_points - modulator_mean) * modulator_var ** -1
                      * (lognormpdf + const), axis=-1)
         dE_dm = np.block([dE1, dE2])[..., None]
 
-        d2E1 = np.sum(w * - 0.5 * softplus(sigma_points) ** 2 / hyp, axis=-1)
+        d2E1 = np.sum(w * - 0.5 * self.link_fn(sigma_points) ** 2 / hyp, axis=-1)
         d2E2 = np.sum(w * 0.5 * (
                 ((sigma_points - modulator_mean) * modulator_var ** -1) ** 2
                 - modulator_var ** -1
