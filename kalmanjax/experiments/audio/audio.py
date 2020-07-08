@@ -40,10 +40,10 @@ if len(sys.argv) > 1:
     save_result = True
     num_iters = 250
 else:
-    method = 15
+    method = 5
     fold = 0
     save_result = False
-    num_iters = 50
+    num_iters = 250
 
 print('method number', method)
 print('batch number', fold)
