@@ -142,6 +142,27 @@ def rotation_matrix(dt, omega):
     return R
 
 
+def discretegrid(xy, w, nt):
+    """
+    Convert spatial observations to a discrete intensity grid
+    :param xy: observed spatial locations as a two-column vector
+    :param w: observation window, i.e. discrete grid to be mapped to, [xmin xmax ymin ymax]
+    :param nt: two-element vector defining number of bins in both directions
+    """
+    # Make grid
+    x = nnp.linspace(w[0], w[1], nt[0] + 1)
+    y = nnp.linspace(w[2], w[3], nt[1] + 1)
+    X, Y = nnp.meshgrid(x, y)
+
+    # Count points
+    N = nnp.zeros([nt[1], nt[0]])
+    for i in range(nt[0]):
+        for j in range(nt[1]):
+            ind = (xy[:, 0] >= x[i]) & (xy[:, 0] < x[i + 1]) & (xy[:, 1] >= y[j]) & (xy[:, 1] < y[j + 1])
+            N[j, i] = nnp.sum(ind)
+    return X[:-1, :-1].T, Y[:-1, :-1].T, N.T
+
+
 def plot(model, it_num, ax=None):
     post_mean, post_var, _, nlpd = model.predict()
     if ax is None:

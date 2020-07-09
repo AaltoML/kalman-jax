@@ -1091,12 +1091,14 @@ class SpatioTemporalMatern52(Prior):
         temporal lengthscale, lt
         spatial lengthscale, ls
     """
-    def __init__(self, variance=1.0, lengthscale_time=1.0, lengthscale_space=1.0, z=None):
+    def __init__(self, variance=1.0, lengthscale_time=1.0, lengthscale_space=1.0, z=None, fixed_grid=False):
         hyp = [variance, lengthscale_time, lengthscale_space]
         super().__init__(hyp=hyp)
         if z is None:
-            self.z = np.linspace(-3., 3., num=15).reshape(-1, 1)
+            z = np.linspace(-3., 3., num=15)
+        self.z = z.reshape(-1, 1)
         self.M = self.z.shape[0]
+        self.fixed_grid = fixed_grid
         self.name = 'Spatio-Temporal Matern-5/2'
 
     @property
@@ -1145,9 +1147,102 @@ class SpatioTemporalMatern52(Prior):
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell_space = hyperparams[2]
         H_time = np.array([[1.0, 0.0, 0.0]])
-        Kzz = self.spatial_covariance(self.z, self.z, ell_space)
-        Kxz = self.spatial_covariance(x_space.reshape(-1, 1), self.z, ell_space)
-        Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
+        if self.fixed_grid:
+            Kx = np.eye(self.z.shape[0])
+        else:
+            Kzz = self.spatial_covariance(self.z, self.z, ell_space)
+            Kxz = self.spatial_covariance(x_space.reshape(-1, 1), self.z, ell_space)
+            Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
+        H = np.kron(Kx, H_time)
+        return H
+
+    @partial(jit, static_argnums=0)
+    def state_transition(self, dt, hyperparams=None):
+        """
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
+        :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
+        :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
+        :return: state transition matrix A [3, 3]
+        """
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell = hyperparams[1]
+        lam = np.sqrt(5.0) / ell
+        dtlam = dt * lam
+        A_time = np.exp(-dtlam) \
+            * (dt * np.array([[lam * (0.5 * dtlam + 1.0),      dtlam + 1.0,            0.5 * dt],
+                              [-0.5 * dtlam * lam ** 2,        lam * (1.0 - dtlam),    1.0 - 0.5 * dtlam],
+                              [lam ** 3 * (0.5 * dtlam - 1.0), lam ** 2 * (dtlam - 3), lam * (0.5 * dtlam - 2.0)]])
+               + np.eye(3))
+        A = np.kron(np.eye(self.M), A_time)
+        return A
+
+
+class SpatialMatern52(Prior):
+    """
+    Spatial Matern-5/2 kernel in SDE form. Similar to the spatio-temporal kernel but the
+    lengthscale is shared across dimensions.
+    Hyperparameters:
+        variance, σ²
+        lengthscale, l
+    """
+    def __init__(self, variance=1.0, lengthscale=1.0, z=None, fixed_grid=False):
+        hyp = [variance, lengthscale]
+        super().__init__(hyp=hyp)
+        if z is None:
+            z = np.linspace(-3., 3., num=15)
+        self.z = z.reshape(-1, 1)
+        self.M = self.z.shape[0]
+        self.fixed_grid = fixed_grid
+        self.name = 'Spatial Matern-5/2'
+
+    @property
+    def variance(self):
+        return softplus(self.hyp[0])
+
+    @property
+    def lengthscale(self):
+        return softplus(self.hyp[1])
+
+    @staticmethod
+    def spatial_covariance(z, z_prime, ell):
+        r = np.sqrt(5) * np.abs(z - z_prime.T) / ell
+        return (1 + r + r**2 / 3) * np.exp(-r)
+
+    @partial(jit, static_argnums=0)
+    def kernel_to_state_space(self, hyperparams=None):
+        # uses variance and lengthscale hyperparameters to construct the state space model
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        var, ell = hyperparams[0], hyperparams[1]
+        Kmm = self.spatial_covariance(self.z, self.z, ell)
+        lam = 5.0**0.5 / ell
+        F_time = np.array([[0.0, 1.0, 0.0],
+                           [0.0, 0.0, 1.0],
+                           [-lam**3.0, -3.0*lam**2.0, -3.0*lam]])
+        F = np.kron(np.eye(self.M), F_time)
+        L = np.array([[0.0],
+                      [0.0],
+                      [1.0]])
+        Qc = np.array([[var * 400.0 * 5.0 ** 0.5 / 3.0 / ell ** 5.0]])
+        H = None
+        kappa = 5.0 / 3.0 * var / ell**2.0
+        Pinf_time = np.array([[var,    0.0,   -kappa],
+                              [0.0,    kappa, 0.0],
+                              [-kappa, 0.0,   25.0*var / ell**4.0]])
+        Pinf = np.kron(Kmm, Pinf_time)
+        return F, L, Qc, H, Pinf
+
+    @partial(jit, static_argnums=0)
+    def measurement_model(self, x_space, hyperparams=None):
+        # uses variance and lengthscale hyperparameters to construct the state space model
+        hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
+        ell = hyperparams[1]
+        H_time = np.array([[1.0, 0.0, 0.0]])
+        if self.fixed_grid:
+            Kx = np.eye(self.z.shape[0])
+        else:
+            Kzz = self.spatial_covariance(self.z, self.z, ell)
+            Kxz = self.spatial_covariance(x_space.reshape(-1, 1), self.z, ell)
+            Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
         H = np.kron(Kx, H_time)
         return H
 

@@ -118,10 +118,10 @@ class ExtendedEP(ApproxInf):
             # --- Compute the cavity distribution ---
             cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean, site_cov, power)
         # calculate the Jacobian of the observation model w.r.t. function fₙ and noise term rₙ
-        Jf, Jr = likelihood.analytical_linearisation(cav_mean, hyp)  # evaluated at the mean
+        Jf, Jr = likelihood.analytical_linearisation(cav_mean, np.zeros_like(y)[..., None], hyp)  # evaluated at mean
         obs_cov = np.eye(y.shape[0])  # observation noise scale is w.l.o.g. 1
         likelihood_expectation, _ = likelihood.conditional_moments(cav_mean, hyp)
-        residual = y - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
+        residual = y[..., None] - likelihood_expectation  # residual, yₙ-E[yₙ|fₙ]
         sigma = Jr @ obs_cov @ Jr.T + power * Jf @ cav_cov @ Jf.T
         site_nat2 = Jf.T @ inv(Jr @ obs_cov @ Jr.T) @ Jf
         site_cov = inv(site_nat2 + 1e-10 * np.eye(Jf.shape[1]))

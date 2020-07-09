@@ -285,11 +285,11 @@ class Likelihood(object):
             h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] rₙ
         """
         conditional_expectation, conditional_covariance = self.conditional_moments(f, hyp)
-        obs_model = conditional_expectation + cholesky(conditional_covariance) * r
+        obs_model = conditional_expectation + cholesky(conditional_covariance) @ r
         return np.squeeze(obs_model)
 
     @partial(jit, static_argnums=0)
-    def analytical_linearisation(self, m, hyp=None):
+    def analytical_linearisation(self, m, r=None, hyp=None):
         """
         TODO: check I have the square root correct for the variance term
         Compute the Jacobian of the state space observation model w.r.t. the
@@ -297,10 +297,11 @@ class Likelihood(object):
         The implicit observation model is:
             h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] rₙ
         The Jacobians are evaluated at the means, fₙ=m, rₙ=0, to be used during
-        extended Kalman filtering and extended Kalman EP.
+        Extended Kalman filtering and Extended EP.
         """
-        Jf, Jr = jacrev(self.observation_model, argnums=(0, 1))(m, 0.0, hyp)
-        return np.atleast_2d(Jf).T, np.atleast_2d(Jr).T
+        r = np.array([[0.0]]) if r is None else r
+        Jf, Jr = jacrev(self.observation_model, argnums=(0, 1))(m, r, hyp)
+        return np.atleast_2d(np.squeeze(Jf)), np.atleast_2d(np.squeeze(Jr))
 
     @partial(jit, static_argnums=(0, 5))
     def variational_expectation_quadrature(self, y, m, v, hyp=None, cubature_func=None):
@@ -686,7 +687,7 @@ class Poisson(Likelihood):
             E[yₙ|fₙ] = link(fₙ)
             Var[yₙ|fₙ] = link(fₙ)
         """
-        return self.link_fn(f), self.link_fn(f)
+        return self.link_fn(f), np.diag(np.squeeze(self.link_fn(f)))
 
 
 class HeteroscedasticNoise(Likelihood):
@@ -970,7 +971,7 @@ class AudioAmplitudeDemodulation(Likelihood):
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=0)
-    def analytical_linearisation(self, m, hyp=None):
+    def analytical_linearisation(self, m, r=None, hyp=None):
         """
         """
         obs_noise_var = hyp if hyp is not None else self.hyp

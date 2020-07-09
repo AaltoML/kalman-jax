@@ -38,7 +38,7 @@ class SDEGP(object):
         :param y: training data / observations
         :param x_test: test inputs
         :param y_test: test data / observations
-
+        :param r_test: test spatial points
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, IKS, PL, ...)
         """
         assert x.shape[0] == y.shape[0]
@@ -63,8 +63,8 @@ class SDEGP(object):
                 r_test = r_test[test_sort_ind]
         if r_test is None:
             r_test = np.empty((1,) + x_test.shape[1:]) * np.nan
-        (self.t_all, self.test_id, self.train_id, self.y_all,
-         self.mask, self.dt, self.dt_all, self.r_test) = self.input_admin(self.t_train, t_test, self.y, y_test, r_test)
+        (self.t_all, self.test_id, self.train_id, self.y_all, self.mask, self.dt,
+         self.dt_all, self.r_test) = self.input_admin(self.t_train, t_test, self.y, y_test, r_test)
         self.t_test = np.array(t_test)
         self.prior = prior
         self.likelihood = likelihood
@@ -104,17 +104,21 @@ class SDEGP(object):
         # else:
         #     r_test = t_test.copy()
         # here we use non-JAX numpy to sort out indexing of these static arrays
-        t_test_train = nnp.concatenate([t_test, t_train])
-        t_test_train = t_test_train[~np.isnan(t_test_train[:, 0]), :]
-        t, x_ind = nnp.unique(t_test_train, return_inverse=True, axis=0)
-        n_test = t_test[~np.isnan(t_test[:, 0]), ...].shape[0]  # number of test locations
-        test_id = x_ind[:n_test]  # index the test locations
-        train_id = x_ind[n_test:]  # index the training locations
+        # t_test_train = nnp.concatenate([t_test, t_train])
+        t_train_test = nnp.concatenate([t_train, t_test])
+        t_train_test = t_train_test[~np.isnan(t_train_test[:, 0]), :]
+        # t, x_ind = nnp.unique(t_test_train, return_inverse=True, axis=0)
+        _, order_ind, x_ind = nnp.unique(t_train_test[:, 0], return_index=True, return_inverse=True)
+        t = t_train_test[order_ind]
+        # n_test = t_test[~np.isnan(t_test[:, 0]), ...].shape[0]  # number of test locations
+        n_train = t_train.shape[0]
+        train_id = x_ind[:n_train]  # index the training locations
+        test_id = x_ind[n_train:]  # index the test locations
         y_all = nnp.nan * nnp.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
-        y_all[x_ind[n_test:], :] = y  # and the data at the train locations
+        y_all[x_ind[:n_train], :] = y  # and the data at the train locations
         if y_test is not None:
-            y_all[x_ind[:n_test], :] = y_test  # and the data at the train locations
-        mask = nnp.ones(y_all.shape[0], dtype=bool)
+            y_all[x_ind[n_train:], :] = y_test  # and the data at the train locations
+        mask = nnp.ones_like(y_all, dtype=bool)
         mask[train_id] = False
         dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
         dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t[:, 0])])
@@ -197,11 +201,12 @@ class SDEGP(object):
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, x)
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, x)
-        nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
-                                                         posterior_mean[self.test_id],
-                                                         posterior_cov[self.test_id],
-                                                         softplus_list(params[0]), softplus(params[1]),
-                                                         return_full)
+        # nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+        #                                                  posterior_mean[self.test_id],
+        #                                                  posterior_cov[self.test_id],
+        #                                                  softplus_list(params[0]), softplus(params[1]),
+        #                                                  return_full)
+        nlpd_test = 0.
         # posterior_mean, posterior_cov, site_params, nlpd_test = self.predict(y, dt, mask, site_params, sampling, x, True)
         mean_test_filt, cov_test_filt = filter_mean[self.test_id], filter_cov[self.test_id]
         mean_test, cov_test = posterior_mean[self.test_id], posterior_cov[self.test_id]
@@ -356,8 +361,6 @@ class SDEGP(object):
         """
         theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
         self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
-        if mask is not None:
-            mask = mask[..., np.newaxis]  # align mask.shape with y.shape
         N = dt.shape[0]
         with loops.Scope() as s:
             s.neg_log_marg_lik = 0.0  # negative log-marginal likelihood
@@ -382,7 +385,7 @@ class SDEGP(object):
                 predict_mean = H @ m_
                 predict_cov = H @ P_ @ H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    y_n = np.where(mask[n], predict_mean[:y_n.shape[0]], y_n)  # fill in masked obs with expectation
+                    y_n = np.where(mask[n], predict_mean[:y_n.shape[0], 0], y_n)  # fill in masked obs with expectation
                 log_lik_n, site_mean, site_cov = self.sites.update(self.likelihood, y_n, predict_mean, predict_cov,
                                                                    theta_lik, None)
                 if site_params is not None:  # use supplied site parameters to perform the update
@@ -393,8 +396,8 @@ class SDEGP(object):
                 s.m = m_ + K @ (site_mean - predict_mean)
                 s.P = P_ - K @ S @ K.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    s.m = np.where(mask[n], m_, s.m)
-                    s.P = np.where(mask[n], P_, s.P)
+                    s.m = np.where(np.any(mask[n]), m_, s.m)
+                    s.P = np.where(np.any(mask[n]), P_, s.P)
                     log_lik_n = np.where(mask[n][..., 0], np.zeros_like(log_lik_n), log_lik_n)
                 s.neg_log_marg_lik -= np.sum(log_lik_n)
                 if store:
