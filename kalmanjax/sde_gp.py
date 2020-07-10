@@ -30,48 +30,46 @@ class SDEGP(object):
         - Extended Kalman smoother (EKS)
         - Variational Inference - with natural gradients (VI)
     """
-    def __init__(self, prior, likelihood, x, y, r=None, x_test=None, y_test=None, r_test=None, approx_inf=None):
+    def __init__(self, prior, likelihood, t, y, r=None, t_test=None, y_test=None, r_test=None, approx_inf=None):
         """
         :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
         :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
-        :param x: training inputs
+        :param t: training inputs
         :param y: training data / observations
         :param r: training spatial points
-        :param x_test: test inputs
+        :param t_test: test inputs
         :param y_test: test data / observations
         :param r_test: test spatial points
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, VI, UKS, ...)
         """
-        assert x.shape[0] == y.shape[0]
+        assert t.shape[0] == y.shape[0]
         if r is None:
-            r = nnp.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
-        x, ind = nnp.unique(x, return_index=True, axis=0)
-        if x.ndim < 2:
-            x = nnp.expand_dims(x, 1)  # make 2-D
+            r = nnp.nan * t  # np.empty((1,) + x.shape[1:]) * np.nan
+        t, ind = nnp.unique(t, return_index=True, axis=0)
+        if t.ndim < 2:
+            t = nnp.expand_dims(t, 1)  # make 2-D
         if y.ndim < 2:
             y = nnp.expand_dims(y, 1)  # make 2-D
         if r.ndim < 2:
             r = nnp.expand_dims(r, 1)  # make 2-D
         y = y[ind, :]
         r = r[ind, :]
-        self.t_train = x
+        self.t_train = t
         self.y = np.array(y)
         self.r_train = np.array(r)
-        if x_test is None:
-            t_test = np.empty((1,) + x.shape[1:]) * np.nan
+        if t_test is None:
+            t_test = np.empty((1,) + t.shape[1:]) * np.nan
+            self.r_test = np.empty((1,) + t.shape[1:]) * np.nan
         else:
-            t_test, test_sort_ind = nnp.unique(nnp.squeeze(x_test), return_index=True, axis=0)  # test inputs
+            t_test, test_sort_ind = nnp.unique(nnp.squeeze(t_test), return_index=True, axis=0)  # test inputs
             if t_test.ndim < 2:
-                # t_test = t_test.reshape((-1,) + x.shape[1:])
                 t_test = nnp.expand_dims(t_test, 1)
             if y_test is not None:
                 y_test = y_test[test_sort_ind].reshape((-1,) + y.shape[1:])
             if r_test is not None:
-                r_test = r_test[test_sort_ind]
-        if r_test is None:
-            self.r_test = np.nan * t_test
-        else:
-            self.r_test = r_test
+                self.r_test = r_test[test_sort_ind]
+            else:
+                self.r_test = np.nan * t_test
         (self.t_all, self.test_id, self.train_id, self.y_all, self.mask, self.dt,
          self.dt_all, self.r_all) = self.input_admin(self.t_train, t_test, self.y, y_test, r, self.r_test)
         self.t_test = np.array(t_test)
@@ -88,14 +86,15 @@ class SDEGP(object):
         print('inference method is', self.sites.name)
 
     @staticmethod
-    def input_admin(t_train, t_test, y, y_test, r_train, r_test):
+    def input_admin(t_train, t_test, y_train, y_test, r_train, r_test):
         """
         Order the inputs, remove duplicates, and index the train and test input locations.
         :param t_train: training inputs [N, 1]
         :param t_test: testing inputs [N*, 1]
-        :param y: observations at the training inputs [N, 1]
+        :param y_train: observations at the training inputs [N, 1]
         :param y_test: observations at the test inputs [N*, 1]
-
+        :param r_train: training spatial inputs
+        :param r_test: test spatial inputs
         :return:
             t: the combined and sorted training and test inputs [N + N*, 1]
             test_id: an array of indices corresponding to the test inputs [N*, 1]
@@ -108,10 +107,6 @@ class SDEGP(object):
         if not (t_test.shape[1] == t_train.shape[1]):
             t_test = np.concatenate([t_test[:, 0][:, None],
                                      np.nan * np.empty([t_test.shape[0], t_train.shape[1]-1])], axis=1)
-        #     r_test = t_test.copy()  # spacial test points
-        #     t_test = t_test[:, :t_train.shape[1]]  # temporal test points
-        # else:
-        #     r_test = t_test.copy()
         # here we use non-JAX numpy to sort out indexing of these static arrays
         # t_test_train = nnp.concatenate([t_test, t_train])
         t_train_test = nnp.concatenate([t_train, t_test])
@@ -120,16 +115,14 @@ class SDEGP(object):
         r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
         r_train_test = nnp.concatenate([r_train, r_test_nan])
         r_train_test = r_train_test[keep_ind, :]
-        # t, x_ind = nnp.unique(t_test_train, return_inverse=True, axis=0)
         _, order_ind, x_ind = nnp.unique(t_train_test[:, 0], return_index=True, return_inverse=True)
         t = t_train_test[order_ind]
         r = r_train_test[order_ind]
-        # n_test = t_test[~np.isnan(t_test[:, 0]), ...].shape[0]  # number of test locations
         n_train = t_train.shape[0]
         train_id = x_ind[:n_train]  # index the training locations
         test_id = x_ind[n_train:]  # index the test locations
-        y_all = nnp.nan * nnp.zeros([t.shape[0], y.shape[1]])  # observation vector with nans at test locations
-        y_all[x_ind[:n_train], :] = y  # and the data at the train locations
+        y_all = nnp.nan * nnp.zeros([t.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
+        y_all[x_ind[:n_train], :] = y_train  # and the data at the train locations
         if y_test is not None:
             y_all[x_ind[n_train:], :] = y_test  # and the data at the train locations
         mask = nnp.ones_like(y_all, dtype=bool)
@@ -242,7 +235,7 @@ class SDEGP(object):
         H = self.prior.measurement_model(r, hyp_prior)
         return H @ mean, H @ cov @ H.T
 
-    def negative_log_predictive_density(self, x_test, y_test, m_test, v_test, hyp_prior, hyp_lik, full_cov):
+    def negative_log_predictive_density(self, t_test, y_test, m_test, v_test, hyp_prior, hyp_lik, full_cov):
         """
         Compute the (normalised) negative log predictive density (NLPD) of the test data yₙ*:
             NLPD = - ∑ₙ log ∫ p(yₙ*|fₙ*) 𝓝(fₙ*|mₙ*,vₙ*) dfₙ*
@@ -260,7 +253,7 @@ class SDEGP(object):
             measure_func = vmap(
                 self.compute_measurement, (0, 0, 0, None)
             )
-            m_test, v_test = measure_func(x_test, m_test, v_test, hyp_prior)
+            m_test, v_test = measure_func(t_test, m_test, v_test, hyp_prior)
         lpd_func = vmap(
             self.likelihood.moment_match, (0, 0, 0, None, None, None)
         )
@@ -505,21 +498,21 @@ class SDEGP(object):
             return site_params, s.smoothed_mean, s.smoothed_cov
         return site_params
 
-    def prior_sample(self, num_samps, x=None):
+    def prior_sample(self, num_samps, t=None):
         """
         Sample from the model prior f~N(0,K) multiple times using a nested loop.
         :param num_samps: the number of samples to draw [scalar]
-        :param x: the input locations at which to sample (defaults to train+test set) [N_samp, 1]
+        :param t: the input locations at which to sample (defaults to train+test set) [N_samp, 1]
         :return:
             f_sample: the prior samples [S, N_samp]
         """
         self.update_model(softplus_list(self.prior.hyp))
-        if x is None:
-            x = self.t_all
+        if t is None:
+            t = self.t_all
         else:
-            x_ind = np.argsort(x[:, 0])
-            x = x[x_ind]
-        dt = np.concatenate([np.array([0.0]), np.diff(x[:, 0])])
+            x_ind = np.argsort(t[:, 0])
+            t = t[x_ind]
+        dt = np.concatenate([np.array([0.0]), np.diff(t[:, 0])])
         N = dt.shape[0]
         with loops.Scope() as s:
             s.f_sample = np.zeros([N, self.func_dim, num_samps])
@@ -532,7 +525,7 @@ class SDEGP(object):
                     C = np.linalg.cholesky(Q + 1e-6 * np.eye(self.state_dim))  # <--- can be a bit unstable
                     # we need to provide a different PRNG seed every time:
                     s.m = A @ s.m + C @ random.normal(random.PRNGKey(i*k+k), shape=[self.state_dim, 1])
-                    H = self.prior.measurement_model(x[k, 1:], softplus_list(self.prior.hyp))
+                    H = self.prior.measurement_model(t[k, 1:], softplus_list(self.prior.hyp))
                     f = (H @ s.m).T
                     s.f_sample = index_add(s.f_sample, index[k, ..., i], np.squeeze(f))
         return s.f_sample
@@ -552,7 +545,7 @@ class SDEGP(object):
             the posterior samples [N_test, num_samps]
         """
         post_mean, _, (site_mean, site_cov), _ = self.predict(site_params=self.sites.site_params, compute_nlpd=False)
-        prior_samp = self.prior_sample(num_samps, x=self.t_all)
+        prior_samp = self.prior_sample(num_samps, t=self.t_all)
         prior_samp_y = sample_gaussian_noise(prior_samp, site_cov)
         with loops.Scope() as ss:
             ss.smoothed_sample = np.zeros(prior_samp_y.shape)

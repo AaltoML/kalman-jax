@@ -35,7 +35,7 @@ lik = likelihoods.Poisson()
 # inf_method = approx_inf.EEP()
 inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]

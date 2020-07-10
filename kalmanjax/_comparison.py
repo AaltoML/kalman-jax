@@ -27,8 +27,8 @@ lik = likelihoods.Probit()
 approx_inf_1 = approx_inf.EP()
 approx_inf_2 = approx_inf.VI()
 
-sde_gp_model_1 = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=approx_inf_1)
-sde_gp_model_2 = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, approx_inf=approx_inf_2)
+sde_gp_model_1 = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=approx_inf_1)
+sde_gp_model_2 = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=approx_inf_2)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]

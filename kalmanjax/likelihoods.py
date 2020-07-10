@@ -279,29 +279,29 @@ class Likelihood(object):
         return self.statistical_linear_regression_quadrature(m, v, hyp, cubature_func)
 
     @partial(jit, static_argnums=0)
-    def observation_model(self, f, r, hyp=None):
+    def observation_model(self, f, sigma, hyp=None):
         """
         The implicit observation model is:
-            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] rₙ
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] σₙ
         """
         conditional_expectation, conditional_covariance = self.conditional_moments(f, hyp)
-        obs_model = conditional_expectation + cholesky(conditional_covariance) @ r
+        obs_model = conditional_expectation + cholesky(conditional_covariance) @ sigma
         return np.squeeze(obs_model)
 
     @partial(jit, static_argnums=0)
-    def analytical_linearisation(self, m, r=None, hyp=None):
+    def analytical_linearisation(self, m, sigma=None, hyp=None):
         """
         TODO: check I have the square root correct for the variance term
         Compute the Jacobian of the state space observation model w.r.t. the
         function fₙ and the noise term rₙ.
         The implicit observation model is:
-            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] rₙ
-        The Jacobians are evaluated at the means, fₙ=m, rₙ=0, to be used during
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] σₙ
+        The Jacobians are evaluated at the means, fₙ=m, σₙ=0, to be used during
         Extended Kalman filtering and Extended EP.
         """
-        r = np.array([[0.0]]) if r is None else r
-        Jf, Jr = jacrev(self.observation_model, argnums=(0, 1))(m, r, hyp)
-        return np.atleast_2d(np.squeeze(Jf)), np.atleast_2d(np.squeeze(Jr))
+        sigma = np.array([[0.0]]) if sigma is None else sigma
+        Jf, Jsigma = jacrev(self.observation_model, argnums=(0, 1))(m, sigma, hyp)
+        return np.atleast_2d(np.squeeze(Jf)), np.atleast_2d(np.squeeze(Jsigma))
 
     @partial(jit, static_argnums=(0, 5))
     def variational_expectation_quadrature(self, y, m, v, hyp=None, cubature_func=None):
@@ -420,9 +420,6 @@ class Gaussian(Likelihood):
         :param variance: The observation noise variance, σ²
         """
         super().__init__(hyp=variance)
-        if self.hyp is None:
-            print('using default likelihood parameter since none was supplied')
-            self.hyp = 0.1
         self.name = 'Gaussian'
 
     @property
@@ -971,7 +968,7 @@ class AudioAmplitudeDemodulation(Likelihood):
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=0)
-    def analytical_linearisation(self, m, r=None, hyp=None):
+    def analytical_linearisation(self, m, sigma=None, hyp=None):
         """
         """
         obs_noise_var = hyp if hyp is not None else self.hyp

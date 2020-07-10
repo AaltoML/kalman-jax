@@ -1115,8 +1115,8 @@ class SpatioTemporalMatern52(Prior):
 
     @staticmethod
     def spatial_covariance(z, z_prime, ell):
-        r = np.sqrt(5) * np.abs(z - z_prime.T) / ell
-        return (1 + r + r**2 / 3) * np.exp(-r)
+        tau = np.sqrt(5) * np.abs(z - z_prime.T) / ell
+        return (1 + tau + tau**2 / 3) * np.exp(-tau)
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -1142,7 +1142,7 @@ class SpatioTemporalMatern52(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space, hyperparams=None):
+    def measurement_model(self, r, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell_space = hyperparams[2]
@@ -1151,7 +1151,7 @@ class SpatioTemporalMatern52(Prior):
             Kx = np.eye(self.z.shape[0])
         else:
             Kzz = self.spatial_covariance(self.z, self.z, ell_space)
-            Kxz = self.spatial_covariance(x_space.reshape(-1, 1), self.z, ell_space)
+            Kxz = self.spatial_covariance(r.reshape(-1, 1), self.z, ell_space)
             Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
         H = np.kron(Kx, H_time)
         return H
@@ -1205,8 +1205,8 @@ class SpatialMatern52(Prior):
 
     @staticmethod
     def spatial_covariance(z, z_prime, ell):
-        r = np.sqrt(5) * np.abs(z - z_prime.T) / ell
-        return (1 + r + r**2 / 3) * np.exp(-r)
+        tau = np.sqrt(5) * np.abs(z - z_prime.T) / ell
+        return (1 + tau + tau**2 / 3) * np.exp(-tau)
 
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
@@ -1232,7 +1232,7 @@ class SpatialMatern52(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space, hyperparams=None):
+    def measurement_model(self, r, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
@@ -1241,7 +1241,7 @@ class SpatialMatern52(Prior):
             Kx = np.eye(self.z.shape[0])
         else:
             Kzz = self.spatial_covariance(self.z, self.z, ell)
-            Kxz = self.spatial_covariance(x_space.reshape(-1, 1), self.z, ell)
+            Kxz = self.spatial_covariance(r.reshape(-1, 1), self.z, ell)
             Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
         H = np.kron(Kx, H_time)
         return H

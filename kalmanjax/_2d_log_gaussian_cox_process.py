@@ -35,7 +35,7 @@ inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
 
 # t_spacetime = np.block([t[..., 0][..., None], r])
 
-model = SDEGP(prior=prior, likelihood=lik, x=t, y=Y, r=r, x_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=t, y=Y, r=r, t_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -91,6 +91,7 @@ link_fn = model.likelihood.link_fn
 
 print('plotting ...')
 plt.figure(1, figsize=(10, 5))
+# im = plt.imshow(mu.T, extent=[0, 1000, 0, 500], origin='lower')
 im = plt.imshow(link_fn(mu).T / scale, extent=[0, 1000, 0, 500], origin='lower')
 plt.colorbar(im, fraction=0.0235, pad=0.04)
 plt.xlim(0, 1000)

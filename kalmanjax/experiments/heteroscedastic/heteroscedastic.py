@@ -120,7 +120,7 @@ elif method == 15:
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH', damping=0.5)
 
-model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=XT, y_test=YT, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, t_test=XT, y_test=YT, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-2)
 # parameters should be a 2-element list [param_prior, param_likelihood]

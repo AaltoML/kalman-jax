@@ -40,7 +40,7 @@ inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='UT')
 # inf_method = approx_inf.StatisticallyLinearisedEP(intmethod='UT')
 # inf_method = approx_inf.UnscentedKalmanSmoother()
 
-model = SDEGP(prior=prior, likelihood=lik, x=x, y=y, x_test=x_test, y_test=y_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, y_test=y_test, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]

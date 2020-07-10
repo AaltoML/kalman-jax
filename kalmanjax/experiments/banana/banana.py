@@ -99,7 +99,7 @@ prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time,
 
 lik = likelihoods.Bernoulli(link='logit')
 
-model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=XT, y_test=YT, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, t_test=XT, y_test=YT, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]

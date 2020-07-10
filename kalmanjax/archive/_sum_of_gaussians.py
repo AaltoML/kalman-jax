@@ -33,10 +33,10 @@ approx_inf_ = EP(power=1.)
 # approx_inf_ = IKS()
 # approx_inf_ = EKEP()
 
-sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=dummy_y, x_test=x_test, approx_inf=approx_inf_)
+sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, t=x, y=dummy_y, t_test=x_test, approx_inf=approx_inf_)
 
 print('generating some data by sampling from the prior ...')
-ground_truth = sde_gp_model.prior_sample(1, x=x)
+ground_truth = sde_gp_model.prior_sample(1, t=x)
 y = sde_gp_model.likelihood.sample(ground_truth)[:, 0, 0]
 
 # plt.figure(1, figsize=(12, 5))
@@ -45,7 +45,7 @@ y = sde_gp_model.likelihood.sample(ground_truth)[:, 0, 0]
 # plt.plot(x, y, '.')
 # plt.show()
 
-sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, x=x, y=y, x_test=x_test, approx_inf=approx_inf_)
+sde_gp_model = SDEGP(prior=prior_, likelihood=lik_, t=x, y=y, t_test=x_test, approx_inf=approx_inf_)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
