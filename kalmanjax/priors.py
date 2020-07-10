@@ -30,7 +30,7 @@ class Prior(object):
         raise NotImplementedError('kernel to state space mapping not implemented for this prior')
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         raise NotImplementedError('measurement model not implemented for this prior')
 
     @partial(jit, static_argnums=0)
@@ -85,7 +85,7 @@ class Exponential(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.array([[1.0]])
         return H
 
@@ -155,7 +155,7 @@ class Matern32(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.array([[1.0, 0.0]])
         return H
 
@@ -230,7 +230,7 @@ class Matern52(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.array([[1.0, 0.0, 0.0]])
         return H
 
@@ -317,7 +317,7 @@ class Matern72(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.array([[1, 0, 0, 0]])
         return H
 
@@ -388,7 +388,7 @@ class Cosine(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.array([[1.0, 0.0]])
         return H
 
@@ -469,7 +469,7 @@ class SubbandMatern12(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H_mat = np.array([[1.0]])
         H_cos = np.array([[1.0, 0.0]])
         H = np.kron(H_mat, H_cos)
@@ -575,7 +575,7 @@ class SubbandMatern32(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H_mat = np.array([[1.0, 0.0]])
         H_cos = np.array([[1.0, 0.0]])
         H = np.kron(H_mat, H_cos)
@@ -693,7 +693,7 @@ class SubbandMatern52(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H_mat = np.array([[1.0, 0.0, 0.0]])
         H_cos = np.array([[1.0, 0.0]])
         H = np.kron(H_mat, H_cos)
@@ -782,7 +782,7 @@ class Periodic(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         return H
 
@@ -899,7 +899,7 @@ class QuasiPeriodicMatern12(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H_p = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         H_m = np.array([[1.0]])
         H = np.kron(H_m, H_p)
@@ -1034,7 +1034,7 @@ class QuasiPeriodicMatern32(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H_p = np.kron(np.ones([1, self.order + 1]), np.array([1., 0.]))
         H_m = np.array([[1.0, 0.0]])
         H = np.kron(H_m, H_p)
@@ -1308,11 +1308,11 @@ class Sum(object):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         hyperparams = softplus_list(self.hyp) if hyperparams is None else hyperparams
-        H = self.components[0].measurement_model(x_space, hyperparams[0])
+        H = self.components[0].measurement_model(r, hyperparams[0])
         for i in range(1, len(self.components)):
-            H_ = self.components[i].measurement_model(x_space, hyperparams[i])
+            H_ = self.components[i].measurement_model(r, hyperparams[i])
             H = np.block([
                 H, H_
             ])
@@ -1380,11 +1380,11 @@ class Independent(object):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         hyperparams = softplus_list(self.hyp) if hyperparams is None else hyperparams
-        H = self.components[0].measurement_model(x_space, hyperparams[0])
+        H = self.components[0].measurement_model(r, hyperparams[0])
         for i in range(1, len(self.components)):
-            H_ = self.components[i].measurement_model(x_space, hyperparams[i])
+            H_ = self.components[i].measurement_model(r, hyperparams[i])
             H = np.block([
                 [H, np.zeros([H.shape[0], H_.shape[1]])],
                 [np.zeros([H_.shape[0], H.shape[1]]), H_]
@@ -1457,7 +1457,7 @@ class SubbandExponentialFixedVar(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H_mat = np.array([[1.0]])
         H_cos = np.array([[1.0, 0.0]])
         H = np.kron(H_mat, H_cos)
@@ -1505,7 +1505,7 @@ class Matern52FixedVar(Prior):
         return F, L, Qc, H, Pinf
 
     @partial(jit, static_argnums=0)
-    def measurement_model(self, x_space=None, hyperparams=None):
+    def measurement_model(self, r=None, hyperparams=None):
         H = np.array([[1.0, 0.0, 0.0]])
         return H
 
