@@ -23,9 +23,9 @@ class SDEGP(object):
     Currently implemented inference methods:
         - Power expectation propagation (PEP)
         - Posterior linearisation (PL)
-        - Cavity linearisation (CL)
-        - Iterated Kalman smoother (IKS)
-        - Extended Kalman EP (EKEP)
+        - Statistically Linearised EP (SLEP)
+        - Gauss-Hermite Kalman smoother (GHKS)
+        - Extended EP (EEP)
         - Extended Kalman smoother (EKS)
         - Variational Inference - with natural gradients (VI)
     """
