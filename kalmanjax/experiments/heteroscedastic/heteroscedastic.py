@@ -40,8 +40,8 @@ if len(sys.argv) > 1:
     fold = int(sys.argv[2])
     plot_final = False
 else:
-    method = 9
-    fold = 2
+    method = 10
+    fold = 1
     plot_final = True
 
 print('method number', method)
@@ -91,15 +91,21 @@ elif method == 8:
     inf_method = approx_inf.GHKS(damping=0.5)
 
 elif method == 9:
-    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.1)
     step_size = 1e-2
+    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.05)  # this method requies more damping
 elif method == 10:
-    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.5)
+    if fold in [1]:
+        inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.5)
+    else:
+        inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.5)
 elif method == 11:
     inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.5)
 
 elif method == 12:
-    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.5)
+    if fold in [3, 4, 6, 7, 9]:
+        inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.1)
+    else:
+        inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.5)
 elif method == 13:
     inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.5)
 elif method == 14:
