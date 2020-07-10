@@ -64,7 +64,7 @@ len_f2 = 1.  # GP lengthscale
 prior1 = priors.Matern32(variance=var_f1, lengthscale=len_f1)
 prior2 = priors.Matern32(variance=var_f2, lengthscale=len_f2)
 prior = priors.Independent([prior1, prior2])
-lik = likelihoods.HeteroschedasticNoise()
+lik = likelihoods.HeteroscedasticNoise()
 
 if method == 0:
     inf_method = approx_inf.EEP(power=1)
