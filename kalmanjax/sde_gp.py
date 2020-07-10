@@ -44,7 +44,7 @@ class SDEGP(object):
         """
         assert x.shape[0] == y.shape[0]
         if r is None:
-            r = np.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
+            r = nnp.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
         x, ind = nnp.unique(x, return_index=True, axis=0)
         if x.ndim < 2:
             x = nnp.expand_dims(x, 1)  # make 2-D
@@ -68,13 +68,8 @@ class SDEGP(object):
                 y_test = y_test[test_sort_ind].reshape((-1,) + y.shape[1:])
             if r_test is not None:
                 r_test = r_test[test_sort_ind]
-        if r is None:
-            r = np.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
-        elif r.ndim < 2:
-            r = nnp.expand_dims(r, 1)  # make 2-D
         if r_test is None:
-            self.r_test = np.nan * t_test  # np.empty((1,) + x_test.shape[1:]) * np.nan
-            # self.r_test = np.zeros_like(t_test)  # np.empty((1,) + x_test.shape[1:]) * np.nan
+            self.r_test = np.nan * t_test
         else:
             self.r_test = r_test
         (self.t_all, self.test_id, self.train_id, self.y_all, self.mask, self.dt,
