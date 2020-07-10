@@ -14,11 +14,13 @@ pi = 3.141592653589793
 plot_intermediate = False
 
 print('loading banana data ...')
-X = np.loadtxt('../data/banana_X_train', delimiter=',')
+inputs = np.loadtxt('../data/banana_X_train', delimiter=',')
+X = inputs[:, :1]
+R = inputs[:, 1:]
 Y = np.loadtxt('../data/banana_Y_train')[:, None]
 
 # Test points
-Xtest, Ytest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
+Xtest, Rtest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
 # Xtest = np.vstack((Xtest.flatten(), Ytest.flatten())).T
 # X0test, X1test = np.linspace(-3., 3., num=100), np.linspace(-3., 3., num=100)
 
@@ -39,7 +41,7 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EKEP()
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, x_test=Xtest, r_test=Ytest, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=X, y=Y, r=R, x_test=Xtest, r_test=Rtest, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -102,9 +104,9 @@ plt.figure(1)
 for label, mark in [[1, 'o'], [0, 'o']]:
     ind = Y[:, 0] == label
     # ax.plot(X[ind, 0], X[ind, 1], mark)
-    plt.scatter(X[ind, 0], X[ind, 1], s=50, alpha=.5)
+    plt.scatter(X[ind], R[ind], s=50, alpha=.5)
 # ax.imshow(mu.T)
-plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=4.)
+plt.contour(Xtest, Rtest, mu, levels=[.0], colors='k', linewidths=4.)
 # plt.axis('equal')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
@@ -125,11 +127,11 @@ im = plt.imshow(link_fn(mu).T, cmap=newcmp, extent=[-lim, lim, -lim, lim], origi
 cb = plt.colorbar(im)
 cb.set_ticks([cb.vmin, 0, cb.vmax])
 cb.set_ticklabels([-1, 0, 1])
-plt.contour(Xtest, Ytest, mu, levels=[.0], colors='k', linewidths=1.5)
+plt.contour(Xtest, Rtest, mu, levels=[.0], colors='k', linewidths=1.5)
 # plt.axis('equal')
 for label in [1, 0]:
     ind = Y[:, 0] == label
-    plt.scatter(X[ind, 0], X[ind, 1], s=50, alpha=.5, edgecolor='k')
+    plt.scatter(X[ind], R[ind], s=50, alpha=.5, edgecolor='k')
 # plt.title('Iteration: %02d' % (j + 1), loc='right', fontweight='bold')
 plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
 plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)

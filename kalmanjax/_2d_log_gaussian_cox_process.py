@@ -35,9 +35,9 @@ lik = likelihoods.Poisson()
 inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
 # inf_method = approx_inf.ExtendedEP()
 
-t_spacetime = np.block([t[..., 0][..., None], r])
+# t_spacetime = np.block([t[..., 0][..., None], r])
 
-model = SDEGP(prior=prior, likelihood=lik, x=t_spacetime, y=Y, x_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, x=t, y=Y, r=r, x_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -64,7 +64,7 @@ plot_num = 0
 mu_prev = None
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(200):
+for j in range(2):
     opt_state, plot_num, mu_prev = gradient_step(j, opt_state, model, plot_num, mu_prev)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
