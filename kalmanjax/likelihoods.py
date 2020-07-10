@@ -45,6 +45,7 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 6))
     def moment_match_quadrature(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
+        TODO: N.B. THIS VERSION IS SUPERCEDED BY THE FUNCTION BELOW. HOWEVER THIS ONE MAY BE MORE STABLE.
         Perform moment matching via Gauss-Hermite quadrature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
             logZₙ = log ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -64,9 +65,9 @@ class Likelihood(object):
             x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(cav_mean.shape[0])
-        # sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
         cav_cho, low = cho_factor(cav_cov)
-        sigma_points = cav_cho @ np.atleast_2d(x) + cav_mean  # fsigᵢ=xᵢ√cₙ + mₙ: scale locations according to cavity dist.
+        # fsigᵢ=xᵢ√cₙ + mₙ: scale locations according to cavity dist.
+        sigma_points = cav_cho @ np.atleast_2d(x) + cav_mean
         # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
@@ -116,6 +117,7 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 6))
     def moment_match_quadrature(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
+        TODO: N.B. THIS VERSION ALLOWS MULTI-DIMENSIONAL MOMENT MATCHING, BUT CAN BE UNSTABLE
         Perform moment matching via Gauss-Hermite quadrature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
             logZₙ = log ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -135,9 +137,9 @@ class Likelihood(object):
             x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(cav_mean.shape[0])
-        # sigma_points = np.sqrt(2) * np.sqrt(v) * x + m  # scale locations according to cavity dist.
         cav_cho, low = cho_factor(cav_cov)
-        sigma_points = cav_cho @ np.atleast_2d(x) + cav_mean  # fsigᵢ=xᵢ√cₙ + mₙ: scale locations according to cavity dist.
+        # fsigᵢ=xᵢ√cₙ + mₙ: scale locations according to cavity dist.
+        sigma_points = cav_cho @ np.atleast_2d(x) + cav_mean
         # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
@@ -204,46 +206,8 @@ class Likelihood(object):
             x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(cav_mean.shape[0])
-        sigma_points = np.sqrt(cav_cov) * x + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
-        lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
-        # Compute zₙ via quadrature:
-        # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
-        mu = np.sum(
-            w * lik_expectation
-        )
-        # Compute variance S via quadrature:
-        # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
-        S = np.sum(
-            w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance)
-        )
-        # Compute cross covariance C via quadrature:
-        # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
-        C = np.sum(
-            w * (sigma_points - cav_mean) * (lik_expectation - mu)
-        )
-        # Compute derivative of z via quadrature:
-        # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
-        omega = np.sum(
-            w * lik_expectation * cav_cov ** -1 * (sigma_points - cav_mean)
-        )
-        return mu, S, C, omega
-
-    @partial(jit, static_argnums=(0, 4))
-    def statistical_linear_regression_quadrature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
-        """
-        Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
-        We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
-        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
-        """
-        if cubature_func is None:
-            x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
-        else:
-            x, w = cubature_func(cav_mean.shape[0])
-        sigma_points = cholesky(cav_cov) @ np.atleast_2d(x) + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        # fsigᵢ=xᵢ√(vₙ) + mₙ: scale locations according to cavity dist.
+        sigma_points = cholesky(cav_cov) @ np.atleast_2d(x) + cav_mean
         lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
@@ -291,7 +255,6 @@ class Likelihood(object):
     @partial(jit, static_argnums=0)
     def analytical_linearisation(self, m, sigma=None, hyp=None):
         """
-        TODO: check I have the square root correct for the variance term
         Compute the Jacobian of the state space observation model w.r.t. the
         function fₙ and the noise term rₙ.
         The implicit observation model is:
@@ -302,52 +265,6 @@ class Likelihood(object):
         sigma = np.array([[0.0]]) if sigma is None else sigma
         Jf, Jsigma = jacrev(self.observation_model, argnums=(0, 1))(m, sigma, hyp)
         return np.atleast_2d(np.squeeze(Jf)), np.atleast_2d(np.squeeze(Jsigma))
-
-    @partial(jit, static_argnums=(0, 5))
-    def variational_expectation_quadrature(self, y, m, v, hyp=None, cubature_func=None):
-        """
-        Computes the "variational expectation" via Gauss-Hermite quadrature, i.e. the
-        expected log-likelihood, and its derivatives w.r.t. the posterior mean
-            E[log p(yₙ|fₙ)] = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        with EP power a.
-        :param y: observed data (yₙ) [scalar]
-        :param m: posterior mean (mₙ) [scalar]
-        :param v: posterior variance (vₙ) [scalar]
-        :param hyp: likelihood hyperparameter [scalar]
-        :param cubature_func: the function to compute sigma points and weights to use during cubature
-        :return:
-            exp_log_lik: the expected log likelihood, E[log p(yₙ|fₙ)]  [scalar]
-            dE_dm: derivative of E[log p(yₙ|fₙ)] w.r.t. mₙ  [scalar]
-            dE_dv: derivative of E[log p(yₙ|fₙ)] w.r.t. vₙ  [scalar]
-        """
-        if cubature_func is None:
-            x, w = gauss_hermite(m.shape[0], 20)  # Gauss-Hermite sigma points and weights
-        else:
-            x, w = cubature_func(m.shape[0])
-        sigma_points = np.sqrt(v) * x + m  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
-        # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
-        weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
-        # Compute expected log likelihood via quadrature:
-        # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                 ≈ ∑ᵢ wᵢ p(yₙ|fsigᵢ)
-        exp_log_lik = np.sum(
-            weighted_log_likelihood_eval
-        )
-        # Compute first derivative via quadrature:
-        # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fsigᵢ)
-        dE_dm = np.sum(
-            (sigma_points - m) / v
-            * weighted_log_likelihood_eval
-        )
-        # Compute second derivative via quadrature:
-        # dE[log p(yₙ|fₙ)]/dvₙ = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fsigᵢ)
-        dE_dv = np.sum(
-            (0.5 * (v ** -2) * (sigma_points - m) ** 2 - 0.5 * v ** -1)
-            * weighted_log_likelihood_eval
-        )
-        return exp_log_lik, dE_dm, dE_dv
 
     @partial(jit, static_argnums=(0, 5))
     def variational_expectation_quadrature(self, y, post_mean, post_cov, hyp=None, cubature_func=None):
@@ -370,7 +287,8 @@ class Likelihood(object):
             x, w = gauss_hermite(post_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(post_mean.shape[0])
-        sigma_points = cholesky(post_cov) @ np.atleast_2d(x) + post_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        # fsigᵢ=xᵢ√(vₙ) + mₙ: scale locations according to cavity dist.
+        sigma_points = cholesky(post_cov) @ np.atleast_2d(x) + post_mean
         # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
         # Compute expected log likelihood via quadrature:
@@ -382,11 +300,6 @@ class Likelihood(object):
         # Compute first derivative via quadrature:
         # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fsigᵢ)
-        # invC = inv(post_cov)
-        # dE_dm = np.sum(
-        #     invC @ (sigma_points - post_mean)
-        #     * weighted_log_likelihood_eval, axis=-1
-        # )[:, None]
         invv = np.diag(post_cov)[:, None] ** -1
         dE_dm = np.sum(
             invv * (sigma_points - post_mean)
@@ -785,8 +698,7 @@ class HeteroscedasticNoise(Likelihood):
     @partial(jit, static_argnums=(0, 6))
     def moment_match_unstable(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
-        An attempt to compute the full site covariance, including cross terms. However, using these cross
-        terms makes things somewhat unstable.
+        TODO: Attempt to compute full site covariance, including cross terms. However, this makes things unstable.
         """
         if cubature_func is None:
             x, w = gauss_hermite(1, 20)  # Gauss-Hermite sigma points and weights
@@ -851,14 +763,14 @@ class HeteroscedasticNoise(Likelihood):
         """
         Perform statistical linear regression (SLR) using quadrature.
         We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
-        TODO: this currently assumes an additive noise model (ok for our current applications), make more general
         """
         if cubature_func is None:
             x, w = gauss_hermite(cav_mean.shape[0], 20)  # Gauss-Hermite sigma points and weights
         else:
             x, w = cubature_func(cav_mean.shape[0])
         m0, m1, v0, v1 = cav_mean[0, 0], cav_mean[1, 0], cav_cov[0, 0], cav_cov[1, 1]
-        sigma_points = cholesky(cav_cov) @ x + cav_mean  # fsigᵢ=xᵢ√(2vₙ) + mₙ: scale locations according to cavity dist.
+        # fsigᵢ=xᵢ√(vₙ) + mₙ: scale locations according to cavity dist.
+        sigma_points = cholesky(cav_cov) @ x + cav_mean
         var = self.link_fn(sigma_points[1]) ** 2
         # Compute zₙ via quadrature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
