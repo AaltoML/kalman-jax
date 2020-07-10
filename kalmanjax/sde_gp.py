@@ -43,16 +43,16 @@ class SDEGP(object):
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, VI, UKS, ...)
         """
         assert x.shape[0] == y.shape[0]
+        if r is None:
+            r = np.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
         x, ind = nnp.unique(x, return_index=True, axis=0)
         if x.ndim < 2:
             x = nnp.expand_dims(x, 1)  # make 2-D
         if y.ndim < 2:
             y = nnp.expand_dims(y, 1)  # make 2-D
-        y = y[ind, :]
-        if r is None:
-            r = np.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
-        elif r.ndim < 2:
+        if r.ndim < 2:
             r = nnp.expand_dims(r, 1)  # make 2-D
+        y = y[ind, :]
         r = r[ind, :]
         self.t_train = x
         self.y = np.array(y)
