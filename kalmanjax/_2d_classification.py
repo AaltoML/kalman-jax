@@ -72,7 +72,7 @@ plot_num = 0
 mu_prev = None
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(30):
+for j in range(50):
     opt_state, plot_num, mu_prev = gradient_step(j, opt_state, model, plot_num, mu_prev)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -80,15 +80,12 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_cov, _, nlpd = model.predict()
-mu, var, _, nlpd_test, _, _ = model.predict_2d()
+mu, var, _, nlpd_test = model.predict(return_full=True)
 mu = np.squeeze(mu)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 # print('test NLPD: %1.2f' % nlpd)
 
-lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0] ** 0.5
-ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
 x_pred = model.t_all
 link_fn = model.likelihood.link_fn
 

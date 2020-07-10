@@ -59,7 +59,8 @@ class SDEGP(object):
         self.sites = EP() if approx_inf is None else approx_inf
         print('inference method is', self.sites.name)
 
-    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None, return_full=False, compute_nlpd=True):
+    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False,
+                r=None, return_full=False, compute_nlpd=True):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -70,6 +71,10 @@ class SDEGP(object):
         :param mask: a boolean array signifying which elements are observed and which are nan [M, 1]
         :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
         :param sampling: notify whether we are doing posterior sampling
+        :param r: spatial locations [M, R]
+        :param return_full: flag to notify if we are handling the case where spatial test locations are a different
+                            size to training locations
+        :param compute_nlpd: flag to notify whether to compute the negative log predictive density of the test data
         :return:
             posterior_mean: the posterior predictive mean [M, state_dim] or [M, obs_dim]
             posterior_cov: the posterior predictive (co)variance [M, M, state_dim] or [M, obs_dim]
@@ -101,60 +106,15 @@ class SDEGP(object):
                                                              return_full)
         else:
             nlpd_test = np.nan
+        # in the spatial model, the train and test points may be of different size. This deals with that situation:
+        if return_full:
+            measure_func = vmap(
+                self.compute_measurement, (0, 0, 0, None)
+            )
+            posterior_mean, posterior_cov = measure_func(self.r_test,
+                                                         posterior_mean[self.test_id], posterior_cov[self.test_id],
+                                                         softplus_list(self.prior.hyp))
         return posterior_mean, posterior_cov, site_params, nlpd_test
-
-    def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None, compute_nlpd=True):
-        """
-        Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
-        training & test locations.
-        This function is also used during posterior sampling to smooth the auxillary data sampled from the prior.
-        The output shapes depend on return_full
-        :param y: observations (nans at test locations) [M, 1]
-        :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [M, 1]
-        :param mask: a boolean array signifying which elements are observed and which are nan [M, 1]
-        :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
-        :param sampling: notify whether we are doing posterior sampling
-        :return:
-            posterior_mean: the posterior predictive mean [M, state_dim] or [M, obs_dim]
-            posterior_cov: the posterior predictive (co)variance [M, M, state_dim] or [M, obs_dim]
-            site_params: the site parameters. If none are provided then new sites are computed [2, M, obs_dim]
-        """
-        return_full = True
-        y = self.y_all if y is None else y
-        r = self.r_all if r is None else r
-        dt = self.dt_all if dt is None else dt
-        mask = self.mask if mask is None else mask
-        params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        site_params = self.sites.site_params if site_params is None else site_params
-        if site_params is not None and not sampling:
-            # construct a vector of site parameters that is the full size of the test data
-            # test site parameters are 𝓝(0,∞), and will not be used
-            site_mean = np.zeros([dt.shape[0], self.func_dim, 1])
-            site_cov = 1e5 * np.tile(np.eye(self.func_dim), (dt.shape[0], 1, 1))
-            # replace parameters at training locations with the supplied sites
-            site_mean = index_add(site_mean, index[self.train_id], site_params[0])
-            site_cov = index_update(site_cov, index[self.train_id], site_params[1])
-            site_params = (site_mean, site_cov)
-        _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, r)
-        _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
-                                                                             True, return_full, None, None, r)
-        if compute_nlpd:
-            nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
-                                                             posterior_mean[self.test_id],
-                                                             posterior_cov[self.test_id],
-                                                             softplus_list(params[0]), softplus(params[1]),
-                                                             return_full)
-        else:
-            nlpd_test = np.nan
-        mean_test_filt, cov_test_filt = filter_mean[self.test_id], filter_cov[self.test_id]
-        mean_test, cov_test = posterior_mean[self.test_id], posterior_cov[self.test_id]
-        measure_func = vmap(
-            self.compute_measurement, (0, 0, 0, None)
-        )
-        m_test_filt, v_test_filt = measure_func(self.r_test, mean_test_filt,
-                                                cov_test_filt, softplus_list(self.prior.hyp))
-        m_test, v_test = measure_func(self.r_test, mean_test, cov_test, softplus_list(self.prior.hyp))
-        return m_test, v_test, site_params, nlpd_test, m_test_filt, v_test_filt
 
     @partial(jit, static_argnums=0)
     def compute_measurement(self, r, mean, cov, hyp_prior):
