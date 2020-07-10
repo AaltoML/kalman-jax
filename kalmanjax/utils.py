@@ -74,6 +74,53 @@ def softplus_inv(x_):
         return np.log(1 - np.exp(-np.abs(x_))) + np.maximum(x_, 0)  # safer version
 
 
+def input_admin(t_train, t_test, y_train, y_test, r_train, r_test):
+    """
+    Order the inputs, remove duplicates, and index the train and test input locations.
+    :param t_train: training inputs [N, 1]
+    :param t_test: testing inputs [N*, 1]
+    :param y_train: observations at the training inputs [N, 1]
+    :param y_test: observations at the test inputs [N*, 1]
+    :param r_train: training spatial inputs
+    :param r_test: test spatial inputs
+    :return:
+        t: the combined and sorted training and test inputs [N + N*, 1]
+        test_id: an array of indices corresponding to the test inputs [N*, 1]
+        train_id: an array of indices corresponding to the training inputs [N, 1]
+        y_all: an array observations y augmented with nans at test locations [N + N*, 1]
+        mask: boolean array to signify training locations [N + N*, 1]
+        dt: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
+        dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
+    """
+    if not (t_test.shape[1] == t_train.shape[1]):
+        t_test = np.concatenate([t_test[:, 0][:, None],
+                                 np.nan * np.empty([t_test.shape[0], t_train.shape[1]-1])], axis=1)
+    # here we use non-JAX numpy to sort out indexing of these static arrays
+    t_train_test = nnp.concatenate([t_train, t_test])
+    keep_ind = ~np.isnan(t_train_test[:, 0])
+    t_train_test = t_train_test[keep_ind, ...]
+    r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
+    r_train_test = nnp.concatenate([r_train, r_test_nan])
+    r_train_test = r_train_test[keep_ind, ...]
+    t_ind = nnp.argsort(t_train_test[:, 0])
+    t = t_train_test[t_ind]
+    r = r_train_test[t_ind]
+    reverse_ind = nnp.argsort(t_ind)
+    n_train = t_train.shape[0]
+    train_id = reverse_ind[:n_train]  # index the training locations
+    test_id = reverse_ind[n_train:]  # index the test locations
+    y_all = nnp.nan * nnp.zeros([t.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
+    y_all[reverse_ind[:n_train], ...] = y_train  # and the data at the train locations
+    if y_test is not None:
+        y_all[reverse_ind[n_train:], ...] = y_test  # and the data at the train locations
+    mask = nnp.ones_like(y_all, dtype=bool)
+    mask[train_id] = False
+    dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
+    dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t[:, 0])])
+    return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
+            np.array(mask), np.array(dt), np.array(dt_all), np.array(r))
+
+
 def logphi(z):
     """
     Calculate the log Gaussian CDF, used for closed form moment matching when the EP power is 1,

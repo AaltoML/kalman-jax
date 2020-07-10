@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax.ops import index, index_update, index_add
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random, vmap
-from utils import softplus, softplus_list, sample_gaussian_noise, solve
+from utils import softplus, softplus_list, sample_gaussian_noise, solve, input_admin
 import numpy as nnp  # "normal" numpy
 from approximate_inference import EP
 from jax.config import config
@@ -43,17 +43,18 @@ class SDEGP(object):
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, VI, UKS, ...)
         """
         assert t.shape[0] == y.shape[0]
-        if r is None:
-            r = nnp.nan * t  # np.empty((1,) + x.shape[1:]) * np.nan
-        t, ind = nnp.unique(t, return_index=True, axis=0)
         if t.ndim < 2:
             t = nnp.expand_dims(t, 1)  # make 2-D
         if y.ndim < 2:
             y = nnp.expand_dims(y, 1)  # make 2-D
+        if r is None:
+            r = nnp.nan * t  # np.empty((1,) + x.shape[1:]) * np.nan
         if r.ndim < 2:
             r = nnp.expand_dims(r, 1)  # make 2-D
-        y = y[ind, :]
-        r = r[ind, :]
+        ind = nnp.argsort(t[:, 0], axis=0)
+        t = t[ind, ...]
+        y = y[ind, ...]
+        r = r[ind, ...]
         self.t_train = t
         self.y = np.array(y)
         self.r_train = np.array(r)
@@ -61,17 +62,18 @@ class SDEGP(object):
             t_test = np.empty((1,) + t.shape[1:]) * np.nan
             self.r_test = np.empty((1,) + t.shape[1:]) * np.nan
         else:
-            t_test, test_sort_ind = nnp.unique(nnp.squeeze(t_test), return_index=True, axis=0)  # test inputs
             if t_test.ndim < 2:
-                t_test = nnp.expand_dims(t_test, 1)
+                t_test = nnp.expand_dims(t_test, 1)  # make 2-D
+            test_sort_ind = nnp.argsort(t_test[:, 0], axis=0)
+            t_test = t_test[test_sort_ind, ...]
             if y_test is not None:
-                y_test = y_test[test_sort_ind].reshape((-1,) + y.shape[1:])
+                y_test = y_test[test_sort_ind, ...].reshape((-1,) + y.shape[1:])
             if r_test is not None:
-                self.r_test = r_test[test_sort_ind]
+                self.r_test = r_test[test_sort_ind, ...]
             else:
                 self.r_test = np.nan * t_test
         (self.t_all, self.test_id, self.train_id, self.y_all, self.mask, self.dt,
-         self.dt_all, self.r_all) = self.input_admin(self.t_train, t_test, self.y, y_test, r, self.r_test)
+         self.dt_all, self.r_all) = input_admin(self.t_train, t_test, self.y, y_test, r, self.r_test)
         self.t_test = np.array(t_test)
         self.prior = prior
         self.likelihood = likelihood
@@ -84,53 +86,6 @@ class SDEGP(object):
         self.minf = np.zeros([self.state_dim, 1])  # stationary state mean
         self.sites = EP() if approx_inf is None else approx_inf
         print('inference method is', self.sites.name)
-
-    @staticmethod
-    def input_admin(t_train, t_test, y_train, y_test, r_train, r_test):
-        """
-        Order the inputs, remove duplicates, and index the train and test input locations.
-        :param t_train: training inputs [N, 1]
-        :param t_test: testing inputs [N*, 1]
-        :param y_train: observations at the training inputs [N, 1]
-        :param y_test: observations at the test inputs [N*, 1]
-        :param r_train: training spatial inputs
-        :param r_test: test spatial inputs
-        :return:
-            t: the combined and sorted training and test inputs [N + N*, 1]
-            test_id: an array of indices corresponding to the test inputs [N*, 1]
-            train_id: an array of indices corresponding to the training inputs [N, 1]
-            y_all: an array observations y augmented with nans at test locations [N + N*, 1]
-            mask: boolean array to signify training locations [N + N*, 1]
-            dt: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
-            dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
-        """
-        if not (t_test.shape[1] == t_train.shape[1]):
-            t_test = np.concatenate([t_test[:, 0][:, None],
-                                     np.nan * np.empty([t_test.shape[0], t_train.shape[1]-1])], axis=1)
-        # here we use non-JAX numpy to sort out indexing of these static arrays
-        # t_test_train = nnp.concatenate([t_test, t_train])
-        t_train_test = nnp.concatenate([t_train, t_test])
-        keep_ind = ~np.isnan(t_train_test[:, 0])
-        t_train_test = t_train_test[keep_ind, :]
-        r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
-        r_train_test = nnp.concatenate([r_train, r_test_nan])
-        r_train_test = r_train_test[keep_ind, :]
-        _, order_ind, x_ind = nnp.unique(t_train_test[:, 0], return_index=True, return_inverse=True)
-        t = t_train_test[order_ind]
-        r = r_train_test[order_ind]
-        n_train = t_train.shape[0]
-        train_id = x_ind[:n_train]  # index the training locations
-        test_id = x_ind[n_train:]  # index the test locations
-        y_all = nnp.nan * nnp.zeros([t.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
-        y_all[x_ind[:n_train], :] = y_train  # and the data at the train locations
-        if y_test is not None:
-            y_all[x_ind[n_train:], :] = y_test  # and the data at the train locations
-        mask = nnp.ones_like(y_all, dtype=bool)
-        mask[train_id] = False
-        dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
-        dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t[:, 0])])
-        return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
-                np.array(mask), np.array(dt), np.array(dt_all), np.array(r))
 
     def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None, return_full=False, compute_nlpd=True):
         """
