@@ -49,8 +49,14 @@ class SDEGP(object):
         if y.ndim < 2:
             y = nnp.expand_dims(y, 1)  # make 2-D
         y = y[ind, :]
+        if r is None:
+            r = np.nan * x  # np.empty((1,) + x.shape[1:]) * np.nan
+        elif r.ndim < 2:
+            r = nnp.expand_dims(r, 1)  # make 2-D
+        r = r[ind, :]
         self.t_train = x
         self.y = np.array(y)
+        self.r_train = np.array(r)
         if x_test is None:
             t_test = np.empty((1,) + x.shape[1:]) * np.nan
         else:
@@ -114,9 +120,11 @@ class SDEGP(object):
         # here we use non-JAX numpy to sort out indexing of these static arrays
         # t_test_train = nnp.concatenate([t_test, t_train])
         t_train_test = nnp.concatenate([t_train, t_test])
-        t_train_test = t_train_test[~np.isnan(t_train_test[:, 0]), :]
+        keep_ind = ~np.isnan(t_train_test[:, 0])
+        t_train_test = t_train_test[keep_ind, :]
         r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
         r_train_test = nnp.concatenate([r_train, r_test_nan])
+        r_train_test = r_train_test[keep_ind, :]
         # t, x_ind = nnp.unique(t_test_train, return_inverse=True, axis=0)
         _, order_ind, x_ind = nnp.unique(t_train_test[:, 0], return_index=True, return_inverse=True)
         t = t_train_test[order_ind]
@@ -294,12 +302,12 @@ class SDEGP(object):
         (neg_log_marg_lik, aux), dlZ = value_and_grad(self.kalman_filter,
                                                       argnums=2, has_aux=True)(self.y, self.dt, params, True,
                                                                                None, self.sites.site_params,
-                                                                               self.r_all[self.train_id])
+                                                                               self.r_train)
         filter_mean, filter_cov, self.sites.site_params = aux
         # run the smoother and update the sites
         self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt,
                                                                    False, False, self.y,
-                                                                   self.sites.site_params, self.r_all[self.train_id])
+                                                                   self.sites.site_params, self.r_train)
         return neg_log_marg_lik, dlZ
 
     def run_two_stage(self, params=None):
