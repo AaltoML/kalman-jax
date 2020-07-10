@@ -12,7 +12,6 @@ from utils import softplus_list, plot
 import pickle
 from sklearn.preprocessing import StandardScaler
 
-plot_final = False
 plot_intermediate = False
 
 print('loading data ...')
@@ -39,9 +38,11 @@ np.random.seed(123)
 if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
+    plot_final = False
 else:
-    method = 15
-    fold = 1
+    method = 9
+    fold = 2
+    plot_final = True
 
 print('method number', method)
 print('batch number', fold)
@@ -66,63 +67,52 @@ prior2 = priors.Matern32(variance=var_f2, lengthscale=len_f2)
 prior = priors.Independent([prior1, prior2])
 lik = likelihoods.HeteroscedasticNoise()
 
+step_size = 5e-2
+
 if method == 0:
-    inf_method = approx_inf.EEP(power=1)
+    inf_method = approx_inf.EEP(power=1, damping=0.5)
 elif method == 1:
-    inf_method = approx_inf.EEP(power=0.5)
+    inf_method = approx_inf.EEP(power=0.5, damping=0.5)
 elif method == 2:
-    inf_method = approx_inf.EKS()
+    inf_method = approx_inf.EKS(damping=0.5)
 
 elif method == 3:
-    inf_method = approx_inf.UEP(power=1)
+    inf_method = approx_inf.UEP(power=1, damping=0.5)
 elif method == 4:
-    inf_method = approx_inf.UEP(power=0.5)
+    inf_method = approx_inf.UEP(power=0.5, damping=0.5)
 elif method == 5:
-    inf_method = approx_inf.UKS()
+    inf_method = approx_inf.UKS(damping=0.5)
 
 elif method == 6:
-    inf_method = approx_inf.GHEP(power=1)
+    inf_method = approx_inf.GHEP(power=1, damping=0.5)
 elif method == 7:
-    inf_method = approx_inf.GHEP(power=0.5)
+    inf_method = approx_inf.GHEP(power=0.5, damping=0.5)
 elif method == 8:
-    inf_method = approx_inf.GHKS()
+    inf_method = approx_inf.GHKS(damping=0.5)
 
 elif method == 9:
-    if fold in [2, 4, 8]:  # for cases where the method fails, set damping parameter to be lower
-        inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.1)
-    else:
-        inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.5)
+    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=0.1)
+    step_size = 1e-2
 elif method == 10:
     inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=0.5)
 elif method == 11:
     inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=0.5)
 
 elif method == 12:
-    if fold in [0, 5]:
-        inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.25)
-    else:
-        inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.5)
+    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=0.5)
 elif method == 13:
     inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=0.5)
 elif method == 14:
-    if fold in [4]:
-        inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.1)
-    else:
-        inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.5)
+    inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=0.5)
 
 elif method == 15:
-    if fold in [1]:
-        inf_method = approx_inf.VI(intmethod='UT', damping=0.03)
-    elif fold in [3, 8]:
-        inf_method = approx_inf.VI(intmethod='UT', damping=0.05)
-    else:
-        inf_method = approx_inf.VI(intmethod='UT', damping=0.1)
+    inf_method = approx_inf.VI(intmethod='UT', damping=0.5)
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH', damping=0.5)
 
 model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, t_test=XT, y_test=YT, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=5e-2)
+opt_init, opt_update, get_params = optimizers.adam(step_size=step_size)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -148,7 +138,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(200):
+for j in range(250):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
