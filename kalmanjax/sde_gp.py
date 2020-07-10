@@ -22,17 +22,14 @@ class SDEGP(object):
     state distribution x(t)~𝓝(0,Pinf).
     Currently implemented inference methods:
         - Power expectation propagation (PEP)
-        - Posterior linearisation (PL)
-        - Statistically Linearised EP (SLEP)
-        - Gauss-Hermite Kalman smoother (GHKS)
-        - Extended EP (EEP)
-        - Extended Kalman smoother (EKS)
+        - Statistically Linearised EP (SLEP / UEP / GHEP / PL)
+        - Classical Kalman smoothers (EKS / UKS / GHKS)
         - Variational Inference - with natural gradients (VI)
     """
     def __init__(self, prior, likelihood, t, y, r=None, t_test=None, y_test=None, r_test=None, approx_inf=None):
         """
         :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
-        :param likelihood: the likelihood model object which performs moment matching and evaluates p(y|f)
+        :param likelihood: the likelihood model object which performs parameter updates and evaluates p(y|f)
         :param t: training inputs
         :param y: training data / observations
         :param r: training spatial points

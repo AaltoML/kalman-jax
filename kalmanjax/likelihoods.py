@@ -19,12 +19,16 @@ def gaussian_second_derivative_wrt_mean(f, m, C, w):
 
 class Likelihood(object):
     """
-    The likelihood model class, p(yₙ|fₙ). Each likelihood implements its own moment matching method,
-    which calculates the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean mₙ,
-        logZₙ = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ = E[p(yₙ|fₙ)]
-    If no custom moment matching method is provided, Gauss-Hermite quadrature is used by default.
-    The requirement for quadrature is simply a method called evaluate_likelihood(), which computes
-    the likelihood model p(yₙ|fₙ) for given data and function values.
+    The likelihood model class, p(yₙ|fₙ). Each likelihood implements its own parameter update methods:
+        Moment matching is used for EP
+        Statistical linearisation is used for SLEP / UKS / GHKS
+        Ananlytical linearisation is used for EEP / EKS
+        Variational expectation is used for VI
+    If no custom parameter update method is provided, cubature is used (Gauss-Hermite by default).
+    The requirement for all inference methods to work is the implementation of the following methods:
+        evaluate_likelihood(), which simply evaluates the likelihood given the latent function
+        evaluate_log_likelihood()
+        conditional_moments(), which return E[y|f] and Cov[y|f]
     """
     def __init__(self, hyp=None):
         """
@@ -43,10 +47,10 @@ class Likelihood(object):
         raise NotImplementedError('conditional moments of this likelihood are not implemented')
 
     @partial(jit, static_argnums=(0, 6))
-    def moment_match_quadrature(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
+    def moment_match_cubature(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
         TODO: N.B. THIS VERSION IS SUPERCEDED BY THE FUNCTION BELOW. HOWEVER THIS ONE MAY BE MORE STABLE.
-        Perform moment matching via Gauss-Hermite quadrature.
+        Perform moment matching via cubature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
             logZₙ = log ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         with EP power a.
@@ -76,7 +80,7 @@ class Likelihood(object):
         # lmax = np.max(ll)
         # weighted_likelihood_eval = np.exp(lmax * power) * w * np.exp(power * (ll - lmax))
 
-        # Compute partition function via quadrature:
+        # Compute partition function via cubature:
         # Zₙ = ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ pᵃ(yₙ|fsigᵢ)
         Z = np.sum(
@@ -85,7 +89,7 @@ class Likelihood(object):
         lZ = np.log(Z)
         Zinv = 1.0 / Z
 
-        # Compute derivative of partition function via quadrature:
+        # Compute derivative of partition function via cubature:
         # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fsigᵢ)
         covinv_f_m = cho_solve((cav_cho, low), sigma_points - cav_mean)
@@ -98,7 +102,7 @@ class Likelihood(object):
         # dlogZₙ/dmₙ = (dZₙ/dmₙ) / Zₙ
         dlZ = Zinv * dZ
 
-        # Compute second derivative of partition function via quadrature:
+        # Compute second derivative of partition function via cubature:
         # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fsigᵢ)
         d2Z = np.sum(
@@ -115,10 +119,10 @@ class Likelihood(object):
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=(0, 6))
-    def moment_match_quadrature(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
+    def moment_match_cubature(self, y, cav_mean, cav_cov, hyp=None, power=1.0, cubature_func=None):
         """
         TODO: N.B. THIS VERSION ALLOWS MULTI-DIMENSIONAL MOMENT MATCHING, BUT CAN BE UNSTABLE
-        Perform moment matching via Gauss-Hermite quadrature.
+        Perform moment matching via cubature.
         Moment matching invloves computing the log partition function, logZₙ, and its derivatives w.r.t. the cavity mean
             logZₙ = log ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         with EP power a.
@@ -143,7 +147,7 @@ class Likelihood(object):
         # pre-compute wᵢ pᵃ(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_likelihood_eval = w * self.evaluate_likelihood(y, sigma_points, hyp) ** power
 
-        # Compute partition function via quadrature:
+        # Compute partition function via cubature:
         # Zₙ = ∫ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ pᵃ(yₙ|fsigᵢ)
         Z = np.sum(
@@ -152,7 +156,7 @@ class Likelihood(object):
         lZ = np.log(np.maximum(Z, 1e-8))
         Zinv = 1.0 / np.maximum(Z, 1e-8)
 
-        # Compute derivative of partition function via quadrature:
+        # Compute derivative of partition function via cubature:
         # dZₙ/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #         ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ pᵃ(yₙ|fsigᵢ)
         d1 = vmap(
@@ -162,7 +166,7 @@ class Likelihood(object):
         # dlogZₙ/dmₙ = (dZₙ/dmₙ) / Zₙ
         dlZ = Zinv * dZ
 
-        # Compute second derivative of partition function via quadrature:
+        # Compute second derivative of partition function via cubature:
         # d²Zₙ/dmₙ² = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #           ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹] pᵃ(yₙ|fsigᵢ)
         d2 = vmap(
@@ -182,9 +186,9 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 6))
     def moment_match(self, y, m, v, hyp=None, power=1.0, cubature_func=None):
         """
-        If no custom moment matching method is provided, we use Gauss-Hermite quadrature.
+        If no custom moment matching method is provided, we use cubature.
         """
-        return self.moment_match_quadrature(y, m, v, hyp, power, cubature_func)
+        return self.moment_match_cubature(y, m, v, hyp, power, cubature_func)
 
     @staticmethod
     def link_fn(latent_mean):
@@ -196,9 +200,9 @@ class Likelihood(object):
         return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
 
     @partial(jit, static_argnums=(0, 4))
-    def statistical_linear_regression_quadrature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
+    def statistical_linear_regression_cubature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
         """
-        Perform statistical linear regression (SLR) using Gauss-Hermite quadrature.
+        Perform statistical linear regression (SLR) using cubature.
         We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
         TODO: this currently assumes an additive noise model (ok for our current applications), make more general
         """
@@ -209,25 +213,25 @@ class Likelihood(object):
         # fsigᵢ=xᵢ√(vₙ) + mₙ: scale locations according to cavity dist.
         sigma_points = cholesky(cav_cov) @ np.atleast_2d(x) + cav_mean
         lik_expectation, lik_covariance = self.conditional_moments(sigma_points, hyp)
-        # Compute zₙ via quadrature:
+        # Compute zₙ via cubature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
         mu = np.sum(
             w * lik_expectation, axis=-1
         )[:, None]
-        # Compute variance S via quadrature:
+        # Compute variance S via cubature:
         # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
         S = np.sum(
             w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance), axis=-1
         )[:, None]
-        # Compute cross covariance C via quadrature:
+        # Compute cross covariance C via cubature:
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
         C = np.sum(
             w * (sigma_points - cav_mean) * (lik_expectation - mu), axis=-1
         )[:, None]
-        # Compute derivative of z via quadrature:
+        # Compute derivative of z via cubature:
         # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
         omega = np.sum(
@@ -238,9 +242,9 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression(self, m, v, hyp=None, cubature_func=None):
         """
-        If no custom SLR method is provided, we use Gauss-Hermite quadrature.
+        If no custom SLR method is provided, we use cubature.
         """
-        return self.statistical_linear_regression_quadrature(m, v, hyp, cubature_func)
+        return self.statistical_linear_regression_cubature(m, v, hyp, cubature_func)
 
     @partial(jit, static_argnums=0)
     def observation_model(self, f, sigma, hyp=None):
@@ -267,11 +271,11 @@ class Likelihood(object):
         return np.atleast_2d(np.squeeze(Jf)), np.atleast_2d(np.squeeze(Jsigma))
 
     @partial(jit, static_argnums=(0, 5))
-    def variational_expectation_quadrature(self, y, post_mean, post_cov, hyp=None, cubature_func=None):
+    def variational_expectation_cubature(self, y, post_mean, post_cov, hyp=None, cubature_func=None):
         """
-        Computes the "variational expectation" via Gauss-Hermite quadrature, i.e. the
+        Computes the "variational expectation" via cubature, i.e. the
         expected log-likelihood, and its derivatives w.r.t. the posterior mean
-            E[log p(yₙ|fₙ)] = log ∫ p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
+            E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         with EP power a.
         :param y: observed data (yₙ) [scalar]
         :param post_mean: posterior mean (mₙ) [scalar]
@@ -291,13 +295,13 @@ class Likelihood(object):
         sigma_points = cholesky(post_cov) @ np.atleast_2d(x) + post_mean
         # pre-compute wᵢ log p(yₙ|xᵢ√(2vₙ) + mₙ)
         weighted_log_likelihood_eval = w * self.evaluate_log_likelihood(y, sigma_points, hyp)
-        # Compute expected log likelihood via quadrature:
+        # Compute expected log likelihood via cubature:
         # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                 ≈ ∑ᵢ wᵢ p(yₙ|fsigᵢ)
         exp_log_lik = np.sum(
             weighted_log_likelihood_eval
         )
-        # Compute first derivative via quadrature:
+        # Compute first derivative via cubature:
         # dE[log p(yₙ|fₙ)]/dmₙ = ∫ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                      ≈ ∑ᵢ wᵢ (fₙ-mₙ) vₙ⁻¹ log p(yₙ|fsigᵢ)
         invv = np.diag(post_cov)[:, None] ** -1
@@ -305,7 +309,7 @@ class Likelihood(object):
             invv * (sigma_points - post_mean)
             * weighted_log_likelihood_eval, axis=-1
         )[:, None]
-        # Compute second derivative via quadrature:
+        # Compute second derivative via cubature (deriv. w.r.t. var = 0.5 * 2nd deriv. w.r.t. mean):
         # dE[log p(yₙ|fₙ)]/dvₙ = ∫ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                        ≈ ∑ᵢ wᵢ [(fₙ-mₙ)² vₙ⁻² - vₙ⁻¹]/2 log p(yₙ|fsigᵢ)
         dE_dv = np.sum(
@@ -318,9 +322,9 @@ class Likelihood(object):
     @partial(jit, static_argnums=(0, 5))
     def variational_expectation(self, y, m, v, hyp=None, cubature_func=None):
         """
-        If no custom variational expectation method is provided, we use Gauss-Hermite quadrature.
+        If no custom variational expectation method is provided, we use cubature.
         """
-        return self.variational_expectation_quadrature(y, m, v, hyp, cubature_func)
+        return self.variational_expectation_cubature(y, m, v, hyp, cubature_func)
 
 
 class Gaussian(Likelihood):
@@ -343,7 +347,7 @@ class Gaussian(Likelihood):
     def evaluate_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Gaussian function 𝓝(yₙ|fₙ,σ²).
-        Can be used to evaluate Q quadrature points.
+        Can be used to evaluate Q cubature points.
         :param y: observed data yₙ [scalar]
         :param f: mean, i.e. the latent function value fₙ [Q, 1]
         :param hyp: likelihood variance σ² [scalar]
@@ -357,7 +361,7 @@ class Gaussian(Likelihood):
     def evaluate_log_likelihood(self, y, f, hyp=None):
         """
         Evaluate the log-Gaussian function log𝓝(yₙ|fₙ,σ²).
-        Can be used to evaluate Q quadrature points.
+        Can be used to evaluate Q cubature points.
         :param y: observed data yₙ [scalar]
         :param f: mean, i.e. the latent function value fₙ [Q, 1]
         :param hyp: likelihood variance σ² [scalar]
@@ -466,7 +470,7 @@ class Bernoulli(Likelihood):
         and its derivatives w.r.t. mₙ, which are required for moment matching.
         If the EP fraction a = 1, we get
                   = log Φ(yₙzₙ), where zₙ = mₙ / √(1 + vₙ)   [see Rasmussen & Williams p74]
-        otherwise we must use quadrature to compute the log partition and its derivatives.
+        otherwise we must use cubature to compute the log partition and its derivatives.
         :param y: observed data (yₙ) [scalar]
         :param m: cavity mean (mₙ) [scalar]
         :param v: cavity variance (vₙ) [scalar]
@@ -494,8 +498,8 @@ class Bernoulli(Likelihood):
             site_var = - (v + 1 / d2lZ)  # approx. likelihood (site) variance
             return lZ, site_mean, site_var
         else:
-            # if a is not 1, we can calculate the moments via quadrature
-            return self.moment_match_quadrature(y, m, v, None, power, cubature_func)
+            # if a is not 1, we can calculate the moments via cubature
+            return self.moment_match_cubature(y, m, v, None, power, cubature_func)
 
 
 class Probit(Bernoulli):
@@ -534,7 +538,7 @@ class Poisson(Likelihood):
         p(yₙ|fₙ) = Poisson(fₙ) = μʸ exp(-μ) / yₙ!
     where μ = g(fₙ) = mean = variance is the Poisson intensity.
     yₙ is non-negative integer count data.
-    No closed form moment matching is available, se we default to using quadrature.
+    No closed form moment matching is available, se we default to using cubature.
 
     Letting Zy = gamma(yₙ+1) = yₙ!, we get log p(yₙ|fₙ) = log(g(fₙ))yₙ - g(fₙ) - log(Zy)
     The larger the intensity μ, the stronger the likelihood resembles a Gaussian
@@ -563,7 +567,7 @@ class Poisson(Likelihood):
             p(yₙ|fₙ) = Poisson(fₙ) = μʸ exp(-μ) / yₙ!
         for μ = g(fₙ), where g() is the link function (exponential or logistic).
         We use the gamma function to evaluate yₙ! = gamma(yₙ + 1).
-        Can be used to evaluate Q quadrature points when performing moment matching.
+        Can be used to evaluate Q cubature points when performing moment matching.
         :param y: observed data (yₙ) [scalar]
         :param f: latent function value (fₙ) [Q, 1]
         :param hyp: dummy variable (Poisson has no hyperparameters)
@@ -580,7 +584,7 @@ class Poisson(Likelihood):
             log p(yₙ|fₙ) = log Poisson(fₙ) = log(μʸ exp(-μ) / yₙ!)
         for μ = g(fₙ), where g() is the link function (exponential or logistic).
         We use the gamma function to evaluate yₙ! = gamma(yₙ + 1).
-        Can be used to evaluate Q quadrature points when performing moment matching.
+        Can be used to evaluate Q cubature points when performing moment matching.
         :param y: observed data (yₙ) [scalar]
         :param f: latent function value (fₙ) [Q, 1]
         :param hyp: dummy variable (Poisson has no hyperparameters)
@@ -727,13 +731,13 @@ class HeteroscedasticNoise(Likelihood):
         var = self.link_fn(sigma_points) ** 2
         log_lik = np.log(var) + var ** -1 * ((y - m0) ** 2 + v0)
         weighted_log_likelihood_eval = w * log_lik
-        # Compute expected log likelihood via quadrature:
+        # Compute expected log likelihood via cubature:
         # E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #                 ≈ ∑ᵢ wᵢ p(yₙ|fsigᵢ)
         exp_log_lik = -0.5 * np.log(2 * pi) - 0.5 * np.sum(
             weighted_log_likelihood_eval
         )
-        # Compute first derivative via quadrature:
+        # Compute first derivative via cubature:
         dE_dm1 = np.sum(
             (var ** -1 * (y - m0 + v0)) * w
         )
@@ -761,7 +765,7 @@ class HeteroscedasticNoise(Likelihood):
     @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
         """
-        Perform statistical linear regression (SLR) using quadrature.
+        Perform statistical linear regression (SLR) using cubature.
         We aim to find a likelihood approximation p(yₙ|fₙ) ≈ 𝓝(yₙ|Afₙ+b,Ω+Var[yₙ|fₙ]).
         """
         if cubature_func is None:
@@ -772,24 +776,24 @@ class HeteroscedasticNoise(Likelihood):
         # fsigᵢ=xᵢ√(vₙ) + mₙ: scale locations according to cavity dist.
         sigma_points = cholesky(cav_cov) @ x + cav_mean
         var = self.link_fn(sigma_points[1]) ** 2
-        # Compute zₙ via quadrature:
+        # Compute zₙ via cubature:
         # zₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
         mu = m0.reshape(1, 1)
-        # Compute variance S via quadrature:
+        # Compute variance S via cubature:
         # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
         S = v0 + np.sum(
             w * var
         )
         S = S.reshape(1, 1)
-        # Compute cross covariance C via quadrature:
+        # Compute cross covariance C via cubature:
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
         C = np.sum(
             w * (sigma_points - cav_mean) * (sigma_points[0] - m0), axis=-1
         ).reshape(2, 1)
-        # Compute derivative of z via quadrature:
+        # Compute derivative of z via cubature:
         # omega = ∫ E[yₙ|fₙ] vₙ⁻¹ (fₙ-mₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
         #       ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ] vₙ⁻¹ (fsigᵢ-mₙ)
         omega = np.block([[1., 0.]])
@@ -906,26 +910,26 @@ class AudioAmplitudeDemodulation(Likelihood):
                                                                                         num_components:]
         sigma_points = cholesky(modulator_cov) @ x + modulator_mean
         lik_expectation, lik_covariance = (self.link_fn(sigma_points).T @ subband_mean).T, hyp
-        # Compute zₙ via quadrature:
+        # Compute zₙ via cubature:
         # muₙ = ∫ E[yₙ|fₙ] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #    ≈ ∑ᵢ wᵢ E[yₙ|fsigᵢ]
         mu = np.sum(
             w * lik_expectation, axis=-1
         )[:, None]
-        # Compute variance S via quadrature:
+        # Compute variance S via cubature:
         # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
         S = np.sum(
             w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance), axis=-1
         )[:, None]
-        # Compute cross covariance C via quadrature:
+        # Compute cross covariance C via cubature:
         # C = ∫ (fₙ-mₙ) (E[yₙ|fₙ]-zₙ)' 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ (fsigᵢ -mₙ) (E[yₙ|fsigᵢ]-zₙ)'
         C = np.sum(
             w * np.block([[self.link_fn(sigma_points) * np.diag(subband_cov)[..., None]],
                           [sigma_points - modulator_mean]]) * (lik_expectation - mu), axis=-1
         )[:, None]
-        # Compute derivative of mu via quadrature:
+        # Compute derivative of mu via cubature:
         omega = np.sum(
             w * np.block([[self.link_fn(sigma_points)],
                           [np.diag(modulator_cov)[..., None] ** -1 * (sigma_points - modulator_mean) * lik_expectation]]), axis=-1
