@@ -144,7 +144,7 @@ class SDEGP(object):
         return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
                 np.array(mask), np.array(dt), np.array(dt_all), np.array(r))
 
-    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None, return_full=False):
+    def predict(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None, return_full=False, compute_nlpd=True):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -178,14 +178,17 @@ class SDEGP(object):
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, r)
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, r)
-        nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
-                                                         posterior_mean[self.test_id],
-                                                         posterior_cov[self.test_id],
-                                                         softplus_list(params[0]), softplus(params[1]),
-                                                         return_full)
+        if compute_nlpd:
+            nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+                                                             posterior_mean[self.test_id],
+                                                             posterior_cov[self.test_id],
+                                                             softplus_list(params[0]), softplus(params[1]),
+                                                             return_full)
+        else:
+            nlpd_test = np.nan
         return posterior_mean, posterior_cov, site_params, nlpd_test
 
-    def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None):
+    def predict_2d(self, y=None, dt=None, mask=None, site_params=None, sampling=False, r=None, compute_nlpd=True):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -220,12 +223,14 @@ class SDEGP(object):
         _, (filter_mean, filter_cov, site_params) = self.kalman_filter(y, dt, params, True, mask, site_params, r)
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, r)
-        # nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
-        #                                                  posterior_mean[self.test_id],
-        #                                                  posterior_cov[self.test_id],
-        #                                                  softplus_list(params[0]), softplus(params[1]),
-        #                                                  return_full)
-        nlpd_test = 0.
+        if compute_nlpd:
+            nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+                                                             posterior_mean[self.test_id],
+                                                             posterior_cov[self.test_id],
+                                                             softplus_list(params[0]), softplus(params[1]),
+                                                             return_full)
+        else:
+            nlpd_test = np.nan
         # posterior_mean, posterior_cov, site_params, nlpd_test = self.predict(y, dt, mask, site_params, sampling, x, True)
         mean_test_filt, cov_test_filt = filter_mean[self.test_id], filter_cov[self.test_id]
         mean_test, cov_test = posterior_mean[self.test_id], posterior_cov[self.test_id]
@@ -280,7 +285,8 @@ class SDEGP(object):
         if params is None:
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False)
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, None,
+                                                                              self.sites.site_params, self.r_train)
         return neg_log_marg_lik, dlZ
 
     def run(self, params=None):
@@ -330,15 +336,15 @@ class SDEGP(object):
         # if self.sites.site_params=None then the filter initialises the sites too
         _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
                                                                                   None, self.sites.site_params,
-                                                                                  self.t_train)
+                                                                                  self.r_train)
         # run the smoother and update the sites
         self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt,
                                                                    False, False, self.y,
-                                                                   self.sites.site_params, self.t_train)
+                                                                   self.sites.site_params, self.r_train)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
         neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
                                                                               None, self.sites.site_params,
-                                                                              self.t_train)
+                                                                              self.r_train)
         return neg_log_marg_lik, dlZ
 
     def update_model(self, theta_prior=None):
@@ -429,82 +435,6 @@ class SDEGP(object):
         if store:
             return s.neg_log_marg_lik, (s.filtered_mean, s.filtered_cov, (s.site_mean, s.site_cov))
         return s.neg_log_marg_lik
-
-    def kalman_filter__(self, y, dt, params, store=False, mask=None, site_params=None, r=None):
-        """
-        Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
-        The Kalman update step invloves some control flow to work out whether we are
-            i) initialising the sites
-            ii) using supplied sites
-            iii) performing a Gaussian update with fixed parameters (e.g. in posterior sampling or ELBO calc.)
-        If store is True then we compute and return the intermediate filtering distributions
-        p(fₙ|y₁,...,yₙ) and sites sₙ(fₙ), otherwise we do not store the intermediates and simply
-        return the energy / negative log-marginal likelihood, -log p(y).
-        :param y: observed data [N, obs_dim]
-        :param dt: step sizes Δtₙ = tₙ - tₙ₋₁ [N, 1]
-        :param params: the model parameters, i.e the hyperparameters of the prior & likelihood
-        :param store: flag to notify whether to store the intermediates
-        :param mask: boolean array signifying which elements of y are observed [N, obs_dim]
-        :param site_params: the Gaussian approximate likelihoods [2, N, obs_dim]
-        :return:
-            if store is True:
-                neg_log_marg_lik: the filter energy, i.e. negative log-marginal likelihood -log p(y),
-                                  used for hyperparameter optimisation (learning) [scalar]
-                filtered_mean: intermediate filtering means [N, state_dim, 1]
-                filtered_cov: intermediate filtering covariances [N, state_dim, state_dim]
-                site_mean: mean of the approximate likelihood sₙ(fₙ) [N, obs_dim]
-                site_var: variance of the approximate likelihood sₙ(fₙ) [N, obs_dim]
-            otherwise:
-                neg_log_marg_lik: the filter energy, i.e. negative log-marginal likelihood -log p(y),
-                                  used for hyperparameter optimisation (learning) [scalar]
-        """
-        theta_prior, theta_lik = softplus_list(params[0]), softplus(params[1])
-        self.update_model(theta_prior)  # all model components that are not static must be computed inside the function
-        N = dt.shape[0]
-        neg_log_marg_lik = 0.0  # negative log-marginal likelihood
-        m, P = self.minf, self.Pinf
-        if store:
-            filtered_mean = np.zeros([N, self.state_dim, 1])
-            filtered_cov = np.zeros([N, self.state_dim, self.state_dim])
-            site_mean = np.zeros([N, self.func_dim, 1])
-            site_var = np.zeros([N, self.func_dim, self.func_dim])
-        for n in range(N):
-            y_n = y[n]
-            # -- KALMAN PREDICT --
-            #  mₙ⁻ = Aₙ mₙ₋₁
-            #  Pₙ⁻ = Aₙ Pₙ₋₁ Aₙ' + Qₙ, where Qₙ = Pinf - Aₙ Pinf Aₙ'
-            A = self.prior.state_transition(dt[n], theta_prior)
-            m_ = A @ m
-            P_ = A @ (P - self.Pinf) @ A.T + self.Pinf
-            # --- KALMAN UPDATE ---
-            # Given previous predicted mean mₙ⁻ and cov Pₙ⁻, incorporate yₙ to get filtered mean mₙ &
-            # cov Pₙ and compute the marginal likelihood p(yₙ|y₁,...,yₙ₋₁)
-            H = self.prior.measurement_model(r[n], theta_prior)
-            mu = H @ m_
-            var = H @ P_ @ H.T
-            if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                y_n = np.where(mask[n], mu[:y_n.shape[0], 0], y_n)  # fill in masked obs with prior expectation
-            log_lik_n, site_mu_, site_var_ = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
-            if site_params is not None:  # use supplied site parameters to perform the update
-                site_mu_, site_var_ = site_params[0][n], site_params[1][n]
-            # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
-            S = var + site_var_
-            K = solve(S, H @ P_).T  # HP(S^-1)
-            m = m_ + K @ (site_mu_ - mu)
-            P = P_ - K @ S @ K.T
-            if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                m = np.where(np.any(mask[n]), m_, m)
-                P = np.where(np.any(mask[n]), P_, P)
-                log_lik_n = np.where(mask[n][..., 0], np.zeros_like(log_lik_n), log_lik_n)
-            neg_log_marg_lik -= np.sum(log_lik_n)
-            if store:
-                filtered_mean = index_add(filtered_mean, index[n, ...], m)
-                filtered_cov = index_add(filtered_cov, index[n, ...], P)
-                site_mean = index_add(site_mean, index[n, ...], site_mu_)
-                site_var = index_add(site_var, index[n, ...], site_var_)
-        if store:
-            return neg_log_marg_lik, (filtered_mean, filtered_cov, (site_mean, site_var))
-        return neg_log_marg_lik
 
     @partial(jit, static_argnums=(0, 5, 6))
     def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, store=False, return_full=False,
@@ -626,13 +556,14 @@ class SDEGP(object):
         :return:
             the posterior samples [N_test, num_samps]
         """
-        post_mean, _, (site_mean, site_cov), _ = self.predict(site_params=self.sites.site_params)
+        post_mean, _, (site_mean, site_cov), _ = self.predict(site_params=self.sites.site_params, compute_nlpd=False)
         prior_samp = self.prior_sample(num_samps, x=self.t_all)
         prior_samp_y = sample_gaussian_noise(prior_samp, site_cov)
         with loops.Scope() as ss:
             ss.smoothed_sample = np.zeros(prior_samp_y.shape)
             for i in ss.range(num_samps):
                 smoothed_sample_i, _, _, _ = self.predict(np.zeros_like(prior_samp_y[..., i]), self.dt_all, self.mask,
-                                                          (prior_samp_y[..., i], site_cov), sampling=True)
+                                                          (prior_samp_y[..., i], site_cov),
+                                                          sampling=True, compute_nlpd=False)
                 ss.smoothed_sample = index_add(ss.smoothed_sample, index[..., i], smoothed_sample_i[..., 0])
         return prior_samp - ss.smoothed_sample + post_mean

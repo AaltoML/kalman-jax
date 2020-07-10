@@ -1,4 +1,4 @@
-def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None, x=None):
+def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None, r=None):
     """
     Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
     The Kalman update step invloves some control flow to work out whether we are
@@ -47,7 +47,7 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         # --- KALMAN UPDATE ---
         # Given previous predicted mean mₙ⁻ and cov Pₙ⁻, incorporate yₙ to get filtered mean mₙ &
         # cov Pₙ and compute the marginal likelihood p(yₙ|y₁,...,yₙ₋₁)
-        H = self.prior.measurement_model(x[n, 1:], theta_prior)
+        H = self.prior.measurement_model(r[n], theta_prior)
         mu = H @ m_
         var = H @ P_ @ H.T
         if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
@@ -76,7 +76,7 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
 
 
 def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, store=False, return_full=False,
-                                 y=None, site_params=None, x=None):
+                                 y=None, site_params=None, r=None):
     """
     Run the RTS smoother to get p(fₙ|y₁,...,y_N),
     i.e. compute p(f)𝚷ₙsₙ(fₙ) where sₙ(fₙ) are the sites (approx. likelihoods).
@@ -121,7 +121,7 @@ def rauch_tung_striebel_smoother(self, params, m_filtered, P_filtered, dt, store
         G_transpose = solve(P_predicted, tmp_gain_cov)  # (P^-1)AF
         m = m_filtered[n, ...] + G_transpose.T @ (m - m_predicted)
         P = P_filtered[n, ...] + G_transpose.T @ (P - P_predicted) @ G_transpose
-        H = self.prior.measurement_model(x[n, 1:], theta_prior)
+        H = self.prior.measurement_model(r[n], theta_prior)
         if store:
             if return_full:
                 smoothed_mean = index_add(smoothed_mean, index[n, ...], m)
