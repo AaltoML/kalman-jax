@@ -83,6 +83,7 @@ post_mean_lgcp = link_fn(posterior_mean[:, 0, 0] + posterior_cov[:, 0, 0] / 2) *
 lb_lgcp = link_fn(posterior_mean[:, 0, 0] - np.sqrt(posterior_cov[:, 0, 0]) * 1.645) * scale
 ub_lgcp = link_fn(posterior_mean[:, 0, 0] + np.sqrt(posterior_cov[:, 0, 0]) * 1.645) * scale
 test_id = model.test_id
+t_test = model.t_all[test_id]
 
 print('sampling from the posterior ...')
 t0 = time.time()
@@ -97,8 +98,8 @@ plt.clf()
 plt.plot(disaster_timings, 0*disaster_timings, 'k+', label='observations', clip_on=False)
 plt.plot(x_pred, post_mean_lgcp, 'g', label='posterior mean')
 plt.fill_between(x_pred, lb_lgcp, ub_lgcp, color='g', alpha=0.05, label='95% confidence')
-plt.plot(model.t_test, post_samp_lgcp, 'g', alpha=0.15)
-plt.xlim(model.t_test[0], model.t_test[-1])
+plt.plot(t_test, post_samp_lgcp, 'g', alpha=0.15)
+plt.xlim(t_test[0], t_test[-1])
 plt.ylim(0.0)
 plt.legend()
 plt.title('log-Gaussian Cox process via Kalman smoothing (coal mining disasters)')

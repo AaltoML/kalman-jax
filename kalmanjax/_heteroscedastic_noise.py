@@ -109,7 +109,6 @@ x_pred = model.t_all[:, 0]
 link = model.likelihood.link_fn
 lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
 ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
-test_id = model.test_id
 
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))

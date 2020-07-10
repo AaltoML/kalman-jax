@@ -90,7 +90,6 @@ print('prediction time: %2.2f secs' % (t1-t0))
 lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0] ** 0.5
 ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
 x_pred = model.t_all
-test_id = model.test_id
 link_fn = model.likelihood.link_fn
 
 # print('sampling from the posterior ...')

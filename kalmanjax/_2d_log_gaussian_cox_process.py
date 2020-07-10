@@ -20,8 +20,6 @@ scale = 1000 / nt
 
 t, r, Y = discretegrid(data, [0, 1000, 0, 500], [nt, nr])
 
-# Ttest, Rtest = np.mgrid[0:1000:100j, 0:500:50j]
-
 np.random.seed(99)
 N = nr * nt  # number of data points
 
@@ -77,10 +75,6 @@ t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 # print('test NLPD: %1.2f' % nlpd)
 
-# lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0] ** 0.5
-# ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
-# x_pred = model.t_all
-# test_id = model.test_id
 link_fn = model.likelihood.link_fn
 
 # print('sampling from the posterior ...')

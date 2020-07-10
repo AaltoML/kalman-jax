@@ -85,6 +85,7 @@ lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0] ** 0.5
 ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
 x_pred = model.t_all[:, 0]
 test_id = model.test_id
+t_test = model.t_all[test_id]
 
 print('sampling from the posterior ...')
 t0 = time.time()
@@ -99,8 +100,8 @@ plt.plot(x, y, 'k.', label='training observations')
 plt.plot(x_test, y_test, 'r.', alpha=0.4, label='test observations')
 plt.plot(x_pred, posterior_mean[..., 0], 'b', label='posterior mean')
 plt.fill_between(x_pred, lb, ub, color='b', alpha=0.05, label='95% confidence')
-plt.plot(model.t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
-plt.xlim([model.t_test[0], model.t_test[-1]])
+plt.plot(t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
+plt.xlim([t_test[0], t_test[-1]])
 plt.legend()
 plt.title('GP regression via Kalman smoothing. Test NLPD: %1.2f' % nlpd)
 plt.xlabel('time - $t$')

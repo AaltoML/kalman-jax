@@ -3,7 +3,6 @@ from jax.ops import index, index_update, index_add
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random, vmap
 from utils import softplus, softplus_list, sample_gaussian_noise, solve, input_admin
-import numpy as nnp  # "normal" numpy
 from approximate_inference import EP
 from jax.config import config
 config.update("jax_enable_x64", True)
@@ -42,39 +41,12 @@ class SDEGP(object):
         :param r_test: test spatial points
         :param approx_inf: the approximate inference algorithm for computing the sites (EP, VI, UKS, ...)
         """
-        assert t.shape[0] == y.shape[0]
-        if t.ndim < 2:
-            t = nnp.expand_dims(t, 1)  # make 2-D
-        if y.ndim < 2:
-            y = nnp.expand_dims(y, 1)  # make 2-D
-        if r is None:
-            r = nnp.nan * t  # np.empty((1,) + x.shape[1:]) * np.nan
-        if r.ndim < 2:
-            r = nnp.expand_dims(r, 1)  # make 2-D
-        ind = nnp.argsort(t[:, 0], axis=0)
-        t = t[ind, ...]
-        y = y[ind, ...]
-        r = r[ind, ...]
-        self.t_train = t
-        self.y = np.array(y)
-        self.r_train = np.array(r)
-        if t_test is None:
-            t_test = np.empty((1,) + t.shape[1:]) * np.nan
-            self.r_test = np.empty((1,) + t.shape[1:]) * np.nan
-        else:
-            if t_test.ndim < 2:
-                t_test = nnp.expand_dims(t_test, 1)  # make 2-D
-            test_sort_ind = nnp.argsort(t_test[:, 0], axis=0)
-            t_test = t_test[test_sort_ind, ...]
-            if y_test is not None:
-                y_test = y_test[test_sort_ind, ...].reshape((-1,) + y.shape[1:])
-            if r_test is not None:
-                self.r_test = r_test[test_sort_ind, ...]
-            else:
-                self.r_test = np.nan * t_test
-        (self.t_all, self.test_id, self.train_id, self.y_all, self.mask, self.dt,
-         self.dt_all, self.r_all) = input_admin(self.t_train, t_test, self.y, y_test, r, self.r_test)
-        self.t_test = np.array(t_test)
+        (self.t_all, self.y_all, self.r_all,
+         self.t_train, self.y_train, self.r_train,
+         self.r_test,
+         self.dt_all, self.dt_train,
+         self.train_id, self.test_id, self.mask
+         ) = input_admin(t, y, r, t_test, y_test, r_test)
         self.prior = prior
         self.likelihood = likelihood
         # construct the state space model:
@@ -174,7 +146,6 @@ class SDEGP(object):
                                                              return_full)
         else:
             nlpd_test = np.nan
-        # posterior_mean, posterior_cov, site_params, nlpd_test = self.predict(y, dt, mask, site_params, sampling, x, True)
         mean_test_filt, cov_test_filt = filter_mean[self.test_id], filter_cov[self.test_id]
         mean_test, cov_test = posterior_mean[self.test_id], posterior_cov[self.test_id]
         measure_func = vmap(
@@ -197,10 +168,13 @@ class SDEGP(object):
         where fₙ* is the function value at the test location.
         The above is equivalent to the quantity used for EP moment matching, so we
         vectorise that method using vmap, and compute it for all test data.
+        :param t_test: the test inputs tₙ*  [N*, 1]
         :param y_test: the test data yₙ*  [N*, 1]
         :param m_test: posterior predictive mean at the test locations, mₙ*  [N*, 1]
-        :param v_test: posterior predictive variance at the test locations, vₙ*  [N*, 1]
+        :param v_test: posterior predictive (co)variance at the test locations, vₙ*  [N*, 1]
+        :param hyp_prior: the hyperparameters of the prior  [array]
         :param hyp_lik: the hyperparameters of the likelihood model  [array]
+        :param full_cov: flag signalling whether m_testa and v_test are the full state dist.
         :return:
             NLPD: the negative log predictive density for the test data
         """
@@ -228,7 +202,8 @@ class SDEGP(object):
         if params is None:
             # fetch the model parameters from the prior and the likelihood
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False, None,
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y_train, self.dt_train,
+                                                                              params, False, None,
                                                                               self.sites.site_params, self.r_train)
         return neg_log_marg_lik, dlZ
 
@@ -249,13 +224,13 @@ class SDEGP(object):
         # run the forward filter to calculate the filtering distribution and compute the negative
         # log-marginal likelihood and its gradient in order to update the hyperparameters
         (neg_log_marg_lik, aux), dlZ = value_and_grad(self.kalman_filter,
-                                                      argnums=2, has_aux=True)(self.y, self.dt, params, True,
+                                                      argnums=2, has_aux=True)(self.y_train, self.dt_train, params, True,
                                                                                None, self.sites.site_params,
                                                                                self.r_train)
         filter_mean, filter_cov, self.sites.site_params = aux
         # run the smoother and update the sites
-        self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt,
-                                                                   False, False, self.y,
+        self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt_train,
+                                                                   False, False, self.y_train,
                                                                    self.sites.site_params, self.r_train)
         return neg_log_marg_lik, dlZ
 
@@ -277,15 +252,15 @@ class SDEGP(object):
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         # run the forward filter to calculate the filtering distribution
         # if self.sites.site_params=None then the filter initialises the sites too
-        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y, self.dt, params, True,
+        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y_train, self.dt_train, params, True,
                                                                                   None, self.sites.site_params,
                                                                                   self.r_train)
         # run the smoother and update the sites
-        self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt,
-                                                                   False, False, self.y,
+        self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt_train,
+                                                                   False, False, self.y_train,
                                                                    self.sites.site_params, self.r_train)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y, self.dt, params, False,
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y_train, self.dt_train, params, False,
                                                                               None, self.sites.site_params,
                                                                               self.r_train)
         return neg_log_marg_lik, dlZ

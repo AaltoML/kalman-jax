@@ -27,12 +27,12 @@ lik = likelihoods.Probit()
 approx_inf_1 = approx_inf.EP()
 approx_inf_2 = approx_inf.VI()
 
-sde_gp_model_1 = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=approx_inf_1)
-sde_gp_model_2 = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=approx_inf_2)
+model_1 = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=approx_inf_1)
+model_2 = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, approx_inf=approx_inf_2)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
-opt_state = opt_init([sde_gp_model_1.prior.hyp, sde_gp_model_1.likelihood.hyp])
+opt_state = opt_init([model_1.prior.hyp, model_1.likelihood.hyp])
 
 
 def gradient_step(i, state, mod):
@@ -54,26 +54,27 @@ def gradient_step(i, state, mod):
 # print('optimisation time: %2.2f secs' % (t1-t0))
 
 for i in range(5):
-    sde_gp_model_1.run()
-    sde_gp_model_2.run()
+    model_1.run()
+    model_2.run()
 
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean_1, posterior_var_1, _, nlpd1 = sde_gp_model_1.predict()
-posterior_mean_2, posterior_var_2, _, nlpd2 = sde_gp_model_2.predict()
+posterior_mean_1, posterior_var_1, _, nlpd1 = model_1.predict()
+posterior_mean_2, posterior_var_2, _, nlpd2 = model_2.predict()
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
-print(sde_gp_model_1.sites.site_params[0][100] - sde_gp_model_2.sites.site_params[0][100])
+print(model_1.sites.site_params[0][100] - model_2.sites.site_params[0][100])
 print(posterior_mean_1 - posterior_mean_2)
 
 lb_1 = posterior_mean_1[:, 0] - 1.96 * posterior_var_1[:, 0]**0.5
 ub_1 = posterior_mean_1[:, 0] + 1.96 * posterior_var_1[:, 0]**0.5
 lb_2 = posterior_mean_2[:, 0] - 1.96 * posterior_var_2[:, 0]**0.5
 ub_2 = posterior_mean_2[:, 0] + 1.96 * posterior_var_2[:, 0]**0.5
-x_pred = sde_gp_model_1.t_all
-test_id = sde_gp_model_1.test_id
-link_fn = sde_gp_model_1.likelihood.link_fn
+x_pred = model_1.t_all
+test_id = model_1.test_id
+t_test = model_1.t_all[test_id]
+link_fn = model_1.likelihood.link_fn
 
 # print('sampling from the posterior ...')
 # t0 = time.time()
@@ -93,7 +94,7 @@ plt.plot(x_pred, link_fn(ub_1), color='m', alpha=0.3)
 plt.plot(x_pred, link_fn(lb_2), color='g', alpha=0.3)
 plt.plot(x_pred, link_fn(ub_2), color='g', alpha=0.3)
 # plt.plot(sde_gp_model_1.t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
-plt.xlim(sde_gp_model_1.t_test[0], sde_gp_model_1.t_test[-1])
+plt.xlim(t_test[0], t_test[-1])
 plt.legend()
 plt.title('GP classification via Kalman smoothing')
 plt.xlabel('time - $t$')

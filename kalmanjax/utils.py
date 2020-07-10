@@ -74,24 +74,56 @@ def softplus_inv(x_):
         return np.log(1 - np.exp(-np.abs(x_))) + np.maximum(x_, 0)  # safer version
 
 
-def input_admin(t_train, t_test, y_train, y_test, r_train, r_test):
+def input_admin(t, y, r, t_test, y_test, r_test):
     """
+    TODO: tidy this function up
     Order the inputs, remove duplicates, and index the train and test input locations.
-    :param t_train: training inputs [N, 1]
+    :param t: training inputs [N, 1]
+    :param y: observations at the training inputs [N, 1]
+    :param r: training spatial inputs
     :param t_test: testing inputs [N*, 1]
-    :param y_train: observations at the training inputs [N, 1]
     :param y_test: observations at the test inputs [N*, 1]
-    :param r_train: training spatial inputs
     :param r_test: test spatial inputs
     :return:
-        t: the combined and sorted training and test inputs [N + N*, 1]
-        test_id: an array of indices corresponding to the test inputs [N*, 1]
-        train_id: an array of indices corresponding to the training inputs [N, 1]
-        y_all: an array observations y augmented with nans at test locations [N + N*, 1]
-        mask: boolean array to signify training locations [N + N*, 1]
-        dt: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
+        t_all: the combined and sorted training and test inputs [N + N*, 1]
+        y_all: an array of observations y augmented with nans at test locations [N + N*, R]
+        r_all: spatial inputs with nans at test locations [N + N*, R]
+        t_train: training inputs [N, 1]
+        y_train: training observations [N, R]
+        r_train: training spatial inputs [N, R]
         dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
+        dt_train: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
+        train_id: an array of indices corresponding to the training inputs [N, 1]
+        test_id: an array of indices corresponding to the test inputs [N*, 1]
+        mask: boolean array to signify training locations [N + N*, 1]
     """
+    assert t.shape[0] == y.shape[0]
+    if t.ndim < 2:
+        t = nnp.expand_dims(t, 1)  # make 2-D
+    if y.ndim < 2:
+        y = nnp.expand_dims(y, 1)  # make 2-D
+    if r is None:
+        r = nnp.nan * t  # np.empty((1,) + x.shape[1:]) * np.nan
+    if r.ndim < 2:
+        r = nnp.expand_dims(r, 1)  # make 2-D
+    ind = nnp.argsort(t[:, 0], axis=0)
+    t_train = t[ind, ...]
+    y_train = y[ind, ...]
+    r_train = r[ind, ...]
+    if t_test is None:
+        t_test = np.empty((1,) + t_train.shape[1:]) * np.nan
+        r_test = np.empty((1,) + t_train.shape[1:]) * np.nan
+    else:
+        if t_test.ndim < 2:
+            t_test = nnp.expand_dims(t_test, 1)  # make 2-D
+        test_sort_ind = nnp.argsort(t_test[:, 0], axis=0)
+        t_test = t_test[test_sort_ind, ...]
+        if y_test is not None:
+            y_test = y_test[test_sort_ind, ...].reshape((-1,) + y.shape[1:])
+        if r_test is not None:
+            r_test = r_test[test_sort_ind, ...]
+        else:
+            r_test = np.nan * t_test
     if not (t_test.shape[1] == t_train.shape[1]):
         t_test = np.concatenate([t_test[:, 0][:, None],
                                  np.nan * np.empty([t_test.shape[0], t_train.shape[1]-1])], axis=1)
@@ -103,22 +135,25 @@ def input_admin(t_train, t_test, y_train, y_test, r_train, r_test):
     r_train_test = nnp.concatenate([r_train, r_test_nan])
     r_train_test = r_train_test[keep_ind, ...]
     t_ind = nnp.argsort(t_train_test[:, 0])
-    t = t_train_test[t_ind]
-    r = r_train_test[t_ind]
+    t_all = t_train_test[t_ind]
+    r_all = r_train_test[t_ind]
     reverse_ind = nnp.argsort(t_ind)
     n_train = t_train.shape[0]
     train_id = reverse_ind[:n_train]  # index the training locations
     test_id = reverse_ind[n_train:]  # index the test locations
-    y_all = nnp.nan * nnp.zeros([t.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
+    y_all = nnp.nan * nnp.zeros([t_all.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
     y_all[reverse_ind[:n_train], ...] = y_train  # and the data at the train locations
     if y_test is not None:
         y_all[reverse_ind[n_train:], ...] = y_test  # and the data at the train locations
     mask = nnp.ones_like(y_all, dtype=bool)
     mask[train_id] = False
-    dt = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
-    dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t[:, 0])])
-    return (np.array(t), np.array(test_id), np.array(train_id), np.array(y_all),
-            np.array(mask), np.array(dt), np.array(dt_all), np.array(r))
+    dt_train = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
+    dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t_all[:, 0])])
+    return (np.array(t_all), np.array(y_all), np.array(r_all),
+            np.array(t_train), np.array(y_train), np.array(r_train),
+            np.array(r_test),
+            np.array(dt_all), np.array(dt_train),
+            np.array(train_id), np.array(test_id), np.array(mask))
 
 
 def logphi(z):
@@ -217,7 +252,7 @@ def plot(model, it_num, ax=None):
     lb = post_mean[:, 0] - 1.96 * post_var[:, 0] ** 0.5
     ub = post_mean[:, 0] + 1.96 * post_var[:, 0] ** 0.5
     ax.plot(model.t_train, model.y, 'k.', label='training observations')
-    plt.plot(model.t_test, model.y_all[model.test_id], 'r.', alpha=0.4, label='test observations')
+    plt.plot(model.t_all[model.test_id], model.y_all[model.test_id], 'r.', alpha=0.4, label='test observations')
     ax.plot(model.t_all, post_mean, 'b', label='posterior mean')
     ax.fill_between(model.t_all[:, 0], lb, ub, color='b', alpha=0.05, label='95% confidence')
     ax.legend(loc=1)

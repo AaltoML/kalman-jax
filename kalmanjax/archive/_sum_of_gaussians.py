@@ -68,7 +68,7 @@ for j in range(3):
 print(neg_log_marg_lik)
 
 params = [sde_gp_model.prior.hyp, sde_gp_model.likelihood.hyp]
-neg_log_marg_lik, dlZ = value_and_grad(sde_gp_model.kalman_filter, argnums=2)(sde_gp_model.y, sde_gp_model.dt, params, False,
+neg_log_marg_lik, dlZ = value_and_grad(sde_gp_model.kalman_filter, argnums=2)(sde_gp_model.y_train, sde_gp_model.dt_train, params, False,
                                                                               False, None, sde_gp_model.sites.site_params)
 print(neg_log_marg_lik)
 print(dlZ)
