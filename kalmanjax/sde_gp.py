@@ -184,8 +184,8 @@ class SDEGP(object):
         # run the forward filter to calculate the filtering distribution and compute the negative
         # log-marginal likelihood and its gradient in order to update the hyperparameters
         (neg_log_marg_lik, aux), dlZ = value_and_grad(self.kalman_filter,
-                                                      argnums=2, has_aux=True)(self.y_train, self.dt_train, params, True,
-                                                                               None, self.sites.site_params,
+                                                      argnums=2, has_aux=True)(self.y_train, self.dt_train, params,
+                                                                               True, None, self.sites.site_params,
                                                                                self.r_train)
         filter_mean, filter_cov, self.sites.site_params = aux
         # run the smoother and update the sites
@@ -212,16 +212,16 @@ class SDEGP(object):
             params = [self.prior.hyp.copy(), self.likelihood.hyp.copy()]
         # run the forward filter to calculate the filtering distribution
         # if self.sites.site_params=None then the filter initialises the sites too
-        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y_train, self.dt_train, params, True,
-                                                                                  None, self.sites.site_params,
+        _, (filter_mean, filter_cov, self.sites.site_params) = self.kalman_filter(self.y_train, self.dt_train, params,
+                                                                                  True, None, self.sites.site_params,
                                                                                   self.r_train)
         # run the smoother and update the sites
         self.sites.site_params = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, self.dt_train,
                                                                    False, False, self.y_train,
                                                                    self.sites.site_params, self.r_train)
         # compute the negative log-marginal likelihood and its gradient in order to update the hyperparameters
-        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y_train, self.dt_train, params, False,
-                                                                              None, self.sites.site_params,
+        neg_log_marg_lik, dlZ = value_and_grad(self.kalman_filter, argnums=2)(self.y_train, self.dt_train, params,
+                                                                              False, None, self.sites.site_params,
                                                                               self.r_train)
         return neg_log_marg_lik, dlZ
 
