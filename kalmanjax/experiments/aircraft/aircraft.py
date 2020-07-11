@@ -120,6 +120,7 @@ def gradient_step(i, state, mod):
 
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
+    # neg_log_marg_lik, gradients = mod.run_two_stage()
 
     print('iter %2d: nlml=%2.2f' %
           (i, neg_log_marg_lik))

@@ -13,10 +13,10 @@ pi = 3.141592653589793
 plot_intermediate = False
 
 print('loading rainforest data ...')
-data = np.loadtxt('../../../data/TRI2TU-data.csv', delimiter=',')
+data = np.loadtxt('../rainforest/TRI2TU-data.csv', delimiter=',')
 
-nr = 50  # spatial grid point (y-aixs)
-nt = 100  # temporal grid points (x-axis)
+nr = 250  # spatial grid point (y-aixs)
+nt = 500  # temporal grid points (x-axis)
 scale = 1000 / nt
 
 t, r, Y = discretegrid(data, [0, 1000, 0, 500], [nt, nr])
