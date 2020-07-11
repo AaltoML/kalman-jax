@@ -1,14 +1,14 @@
 # kalman-jax
-Approximate inference for Markov (i.e temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://twitter.com/wil_j_wil).
+Approximate inference for Markov (i.e., temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://twitter.com/wil_j_wil).
 The Bernoulli likelihood was implemented by **Paul Chang**. We are based in [**Arno Solin**](https://users.aalto.fi/~asolin/)'s machine learning group at Aalto University, Finland.
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
 
 The methodology is outlined in the following paper:  
-W. Wilkinson, P. Chang, M. Riis Andersen, A. Solin. **State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes.** *International Conference on Machine Learning (ICML), 2020*
+* W. Wilkinson, P. Chang, M. Riis Andersen, A. Solin. **State Space Expectation Propagation: Efficient Inference Schemes for Temporal Gaussian Processes.** *International Conference on Machine Learning (ICML), 2020*
 
 More details about the variational inference method are given in the following paper:  
-[P. Chang, W. Wilkinson, M. E. Khan, A. Solin. **Fast Variational Learning in State-Space Gaussian Process Models.** *International Workshop on Machine Learning for Signal Processing (MLSP), 2020*](https://arxiv.org/abs/2007.04731)
+* P. Chang, W. Wilkinson, M. E. Khan, A. Solin. **Fast Variational Learning in State-Space Gaussian Process Models.** *International Workshop on Machine Learning for Signal Processing (MLSP), 2020* [[arXiv]](https://arxiv.org/abs/2007.04731)
 
 If you use this code in your research, please cite the paper as follows:  
 ```
@@ -67,3 +67,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [ ] Product
 - [x] Independent (multiple stacked components) 
 - [ ] Latent force models (linear)
+
+## License
+
+This software is provided under the Apache License 2.0. See the accompanying LICENSE file for details.
