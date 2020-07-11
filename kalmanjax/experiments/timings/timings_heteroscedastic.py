@@ -102,6 +102,6 @@ time_taken = np.mean(time_taken)
 with open("output/heteroscedastic_" + str(method) + ".txt", "wb") as fp:
     pickle.dump(time_taken, fp)
 
-with open("output/heteroscedastic_" + str(method) + ".txt", "rb") as fp:
-    time_taken = pickle.load(fp)
-print(time_taken)
+# with open("output/heteroscedastic_" + str(method) + ".txt", "rb") as fp:
+#     time_taken = pickle.load(fp)
+# print(time_taken)

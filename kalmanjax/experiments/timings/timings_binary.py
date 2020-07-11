@@ -1,24 +1,27 @@
 import sys
 sys.path.insert(0, '../../')
 import numpy as np
+from jax.experimental import optimizers
 import time
 from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
 import likelihoods
+from utils import softplus_list, plot
 import pickle
 pi = 3.141592653589793
 
 plot_intermediate = False
 
-print('loading banana data ...')
-inputs = np.loadtxt('../banana/banana_X_train', delimiter=',')
-X = inputs[:, :1]
-R = inputs[:, 1:]
-Y = np.loadtxt('../banana/banana_Y_train')[:, None]
-
-# Test points
-Xtest, Rtest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
+print('generating some data ...')
+np.random.seed(99)
+N = 10000  # number of training points
+x = np.sort(70 * np.random.rand(N))
+sn = 0.25
+f = lambda x_: 12. * np.sin(4 * pi * x_) / (0.25 * pi * x_ + 1)
+y_ = f(x) + np.math.sqrt(sn)*np.random.randn(x.shape[0])
+y = np.sign(y_)
+y[y == -1] = 0
 
 if len(sys.argv) > 1:
     method = int(sys.argv[1])
@@ -26,6 +29,18 @@ else:
     method = 0
 
 print('method number', method)
+
+x_train = x
+x_test = x
+y_train = y
+y_test = y
+
+var_f = 1.  # GP variance
+len_f = 0.25  # GP lengthscale
+
+prior = priors.Matern72(variance=var_f, lengthscale=len_f)
+
+lik = likelihoods.Bernoulli(link='logit')
 
 if method == 0:
     inf_method = approx_inf.EEP(power=1)
@@ -52,20 +67,7 @@ elif method == 8:
 elif method == 9:
     inf_method = approx_inf.VI(intmethod='GH')
 
-# plot_2d_classification(None, 0)
-
-np.random.seed(99)
-N = X.shape[0]  # number of training points
-
-var_f = 1.  # GP variance
-len_time = 1.  # temporal lengthscale
-len_space = 1.  # spacial lengthscale
-
-prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time, lengthscale_space=len_space)
-
-lik = likelihoods.Bernoulli(link='logit')
-
-model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, t_test=Xtest, r_test=Rtest, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, t_test=x_test, y_test=y_test, approx_inf=inf_method)
 
 neg_log_marg_lik, gradients = model.run()
 print(gradients)
@@ -86,9 +88,9 @@ for j in range(10):
 
 time_taken = np.mean(time_taken)
 
-with open("output/banana_" + str(method) + ".txt", "wb") as fp:
+with open("output/binary_" + str(method) + ".txt", "wb") as fp:
     pickle.dump(time_taken, fp)
 
-# with open("output/banana_" + str(method) + ".txt", "rb") as fp:
+# with open("output/binary_" + str(method) + ".txt", "rb") as fp:
 #     time_taken = pickle.load(fp)
 # print(time_taken)

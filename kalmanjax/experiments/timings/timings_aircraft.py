@@ -7,19 +7,29 @@ from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
 import likelihoods
+from datetime import date
 import pickle
 
 plot_final = False
 plot_intermediate = False
 
-print('loading coal data ...')
-if plot_final:
-    disaster_timings = pd.read_csv('../../../data/coal.txt', header=None).values[:, 0]
+print('loading data ...')
+aircraft_accidents = pd.read_csv('../aircraft/aircraft_accidents.txt', sep='-', header=None).values
 
-D = np.loadtxt('../coal/binned.csv')
-x = D[:, 0:1]
-y = D[:, 1:]
-N = D.shape[0]
+num_data = aircraft_accidents.shape[0]
+xx = np.zeros([num_data, 1])
+for j in range(num_data):
+    xx[j] = date.toordinal(date(aircraft_accidents[j, 0], aircraft_accidents[j, 1], aircraft_accidents[j, 2])) + 366
+
+BIN_WIDTH = 1
+# Discretize the data
+x_min = np.floor(np.min(xx))
+x_max = np.ceil(np.max(xx))
+x_max_int = x_max-np.mod(x_max-x_min, BIN_WIDTH)
+x = np.linspace(x_min, x_max_int, num=int((x_max_int-x_min)/BIN_WIDTH+1))
+x = np.concatenate([np.min(x)-np.linspace(61, 1, num=61), x])  # pad with zeros to reduce strange edge effects
+y, _ = np.histogram(xx, np.concatenate([[-1e10], x[1:]-np.diff(x)/2, [1e10]]))
+N = y.shape[0]
 
 np.random.seed(123)
 # meanval = np.log(len(disaster_timings)/num_time_bins)  # TODO: incorporate mean
@@ -36,10 +46,11 @@ x_test = x
 y_train = y
 y_test = y
 
-var_f = 1.0  # GP variance
-len_f = 1.0  # GP lengthscale
+prior_1 = priors.Matern52(variance=2., lengthscale=5.5e4)
+prior_2 = priors.QuasiPeriodicMatern32(variance=1., lengthscale_periodic=2., period=365., lengthscale_matern=1.5e4)
+prior_3 = priors.QuasiPeriodicMatern32(variance=1., lengthscale_periodic=2., period=7., lengthscale_matern=30*365.)
 
-prior = priors.Matern52(variance=var_f, lengthscale=len_f)
+prior = priors.Sum([prior_1, prior_2, prior_3])
 lik = likelihoods.Poisson()
 
 if method == 0:
@@ -88,9 +99,9 @@ for j in range(10):
 
 time_taken = np.mean(time_taken)
 
-with open("output/coal_" + str(method) + ".txt", "wb") as fp:
+with open("output/aircraft_" + str(method) + ".txt", "wb") as fp:
     pickle.dump(time_taken, fp)
 
-# with open("output/coal_" + str(method) + ".txt", "rb") as fp:
+# with open("output/aircraft_" + str(method) + ".txt", "rb") as fp:
 #     time_taken = pickle.load(fp)
 # print(time_taken)
