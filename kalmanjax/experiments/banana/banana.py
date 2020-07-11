@@ -17,7 +17,7 @@ pi = 3.141592653589793
 plot_intermediate = False
 
 print('loading banana data ...')
-Xall = np.loadtxt('banana_X_train', delimiter=',')
+inputs = np.loadtxt('banana_X_train', delimiter=',')
 Yall = np.loadtxt('banana_Y_train')[:, None]
 cvind = np.loadtxt('cvind.csv').astype(int)
 # 10-fold cross-validation
@@ -41,9 +41,11 @@ test = cvind[fold, :]
 train = np.setdiff1d(cvind, test)
 
 # Set training and test data
-X = Xall[train, :]
+X = inputs[train, :1]
+R = inputs[train, 1:]
 Y = Yall[train, :]
-XT = Xall[test, :]
+XT = inputs[test, :1]
+RT = inputs[test, 1:]
 YT = Yall[test, :]
 
 if method == 0:
@@ -99,7 +101,7 @@ prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time,
 
 lik = likelihoods.Bernoulli(link='logit')
 
-model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, t_test=XT, y_test=YT, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, t_test=XT, y_test=YT, r_test=RT, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -130,7 +132,7 @@ plot_num = 0
 mu_prev = None
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(250):
+for j in range(0):
     opt_state, plot_num, mu_prev = gradient_step(j, opt_state, model, plot_num, mu_prev)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -138,7 +140,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+posterior_mean, posterior_var, _, nlpd = model.predict(return_full=True)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('test NLPD: %1.2f' % nlpd)

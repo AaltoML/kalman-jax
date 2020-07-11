@@ -38,7 +38,7 @@ lik = likelihoods.Probit()
 inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.SLEP()
 # inf_method = approx_inf.EKS()
-# inf_method = approx_inf.EKEP()
+# inf_method = approx_inf.EEP()
 # inf_method = approx_inf.VI()
 
 model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, t_test=Xtest, r_test=Rtest, approx_inf=inf_method)
