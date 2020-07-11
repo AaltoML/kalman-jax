@@ -48,12 +48,12 @@ elif method == 1:
     inf_method = approx_inf.EKS()
 
 elif method == 2:
-    inf_method = approx_inf.UEP(power=1)
+    inf_method = approx_inf.UEP(power=0.5)
 elif method == 3:
     inf_method = approx_inf.UKS()
 
 elif method == 4:
-    inf_method = approx_inf.GHEP(power=1)
+    inf_method = approx_inf.GHEP(power=0.5)
 elif method == 5:
     inf_method = approx_inf.GHKS()
 

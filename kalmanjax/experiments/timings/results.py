@@ -12,7 +12,7 @@ for method in range(10):
         else:
             with open("output/" + str(task) + "_" + str(method) + ".txt", "rb") as fp:
                 result = pickle.load(fp)
-                print(result)
+                # print(result)
                 method_timings[method, task_num] = result
 
 # for fold in range(10):
@@ -20,7 +20,7 @@ for method in range(10):
 #         print(pickle.load(fp))
 
 np.set_printoptions(precision=3)
-print(method_timings[:, -1][None, ...].T)
+print(method_timings[:, -1])
 # print(np.nanmean(method_nlpd, axis=1))
 # np.set_printoptions(precision=2)
 # print(np.std(method_nlpd, axis=1))

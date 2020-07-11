@@ -37,7 +37,7 @@ if method == 0:
 elif method == 1:
     inf_method = approx_inf.EKS()
 
-prior = priors.SpatialMatern52(variance=var_f, lengthscale=len_f, z=r[0, ...], fixed_grid=True)
+prior = priors.SpatialMatern32(variance=var_f, lengthscale=len_f, z=r[0, ...], fixed_grid=True)
 lik = likelihoods.Poisson()
 # inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
 inf_method = approx_inf.ExtendedEP()

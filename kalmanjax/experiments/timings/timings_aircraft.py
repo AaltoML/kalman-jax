@@ -89,7 +89,7 @@ print(gradients)
 
 print('optimising the hyperparameters ...')
 time_taken = np.zeros([10, 1])
-for j in range(10):
+for j in range(2):
     t0 = time.time()
     neg_log_marg_lik, gradients = model.run()
     print(gradients)

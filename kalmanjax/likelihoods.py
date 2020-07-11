@@ -561,7 +561,7 @@ class Poisson(Likelihood):
             raise NotImplementedError('link function not implemented')
         self.name = 'Poisson'
 
-    # @partial(jit, static_argnums=0)
+    @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Poisson likelihood:
