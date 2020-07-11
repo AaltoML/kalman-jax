@@ -1,4 +1,4 @@
-def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None, r=None):
+def kalman_filter__(self, y, dt, params, store=False, mask=None, site_params=None, r=None):
     """
     Run the Kalman filter to get p(fₙ|y₁,...,yₙ).
     The Kalman update step invloves some control flow to work out whether we are
@@ -37,7 +37,7 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         site_mean = np.zeros([N, self.func_dim, 1])
         site_var = np.zeros([N, self.func_dim, self.func_dim])
     for n in range(N):
-        y_n = y[n]
+        y_n = y[n][..., np.newaxis]
         # -- KALMAN PREDICT --
         #  mₙ⁻ = Aₙ mₙ₋₁
         #  Pₙ⁻ = Aₙ Pₙ₋₁ Aₙ' + Qₙ, where Qₙ = Pinf - Aₙ Pinf Aₙ'
@@ -51,7 +51,8 @@ def kalman_filter(self, y, dt, params, store=False, mask=None, site_params=None,
         mu = H @ m_
         var = H @ P_ @ H.T
         if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-            y_n = np.where(mask[n], mu[:y_n.shape[0], 0], y_n)  # fill in masked obs with prior expectation
+            y_n = np.where(mask[n][..., np.newaxis], mu[:y_n.shape[0]],
+                           y_n)  # fill in masked obs with prior expectation
         log_lik_n, site_mu_, site_var_ = self.sites.update(self.likelihood, y_n, mu, var, theta_lik, None)
         if site_params is not None:  # use supplied site parameters to perform the update
             site_mu_, site_var_ = site_params[0][n], site_params[1][n]

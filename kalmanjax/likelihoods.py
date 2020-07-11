@@ -199,7 +199,7 @@ class Likelihood(object):
         lik_std = cholesky(np.diag(np.expand_dims(lik_variance, 0)))
         return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
 
-    @partial(jit, static_argnums=(0, 4))
+    # @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression_cubature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
         """
         Perform statistical linear regression (SLR) using cubature.
@@ -222,6 +222,7 @@ class Likelihood(object):
         # Compute variance S via cubature:
         # S = ∫ [(E[yₙ|fₙ]-zₙ) (E[yₙ|fₙ]-zₙ)' + Cov[yₙ|fₙ]] 𝓝(fₙ|mₙ,vₙ) dfₙ
         #   ≈ ∑ᵢ wᵢ [(E[yₙ|fsigᵢ]-zₙ) (E[yₙ|fsigᵢ]-zₙ)' + Cov[yₙ|fₙ]]
+        # TODO: allow for multi-dim cubature
         S = np.sum(
             w * ((lik_expectation - mu) * (lik_expectation - mu) + lik_covariance), axis=-1
         )[:, None]
@@ -560,7 +561,7 @@ class Poisson(Likelihood):
             raise NotImplementedError('link function not implemented')
         self.name = 'Poisson'
 
-    @partial(jit, static_argnums=0)
+    # @partial(jit, static_argnums=0)
     def evaluate_likelihood(self, y, f, hyp=None):
         """
         Evaluate the Poisson likelihood:
@@ -595,13 +596,25 @@ class Poisson(Likelihood):
         return y * np.log(mu) - mu - gammaln(y + 1)
 
     @partial(jit, static_argnums=0)
+    def observation_model(self, f, sigma, hyp=None):
+        """
+        TODO: sort out broadcasting so we don't need this additional function (only difference is the transpose)
+        The implicit observation model is:
+            h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] σₙ
+        """
+        conditional_expectation, conditional_covariance = self.conditional_moments(f, hyp)
+        obs_model = conditional_expectation + cholesky(conditional_covariance.T) @ sigma
+        return np.squeeze(obs_model)
+
+    @partial(jit, static_argnums=0)
     def conditional_moments(self, f, hyp=None):
         """
         The first two conditional moments of a Poisson distribution are equal to the intensity:
             E[yₙ|fₙ] = link(fₙ)
             Var[yₙ|fₙ] = link(fₙ)
         """
-        return self.link_fn(f), np.diag(np.squeeze(self.link_fn(f)))
+        # return self.link_fn(f), self.link_fn(f)
+        return self.link_fn(f), vmap(np.diag, 1, 2)(self.link_fn(f))
 
 
 class HeteroscedasticNoise(Likelihood):

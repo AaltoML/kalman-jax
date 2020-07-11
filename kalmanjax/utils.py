@@ -149,11 +149,11 @@ def input_admin(t, y, r, t_test, y_test, r_test):
     mask[train_id] = False
     dt_train = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
     dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t_all[:, 0])])
-    return (np.array(t_all), np.array(y_all), np.array(r_all),
-            np.array(t_train), np.array(y_train), np.array(r_train),
-            np.array(r_test),
-            np.array(dt_all), np.array(dt_train),
-            np.array(train_id), np.array(test_id), np.array(mask))
+    return (np.array(t_all, dtype=np.float64), np.array(y_all, dtype=np.float64), np.array(r_all, dtype=np.float64),
+            np.array(t_train, dtype=np.float64), np.array(y_train, dtype=np.float64), np.array(r_train, dtype=np.float64),
+            np.array(r_test, dtype=np.float64),
+            np.array(dt_all, dtype=np.float64), np.array(dt_train, dtype=np.float64),
+            np.array(train_id, dtype=np.int64), np.array(test_id, dtype=np.int64), np.array(mask, dtype=bool))
 
 
 def logphi(z):

@@ -28,8 +28,8 @@ len_f = 10  # lengthscale
 
 prior = priors.SpatialMatern52(variance=var_f, lengthscale=len_f, z=r[0, ...], fixed_grid=True)
 lik = likelihoods.Poisson()
-inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
-# inf_method = approx_inf.ExtendedEP()
+# inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
+inf_method = approx_inf.ExtendedEP()
 
 # t_spacetime = np.block([t[..., 0][..., None], r])
 

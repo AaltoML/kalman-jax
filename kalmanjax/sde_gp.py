@@ -273,7 +273,7 @@ class SDEGP(object):
                 s.site_mean = np.zeros([N, self.func_dim, 1])
                 s.site_cov = np.zeros([N, self.func_dim, self.func_dim])
             for n in s.range(N):
-                y_n = y[n]
+                y_n = y[n][..., np.newaxis]
                 # -- KALMAN PREDICT --
                 #  mₙ⁻ = Aₙ mₙ₋₁
                 #  Pₙ⁻ = Aₙ Pₙ₋₁ Aₙ' + Qₙ, where Qₙ = Pinf - Aₙ Pinf Aₙ'
@@ -287,7 +287,7 @@ class SDEGP(object):
                 predict_mean = H @ m_
                 predict_cov = H @ P_ @ H.T
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
-                    y_n = np.where(mask[n], predict_mean[:y_n.shape[0], 0], y_n)  # fill in masked obs with expectation
+                    y_n = np.where(mask[n][..., np.newaxis], predict_mean[:y_n.shape[0]], y_n)  # fill in masked obs with expectation
                 log_lik_n, site_mean, site_cov = self.sites.update(self.likelihood, y_n, predict_mean, predict_cov,
                                                                    theta_lik, None)
                 if site_params is not None:  # use supplied site parameters to perform the update
@@ -375,7 +375,8 @@ class SDEGP(object):
                     # extract mean and var from state:
                     post_mean, post_cov = H @ s.m, H @ s.P @ H.T
                     # calculate the new sites
-                    _, site_mu, site_cov = self.sites.update(self.likelihood, y[n], post_mean, post_cov, theta_lik,
+                    _, site_mu, site_cov = self.sites.update(self.likelihood, y[n][..., np.newaxis],
+                                                             post_mean, post_cov, theta_lik,
                                                              (site_params[0][n], site_params[1][n]))
                     s.site_mean = index_add(s.site_mean, index[n, ...], site_mu)
                     s.site_var = index_add(s.site_var, index[n, ...], site_cov)
