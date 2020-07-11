@@ -1,5 +1,5 @@
 # kalman-jax
-Approximate inference for Markov (i.e temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://twitter.com/wil_j_wil).
+Approximate inference for Markov (i.e., temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://twitter.com/wil_j_wil).
 The Bernoulli likelihood was implemented by **Paul Chang**. We are based in [**Arno Solin**](https://users.aalto.fi/~asolin/)'s machine learning group at Aalto University, Finland.
 
 This project aims to implement an XLA JIT compilable framework for inference in (non-conjugate) Markov Gaussian processes, with autodiff using [JAX](https://github.com/google/jax).
@@ -67,3 +67,7 @@ Each approximate inference algorithm will call the same underlying Kalman filter
 - [ ] Product
 - [x] Independent (multiple stacked components) 
 - [ ] Latent force models (linear)
+
+## License
+
+This software is provided under the Apache License 2.0. See the accompanying LICENSE file for details.
