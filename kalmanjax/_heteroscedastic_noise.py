@@ -54,7 +54,7 @@ prior = priors.Independent([prior1, prior2])
 lik = likelihoods.HeteroscedasticNoise()
 
 # inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='UT', damping=0.1)
-inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='GH', damping=0.5)
+inf_method = approx_inf.ExpectationPropagation(power=0.01, intmethod='GH', damping=0.5)
 # inf_method = approx_inf.VariationalInference(intmethod='GH', damping=0.5)
 # inf_method = approx_inf.VariationalInference(intmethod='UT', damping=0.5)
 # inf_method = approx_inf.ExtendedEP(power=0, damping=0.5)
@@ -91,7 +91,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(200):
+for j in range(250):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
@@ -105,21 +105,25 @@ print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)
 
 
-x_pred = model.t_all[:, 0]
+x_pred = X_scaler.inverse_transform(model.t_all[:, 0])
 link = model.likelihood.link_fn
-lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
-ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
+post_mean = posterior_mean[:, 0, 0]
+lb = post_mean - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
+ub = post_mean + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
+post_mean = y_scaler.inverse_transform(post_mean)
+lb = y_scaler.inverse_transform(lb)
+ub = y_scaler.inverse_transform(ub)
 
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
 plt.clf()
-plt.plot(X, Y, 'k.', label='train')
-plt.plot(XT, YT, 'r.', label='test')
-plt.plot(x_pred, posterior_mean[:, 0], 'c', label='posterior mean')
+plt.plot(X_scaler.inverse_transform(X), y_scaler.inverse_transform(Y), 'k.', label='train')
+plt.plot(X_scaler.inverse_transform(XT), y_scaler.inverse_transform(YT), 'r.', label='test')
+plt.plot(x_pred, post_mean, 'c', label='posterior mean')
 plt.fill_between(x_pred, lb, ub, color='c', alpha=0.05, label='95% confidence')
-plt.xlim(model.t_all[0], model.t_all[-1])
+plt.xlim(x_pred[0], x_pred[-1])
 plt.legend()
 plt.title('Heteroschedastic Noise Model via Kalman smoothing (motorcycle crash data)')
-plt.xlabel('time')
-plt.ylabel('acceleration')
+plt.xlabel('time (milliseconds)')
+plt.ylabel('accelerometer reading')
 plt.show()
