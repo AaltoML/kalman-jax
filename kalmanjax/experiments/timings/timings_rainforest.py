@@ -39,25 +39,25 @@ elif method == 1:
 
 prior = priors.SpatialMatern32(variance=var_f, lengthscale=len_f, z=r[0, ...], fixed_grid=True)
 lik = likelihoods.Poisson()
-# inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
-inf_method = approx_inf.ExtendedEP()
+inf_method = approx_inf.ExtendedKalmanSmoother(damping=1.)
+# inf_method = approx_inf.ExtendedEP()
 
 # t_spacetime = np.block([t[..., 0][..., None], r])
 
 model = SDEGP(prior=prior, likelihood=lik, t=t, y=Y, r=r, t_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
 
-neg_log_marg_lik, gradients = model.run()
+neg_log_marg_lik, gradients = model.run_two_stage()
 print(gradients)
-neg_log_marg_lik, gradients = model.run()
+neg_log_marg_lik, gradients = model.run_two_stage()
 print(gradients)
-neg_log_marg_lik, gradients = model.run()
+neg_log_marg_lik, gradients = model.run_two_stage()
 print(gradients)
 
 print('optimising the hyperparameters ...')
 time_taken = np.zeros([10, 1])
 for j in range(10):
     t0 = time.time()
-    neg_log_marg_lik, gradients = model.run()
+    neg_log_marg_lik, gradients = model.run_two_stage()
     print(gradients)
     t1 = time.time()
     time_taken[j] = t1-t0

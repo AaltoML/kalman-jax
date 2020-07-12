@@ -20,7 +20,7 @@ for method in range(10):
 #         print(pickle.load(fp))
 
 np.set_printoptions(precision=3)
-print(method_timings[:, -1])
+print(method_timings[:, :-1])
 # print(np.nanmean(method_nlpd, axis=1))
 # np.set_printoptions(precision=2)
 # print(np.std(method_nlpd, axis=1))

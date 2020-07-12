@@ -14,8 +14,8 @@ plot_intermediate = False
 print('loading rainforest data ...')
 data = np.loadtxt('../data/TRI2TU-data.csv', delimiter=',')
 
-nr = 50  # spatial grid point (y-aixs)
-nt = 100  # temporal grid points (x-axis)
+nr = 100  # spatial grid point (y-aixs)
+nt = 200  # temporal grid points (x-axis)
 scale = 1000 / nt
 
 t, r, Y = discretegrid(data, [0, 1000, 0, 500], [nt, nr])
@@ -26,10 +26,10 @@ N = nr * nt  # number of data points
 var_f = 1  # GP variance
 len_f = 10  # lengthscale
 
-prior = priors.SpatialMatern52(variance=var_f, lengthscale=len_f, z=r[0, ...], fixed_grid=True)
+prior = priors.SpatialMatern32(variance=var_f, lengthscale=len_f, z=r[0, ...], fixed_grid=True)
 lik = likelihoods.Poisson()
-# inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
-inf_method = approx_inf.ExtendedEP()
+inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
+# inf_method = approx_inf.ExtendedEP()
 
 # t_spacetime = np.block([t[..., 0][..., None], r])
 

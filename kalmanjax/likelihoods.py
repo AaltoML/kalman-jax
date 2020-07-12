@@ -1,6 +1,6 @@
 import jax.numpy as np
 from jax.scipy.special import erf, gammaln
-from jax import jit, partial, jacrev, random, vmap
+from jax import jit, partial, jacrev, random, vmap, grad
 from jax.scipy.linalg import cholesky, cho_factor, cho_solve
 from jax.scipy.linalg import inv as inv_any
 from utils import inv, softplus, sigmoid, logphi, gaussian_moment_match, softplus_inv, gauss_hermite
@@ -199,7 +199,7 @@ class Likelihood(object):
         lik_std = cholesky(np.diag(np.expand_dims(lik_variance, 0)))
         return lik_expectation + lik_std * random.normal(random.PRNGKey(rng_key), shape=f.shape)
 
-    # @partial(jit, static_argnums=(0, 4))
+    @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression_cubature(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
         """
         Perform statistical linear regression (SLR) using cubature.
@@ -261,7 +261,7 @@ class Likelihood(object):
     def analytical_linearisation(self, m, sigma=None, hyp=None):
         """
         Compute the Jacobian of the state space observation model w.r.t. the
-        function fₙ and the noise term rₙ.
+        function fₙ and the noise term σₙ.
         The implicit observation model is:
             h(fₙ,rₙ) = E[yₙ|fₙ] + √Cov[yₙ|fₙ] σₙ
         The Jacobians are evaluated at the means, fₙ=m, σₙ=0, to be used during
@@ -422,10 +422,12 @@ class Bernoulli(Likelihood):
         super().__init__(hyp=None)
         if link == 'logit':
             self.link_fn = lambda f: 1 / (1 + np.exp(-f))
+            self.dlink_fn = lambda f: np.exp(f) / (1 + np.exp(f)) ** 2
             self.link = link
         elif link == 'probit':
             jitter = 1e-10
             self.link_fn = lambda f: 0.5 * (1.0 + erf(f / np.sqrt(2.0))) * (1 - 2 * jitter) + jitter
+            self.dlink_fn = lambda f: grad(self.link_fn)(np.squeeze(f)).reshape(-1, 1)
             self.link = link
         else:
             raise NotImplementedError('link function not implemented')
@@ -502,6 +504,19 @@ class Bernoulli(Likelihood):
             # if a is not 1, we can calculate the moments via cubature
             return self.moment_match_cubature(y, m, v, None, power, cubature_func)
 
+    @partial(jit, static_argnums=0)
+    def analytical_linearisation(self, m, sigma=None, hyp=None):
+        """
+        Compute the Jacobian of the state space observation model w.r.t. the
+        function fₙ and the noise term σₙ.
+        """
+        Jf = self.dlink_fn(m) + (
+            0.5 * (self.link_fn(m) * (1 - self.link_fn(m))) ** -0.5
+            * self.dlink_fn(m) * (1 - 2 * self.link_fn(m))
+        ) * sigma
+        Jsigma = (self.link_fn(m) * (1 - self.link_fn(m))) ** 0.5
+        return Jf, Jsigma
+
 
 class Probit(Bernoulli):
     """
@@ -555,8 +570,10 @@ class Poisson(Likelihood):
         super().__init__(hyp=None)
         if link == 'exp':
             self.link_fn = lambda mu: np.exp(mu)
+            self.dlink_fn = lambda mu: np.exp(mu)
         elif link == 'logistic':
-            self.link_fn = lambda mu: np.log(1.0 + np.exp(mu))
+            self.link_fn = lambda mu: softplus(mu)
+            self.dlink_fn = lambda mu: sigmoid(mu)
         else:
             raise NotImplementedError('link function not implemented')
         self.name = 'Poisson'
@@ -616,6 +633,16 @@ class Poisson(Likelihood):
         # return self.link_fn(f), self.link_fn(f)
         return self.link_fn(f), vmap(np.diag, 1, 2)(self.link_fn(f))
 
+    @partial(jit, static_argnums=0)
+    def analytical_linearisation(self, m, sigma=None, hyp=None):
+        """
+        Compute the Jacobian of the state space observation model w.r.t. the
+        function fₙ and the noise term σₙ.
+        """
+        Jf = np.diag(np.squeeze(self.link_fn(m) + 0.5 * self.link_fn(m) ** -0.5 * self.dlink_fn(m) * sigma, axis=-1))
+        Jsigma = np.diag(np.squeeze(self.link_fn(m) ** 0.5, axis=-1))
+        return Jf, Jsigma
+
 
 class HeteroscedasticNoise(Likelihood):
     """
@@ -628,9 +655,11 @@ class HeteroscedasticNoise(Likelihood):
         """
         super().__init__(hyp=None)
         if link == 'exp':
-            self.link_fn = lambda mu: np.exp(mu-0.5)
+            self.link_fn = lambda mu: np.exp(mu - 0.5)
+            self.dlink_fn = lambda mu: np.exp(mu - 0.5)
         elif link == 'softplus':
-            self.link_fn = lambda mu: softplus(mu-0.5) + 1e-10
+            self.link_fn = lambda mu: softplus(mu - 0.5) + 1e-10
+            self.dlink_fn = lambda mu: sigmoid(mu - 0.5)
         else:
             raise NotImplementedError('link function not implemented')
         self.name = 'Heteroscedastic Noise'
@@ -812,6 +841,14 @@ class HeteroscedasticNoise(Likelihood):
         omega = np.block([[1., 0.]])
         return mu, S, C, omega
 
+    @partial(jit, static_argnums=0)
+    def analytical_linearisation(self, m, sigma=None, hyp=None):
+        """
+        Compute the Jacobian of the state space observation model w.r.t. the
+        function fₙ and the noise term σₙ.
+        """
+        return np.block([[np.array(1.0), self.dlink_fn(m[1]) * sigma]]), self.link_fn(np.array([m[1]]))
+
 
 class AudioAmplitudeDemodulation(Likelihood):
     """
@@ -904,8 +941,8 @@ class AudioAmplitudeDemodulation(Likelihood):
         num_components = int(m.shape[0] / 2)
         subbands, modulators = m[:num_components], self.link_fn(m[num_components:])
         Jf = np.block([[modulators], [subbands * self.dlink_fn(m[num_components:])]])
-        Jr = np.array([[np.sqrt(obs_noise_var)]])
-        return np.atleast_2d(Jf).T, np.atleast_2d(Jr).T
+        Jsigma = np.array([[np.sqrt(obs_noise_var)]])
+        return np.atleast_2d(Jf).T, np.atleast_2d(Jsigma).T
 
     @partial(jit, static_argnums=(0, 4))
     def statistical_linear_regression(self, cav_mean, cav_cov, hyp=None, cubature_func=None):
@@ -982,3 +1019,14 @@ class AudioAmplitudeDemodulation(Likelihood):
         ) * (lognormpdf + const), axis=-1)
         dE_dv = np.diag(np.block([d2E1, d2E2]))
         return exp_log_lik, dE_dm, dE_dv
+
+    @partial(jit, static_argnums=0)
+    def analytical_linearisation(self, m, sigma=None, hyp=None):
+        """
+        Compute the Jacobian of the state space observation model w.r.t. the
+        function fₙ and the noise term σₙ.
+        """
+        num_components = int(m.shape[0] / 2)
+        Jf = np.block([[self.link_fn(m[num_components:])], [m[:num_components] * self.dlink_fn(m[num_components:])]]).T
+        Jsigma = np.array([[hyp ** 0.5]])
+        return Jf, Jsigma
