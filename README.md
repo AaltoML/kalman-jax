@@ -22,6 +22,12 @@ If you use this code in your research, please cite the paper as follows:
 
 ![Spatio temporal GP classification](./data/spatio_temporal_classification.gif)
 
+## Getting started
+ - Install the latest version of jax and jaxlib (see [requirements.txt](./requirements.txt) for full dependencies)
+ - We have lots of [demo notebooks](./kalmanjax/notebooks/) which cover many different tasks and modelling scenarios.
+
+## Info
+
 ### We combine two recent advances in the field of probabilistic machine learning:
  - Development of state space methods for linear-time approximate inference in Gaussian processes
  - The ability to JIT compile and autodiff through loops efficiently with JAX
