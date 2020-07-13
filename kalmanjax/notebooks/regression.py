@@ -1,4 +1,7 @@
+import sys
+sys.path.insert(0, '../')
 import numpy as np
+from jax.nn import softplus
 from jax.experimental import optimizers
 import matplotlib.pyplot as plt
 import time
@@ -9,40 +12,39 @@ import likelihoods
 from utils import softplus_list, plot
 pi = 3.141592653589793
 
+
+def wiggly_time_series(x_):
+    noise_var = 0.15  # true observation noise
+    return (np.cos(0.04*x_+0.33*pi) * np.sin(0.2*x_) +
+            np.math.sqrt(noise_var) * np.random.normal(0, 1, x_.shape))
+
+
 plot_intermediate = False
 
 print('generating some data ...')
-np.random.seed(99)
-N = 1000  # number of training points
-x = 100 * np.random.rand(N)
-f = lambda x_: 6 * np.sin(pi * x_ / 10.0) / (pi * x_ / 10.0 + 1)
-y_ = f(x) + np.math.sqrt(0.05)*np.random.randn(x.shape[0])
-y = np.sign(y_)
-y[y == -1] = 0
+np.random.seed(12345)
+N = 1000
+# x = np.linspace(-25.0, 75.0, num=N)  # evenly spaced
+x = np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N))  # unevenly spaced
+y = wiggly_time_series(x)
+x_test = np.linspace(np.min(x)-15.0, np.max(x)+15.0, num=500)
+y_test = wiggly_time_series(x_test) + 0.5*np.random.randn(x_test.shape[0])
 
-x_test = np.linspace(np.min(x)-10.0, np.max(x)+10.0, num=500)
-y_test = np.sign(f(x_test) + np.math.sqrt(0.05)*np.random.randn(x_test.shape[0]))
-
-y_test[y_test == -1] = 0
-
-var_f = 1.  # GP variance
+var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
+var_y = 0.5  # observation noise
 
 prior = priors.Matern52(variance=var_f, lengthscale=len_f)
-
-lik = likelihoods.Bernoulli(link='logit')
-inf_method = approx_inf.ExpectationPropagation(power=0.9, intmethod='UT')
-# inf_method = approx_inf.VariationalInference(intmethod='GH')
-# inf_method = approx_inf.VariationalInference(intmethod='UT')
-# inf_method = approx_inf.ExtendedEP(power=0)
-# inf_method = approx_inf.ExtendedKalmanSmoother()
-# inf_method = approx_inf.GaussHermiteKalmanSmoother()
-# inf_method = approx_inf.StatisticallyLinearisedEP(intmethod='UT')
-# inf_method = approx_inf.UnscentedKalmanSmoother()
+# prior_ = priors.QuasiPeriodicMatern32([var_f, len_f, 20., 50.])
+lik = likelihoods.Gaussian(variance=var_y)
+inf_method = approx_inf.EP(power=0.5)
+# inf_method = approx_inf.EKS()
+# inf_method = approx_inf.EEP()
+# inf_method = approx_inf.VI()
 
 model = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, y_test=y_test, approx_inf=inf_method)
 
-opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
+opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
 opt_state = opt_init([model.prior.hyp, model.likelihood.hyp])
 
@@ -56,9 +58,9 @@ def gradient_step(i, state, mod):
     neg_log_marg_lik, gradients = mod.run()
     # neg_log_marg_lik, gradients = mod.run_two_stage()  # <-- less elegant but reduces compile time
 
-    prior_params = softplus_list(params[0])
-    print('iter %2d: var_f=%1.2f len_f=%1.2f, nlml=%2.2f' %
-          (i, prior_params[0], prior_params[1], neg_log_marg_lik))
+    prior_params, lik_param = softplus_list(params[0]), softplus(params[1])
+    print('iter %2d: var_f=%1.2f len_f=%1.2f var_y=%1.2f, nlml=%2.2f' %
+          (i, prior_params[0], prior_params[1], lik_param, neg_log_marg_lik))
 
     if plot_intermediate:
         plot(mod, i)
@@ -86,7 +88,6 @@ ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
 x_pred = model.t_all[:, 0]
 test_id = model.test_id
 t_test = model.t_all[test_id]
-link_fn = model.likelihood.link_fn
 
 print('sampling from the posterior ...')
 t0 = time.time()
@@ -97,13 +98,13 @@ print('sampling time: %2.2f secs' % (t1-t0))
 print('plotting ...')
 plt.figure(1, figsize=(12, 5))
 plt.clf()
-plt.plot(x, y, 'b+', label='training observations')
-plt.plot(x_test, y_test, 'r+', alpha=0.4, label='test observations')
-plt.plot(x_pred, link_fn(posterior_mean[..., 0]), 'm', label='posterior mean')
-plt.fill_between(x_pred, link_fn(lb), link_fn(ub), color='m', alpha=0.05, label='95% confidence')
-plt.plot(t_test, link_fn(posterior_samp[test_id, 0, :]), 'm', alpha=0.15)
-plt.xlim(t_test[0], t_test[-1])
+plt.plot(x, y, 'k.', label='training observations')
+plt.plot(x_test, y_test, 'r.', alpha=0.4, label='test observations')
+plt.plot(x_pred, posterior_mean[..., 0], 'b', label='posterior mean')
+plt.fill_between(x_pred, lb, ub, color='b', alpha=0.05, label='95% confidence')
+plt.plot(t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
+plt.xlim([t_test[0], t_test[-1]])
 plt.legend()
-plt.title('GP classification via Kalman smoothing. Test NLPD: %1.2f' % nlpd)
+plt.title('GP regression via Kalman smoothing. Test NLPD: %1.2f' % nlpd)
 plt.xlabel('time - $t$')
 plt.show()
