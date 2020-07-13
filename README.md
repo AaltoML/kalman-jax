@@ -24,7 +24,7 @@ If you use this code in your research, please cite the paper as follows:
 
 ## Getting started
  - Install the latest version of jax and jaxlib (see [requirements.txt](./requirements.txt) for full dependencies)
- - We have lots of [demo notebooks](./kalmanjax/notebooks/) which cover many different tasks and modelling scenarios.
+ - We have lots of [**demo notebooks**](./kalmanjax/notebooks/) which cover many different tasks and modelling scenarios.
 
 ## Info
 
