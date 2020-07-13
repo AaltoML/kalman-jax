@@ -281,7 +281,7 @@ def plot_2d_classification(m, it_num):
     # ax.set_xlim(-2.8, 2.8)
     # ax.set_ylim(-2.8, 2.8)
 
-    mu, var, _, nlpd_test, _, _ = m.predict_2d()
+    mu, var, _, nlpd_test, _, _ = m.predict(return_full=True)
     mu = np.squeeze(mu)
     lim = 2.8
     label0, label1 = -1., 1.  # class labels are +/-1
@@ -311,7 +311,7 @@ def plot_2d_classification(m, it_num):
 
 
 def plot_2d_classification_filtering(m, it_num, plot_num, mu_prev=None):
-    mu, var, _, nlpd_test, mu_filt, var_filt = m.predict_2d()
+    mu, var, _, nlpd_test, mu_filt, var_filt = m.predict_2d(return_full=True)
     mu, mu_filt = np.squeeze(mu), np.squeeze(mu_filt)
     if mu_prev is None:
         mu_plot = nnp.zeros_like(mu)

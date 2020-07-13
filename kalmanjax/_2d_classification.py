@@ -9,15 +9,14 @@ import approximate_inference as approx_inf
 import priors
 import likelihoods
 from utils import softplus_list, plot_2d_classification, plot_2d_classification_filtering
-pi = 3.141592653589793
 
 plot_intermediate = False
 
 print('loading banana data ...')
 inputs = np.loadtxt('../data/banana_X_train', delimiter=',')
-X = inputs[:, :1]
-R = inputs[:, 1:]
-Y = np.loadtxt('../data/banana_Y_train')[:, None]
+X = inputs[:, :1]  # temporal inputs (x-axis)
+R = inputs[:, 1:]  # spatial inputs (y-axis)
+Y = np.loadtxt('../data/banana_Y_train')[:, None]  # observations / labels
 
 # Test points
 Xtest, Rtest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]
@@ -35,11 +34,10 @@ len_space = 0.3  # spacial lengthscale
 
 prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time, lengthscale_space=len_space)
 lik = likelihoods.Probit()
-inf_method = approx_inf.EP(power=0.5)
-# inf_method = approx_inf.SLEP()
-# inf_method = approx_inf.EKS()
-# inf_method = approx_inf.EEP()
-# inf_method = approx_inf.VI()
+inf_method = approx_inf.ExpectationPropagation(power=0.5)
+# inf_method = approx_inf.StatisticallyLinearisedEP()
+# inf_method = approx_inf.ExtendedKalmanSmoother()
+# inf_method = approx_inf.VariationalInference()
 
 model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, t_test=Xtest, r_test=Rtest, approx_inf=inf_method)
 
