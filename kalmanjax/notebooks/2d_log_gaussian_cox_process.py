@@ -9,7 +9,6 @@ import approximate_inference as approx_inf
 import priors
 import likelihoods
 from utils import softplus_list, discretegrid
-pi = 3.141592653589793
 
 plot_intermediate = False
 
@@ -32,8 +31,6 @@ prior = priors.SpatialMatern32(variance=var_f, lengthscale=len_f, z=r[0, ...], f
 lik = likelihoods.Poisson()
 inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
 # inf_method = approx_inf.ExtendedEP()
-
-# t_spacetime = np.block([t[..., 0][..., None], r])
 
 model = SDEGP(prior=prior, likelihood=lik, t=t, y=Y, r=r, t_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
 
