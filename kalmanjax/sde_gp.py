@@ -28,7 +28,7 @@ class SDEGP(object):
     """
     def __init__(self, prior, likelihood, t, y, r=None, t_test=None, y_test=None, r_test=None, approx_inf=None):
         """
-        :param prior: the model prior p(f|0,k(t,t')) object which constructs the required state space model matrices
+        :param prior: the model prior p(f)=GP(0,k(.,.)) object which constructs the required state space model matrices
         :param likelihood: the likelihood model object which performs parameter updates and evaluates p(y|f)
         :param t: training inputs
         :param y: training data / observations
