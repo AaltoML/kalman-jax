@@ -1159,10 +1159,10 @@ class SpatioTemporalMatern52(Prior):
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the spatio-temporal Matern-5/2 prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
-        :return: state transition matrix A [3, 3]
+        :return: state transition matrix A [3M, 3M]
         """
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
@@ -1249,10 +1249,10 @@ class SpatialMatern52(Prior):
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the spatial Matern-5/2 prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
-        :return: state transition matrix A [3, 3]
+        :return: state transition matrix A [3M, 3M]
         """
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
@@ -1335,10 +1335,10 @@ class SpatialMatern32(Prior):
     @partial(jit, static_argnums=0)
     def state_transition(self, dt, hyperparams=None):
         """
-        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the Matern-5/2 prior.
+        Calculation of the discrete-time state transition matrix A = expm(FΔt) for the spatial Matern-3/2 prior.
         :param dt: step size(s), Δtₙ = tₙ - tₙ₋₁ [scalar]
         :param hyperparams: the kernel hyperparameters, lengthscale is in index 1 [2]
-        :return: state transition matrix A [3, 3]
+        :return: state transition matrix A [2M, 2M]
         """
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         ell = hyperparams[1]
