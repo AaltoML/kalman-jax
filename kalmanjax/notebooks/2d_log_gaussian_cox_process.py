@@ -13,7 +13,7 @@ from utils import softplus_list, discretegrid
 plot_intermediate = False
 
 print('loading rainforest data ...')
-data = np.loadtxt('../data/TRI2TU-data.csv', delimiter=',')
+data = np.loadtxt('../../data/TRI2TU-data.csv', delimiter=',')
 
 nr = 100  # spatial grid point (y-aixs)
 nt = 200  # temporal grid points (x-axis)

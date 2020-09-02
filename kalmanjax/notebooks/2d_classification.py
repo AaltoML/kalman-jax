@@ -15,10 +15,10 @@ from utils import softplus_list, plot_2d_classification, plot_2d_classification_
 plot_intermediate = False
 
 print('loading banana data ...')
-inputs = np.loadtxt('../data/banana_X_train', delimiter=',')
+inputs = np.loadtxt('../../data/banana_X_train', delimiter=',')
 X = inputs[:, :1]  # temporal inputs (x-axis)
 R = inputs[:, 1:]  # spatial inputs (y-axis)
-Y = np.loadtxt('../data/banana_Y_train')[:, None]  # observations / labels
+Y = np.loadtxt('../../data/banana_Y_train')[:, None]  # observations / labels
 
 # Test points
 Xtest, Rtest = np.mgrid[-2.8:2.8:100j, -2.8:2.8:100j]

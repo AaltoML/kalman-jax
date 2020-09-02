@@ -14,7 +14,7 @@ from utils import softplus_list, plot
 plot_intermediate = False
 
 print('loading coal data ...')
-disaster_timings = pd.read_csv('../data/coal.txt', header=None).values[:, 0]
+disaster_timings = pd.read_csv('../../data/coal.txt', header=None).values[:, 0]
 
 # Discretization
 num_time_bins = 200

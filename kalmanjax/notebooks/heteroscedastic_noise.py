@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 plot_intermediate = False
 
 print('loading data ...')
-D = np.loadtxt('../data/mcycle.csv', delimiter=',')
+D = np.loadtxt('../../data/mcycle.csv', delimiter=',')
 X = D[:, 1:2]
 Y = D[:, 2:]
 N = X.shape[0]
