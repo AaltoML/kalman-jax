@@ -1115,7 +1115,7 @@ class SpatioTemporalMatern52(Prior):
 
     @staticmethod
     def spatial_covariance(z, z_prime, ell):
-        tau = np.sqrt(5) * np.abs(z - z_prime.T) / ell
+        tau = np.sqrt(5) * (np.abs(z - z_prime.T) + 1e-8) / ell
         return (1 + tau + tau**2 / 3) * np.exp(-tau)
 
     @partial(jit, static_argnums=0)
@@ -1205,7 +1205,7 @@ class SpatialMatern52(Prior):
 
     @staticmethod
     def spatial_covariance(z, z_prime, ell):
-        tau = np.sqrt(5) * np.abs(z - z_prime.T) / ell
+        tau = np.sqrt(5) * (np.abs(z - z_prime.T) + 1e-8) / ell
         return (1 + tau + tau**2 / 3) * np.exp(-tau)
 
     @partial(jit, static_argnums=0)
@@ -1295,7 +1295,7 @@ class SpatialMatern32(Prior):
 
     @staticmethod
     def spatial_covariance(z, z_prime, ell):
-        tau = np.sqrt(3) * np.abs(z - z_prime.T) / ell
+        tau = np.sqrt(3) * (np.abs(z - z_prime.T) + 1e-8) / ell
         return (1 + tau) * np.exp(-tau)
 
     @partial(jit, static_argnums=0)
