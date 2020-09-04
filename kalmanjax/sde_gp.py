@@ -131,7 +131,7 @@ class SDEGP(object):
         :param v_test: posterior predictive (co)variance at the test locations, vₙ*  [N*, 1]
         :param hyp_prior: the hyperparameters of the prior  [array]
         :param hyp_lik: the hyperparameters of the likelihood model  [array]
-        :param full_cov: flag signalling whether m_testa and v_test are the full state dist.
+        :param full_cov: flag signalling whether m_test and v_test are the full state dist.
         :return:
             NLPD: the negative log predictive density for the test data
         """
