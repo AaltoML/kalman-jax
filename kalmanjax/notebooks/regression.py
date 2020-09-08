@@ -28,7 +28,7 @@ N = 1000
 x = np.random.permutation(np.linspace(-25.0, 150.0, num=N) + 0.5*np.random.randn(N))  # unevenly spaced
 y = wiggly_time_series(x)
 x_test = np.linspace(np.min(x)-15.0, np.max(x)+15.0, num=500)
-y_test = wiggly_time_series(x_test) + 0.5*np.random.randn(x_test.shape[0])
+y_test = wiggly_time_series(x_test)
 
 var_f = 1.0  # GP variance
 len_f = 5.0  # GP lengthscale
