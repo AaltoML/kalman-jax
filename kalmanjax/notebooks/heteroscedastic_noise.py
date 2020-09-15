@@ -26,7 +26,7 @@ Xall = X_scaler.transform(X)
 Yall = y_scaler.transform(Y)
 
 # Load cross-validation indices
-cvind = np.loadtxt('experiments/heteroscedastic/cvind.csv').astype(int)
+cvind = np.loadtxt('../experiments/heteroscedastic/cvind.csv').astype(int)
 
 # 10-fold cross-validation setup
 nt = np.floor(cvind.shape[0]/10).astype(int)
