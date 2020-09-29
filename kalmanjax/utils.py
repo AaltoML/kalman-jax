@@ -418,7 +418,7 @@ def gauss_hermite(dim=1, num_quad_pts=20):
     # sigma_pts, weights = hermgauss(num_quad_pts)  # Gauss-Hermite sigma points and weights
     sigma_pts, weights = mvhermgauss(num_quad_pts, dim)
     sigma_pts = np.sqrt(2) * sigma_pts.T
-    weights = weights.T / np.sqrt(pi)  # scale weights by 1/√π
+    weights = weights.T * pi ** (-0.5 * dim)  # scale weights by 1/√π
     return sigma_pts, weights
 
 
