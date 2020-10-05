@@ -112,7 +112,7 @@ plot_num = 0
 mu_prev = None
 print('optimising the hyperparameters ...')
 t0 = time.time()
-for j in range(250):
+for j in range(500):
     opt_state, plot_num, mu_prev = gradient_step(j, opt_state, model, plot_num, mu_prev)
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
