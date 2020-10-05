@@ -129,7 +129,7 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 if plot_final:
     lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0]**0.5
     ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0]**0.5
-    t_test = model.t_all[model.test_id, 0]
+    t_test = model.t_all[:, 0]
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
