@@ -96,7 +96,7 @@ class SDEGP(object):
         _, posterior_mean, posterior_cov = self.rauch_tung_striebel_smoother(params, filter_mean, filter_cov, dt,
                                                                              True, return_full, None, None, r)
         if compute_nlpd:
-            nlpd_test = self.negative_log_predictive_density(self.t_all[self.test_id], self.y_all[self.test_id],
+            nlpd_test = self.negative_log_predictive_density(self.r_test, self.y_all[self.test_id],
                                                              posterior_mean[self.test_id],
                                                              posterior_cov[self.test_id],
                                                              softplus_list(params[0]), softplus(params[1]),
@@ -118,14 +118,14 @@ class SDEGP(object):
         H = self.prior.measurement_model(r, hyp_prior)
         return H @ mean, H @ cov @ H.T
 
-    def negative_log_predictive_density(self, t_test, y_test, m_test, v_test, hyp_prior, hyp_lik, full_cov):
+    def negative_log_predictive_density(self, r_test, y_test, m_test, v_test, hyp_prior, hyp_lik, full_cov):
         """
         Compute the (normalised) negative log predictive density (NLPD) of the test data yₙ*:
             NLPD = - ∑ₙ log ∫ p(yₙ*|fₙ*) 𝓝(fₙ*|mₙ*,vₙ*) dfₙ*
         where fₙ* is the function value at the test location.
         The above is equivalent to the quantity used for EP moment matching, so we
         vectorise that method using vmap, and compute it for all test data.
-        :param t_test: the test inputs tₙ*  [N*, 1]
+        :param r_test: the test spatial inputs rₙ*  [N*, 1]
         :param y_test: the test data yₙ*  [N*, 1]
         :param m_test: posterior predictive mean at the test locations, mₙ*  [N*, 1]
         :param v_test: posterior predictive (co)variance at the test locations, vₙ*  [N*, 1]
@@ -139,7 +139,7 @@ class SDEGP(object):
             measure_func = vmap(
                 self.compute_measurement, (0, 0, 0, None)
             )
-            m_test, v_test = measure_func(t_test, m_test, v_test, hyp_prior)
+            m_test, v_test = measure_func(r_test, m_test, v_test, hyp_prior)
         lpd_func = vmap(
             self.likelihood.moment_match, (0, 0, 0, None, None, None)
         )
