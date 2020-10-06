@@ -15,9 +15,15 @@ def compute_cavity(post_mean, post_cov, site_mean, site_cov, power):
     return cav_mean, cav_cov
 
 
+def ensure_positive_precision(K):
+    K_diag = np.diag(np.diag(K))
+    K = np.where(np.any(np.diag(K) < 0), np.where(K_diag < 0, 1e-2, K_diag), K)
+    return K
+
+
 def ensure_positive_variance(K):
-    K = np.where(np.any(np.diag(K) < 0), np.diag(np.diag(K)), K)
-    K = np.where(K < 0, 99., K)
+    K_diag = np.diag(np.diag(K))
+    K = np.where(np.any(np.diag(K) < 0), np.where(K_diag < 0, 1e2, K_diag), K)
     return K
 
 
@@ -322,7 +328,7 @@ class VariationalInference(ApproxInf):
             site_mean, site_cov = site_params
             log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
-            dE_dv = -ensure_positive_variance(-dE_dv)
+            dE_dv = -ensure_positive_precision(-dE_dv)
             lambda_t_2 = inv_any(site_cov + 1e-10 * np.eye(site_cov.shape[0]))
             lambda_t_1 = lambda_t_2 @ site_mean
             lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv @ post_mean)

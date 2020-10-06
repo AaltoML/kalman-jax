@@ -40,7 +40,7 @@ if len(sys.argv) > 1:
     save_result = True
     num_iters = 250
 else:
-    method = 2
+    method = 9
     fold = 0
     save_result = False
     num_iters = 50
