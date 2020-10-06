@@ -40,8 +40,8 @@ if len(sys.argv) > 1:
     fold = int(sys.argv[2])
     plot_final = False
 else:
-    method = 10
-    fold = 1
+    method = 15
+    fold = 2
     plot_final = True
 
 print('method number', method)

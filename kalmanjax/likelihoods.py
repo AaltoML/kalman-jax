@@ -2,8 +2,8 @@ import jax.numpy as np
 from jax.scipy.special import erf, gammaln
 from jax import jit, partial, jacrev, random, vmap, grad
 from jax.scipy.linalg import cholesky, cho_factor, cho_solve
-from jax.scipy.linalg import inv as inv_any
-from utils import inv, softplus, sigmoid, logphi, gaussian_moment_match, softplus_inv, gauss_hermite
+from utils import inv, softplus, sigmoid, logphi, gaussian_moment_match, softplus_inv, gauss_hermite, \
+    ensure_positive_precision
 pi = 3.141592653589793
 
 
@@ -114,8 +114,9 @@ class Likelihood(object):
         #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
         #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
         d2lZ = -dlZ @ dlZ.T + Zinv * d2Z
-        site_mean = cav_mean - inv_any(d2lZ) @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + inv_any(d2lZ))  # approx. likelihood (site) variance
+        id2lZ = inv(ensure_positive_precision(-d2lZ) - 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean + id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = power * (-cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=(0, 6))
@@ -178,9 +179,9 @@ class Likelihood(object):
         #              = (d²Zₙ/dmₙ² * Zₙ - (dZₙ/dmₙ)²) / Zₙ²
         #              = d²Zₙ/dmₙ² / Zₙ - (dlogZₙ/dmₙ)²
         d2lZ = -dlZ @ dlZ.T + Zinv * d2Z
-        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
-        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
+        id2lZ = inv(ensure_positive_precision(-d2lZ) - 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean + id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = power * (-cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=(0, 6))
@@ -721,9 +722,9 @@ class HeteroscedasticNoise(Likelihood):
                         [dlZ2]])
         d2lZ = np.block([[d2lZ1, 0],
                          [0., d2lZ2]])
-        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
-        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
+        id2lZ = inv(ensure_positive_precision(-d2lZ) - 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean + id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = power * (-cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=0)
@@ -754,9 +755,9 @@ class HeteroscedasticNoise(Likelihood):
         dlZ = self.dlZ_dm(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)[:, None]
         d2lZ = jacrev(self.dlZ_dm, argnums=3)(y, x, w, np.squeeze(cav_mean), np.squeeze(np.diag(cav_cov)), power)
         # d2lZ = np.diag(np.diag(d2lZ))  # discard cross terms
-        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
-        site_mean = cav_mean - id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
+        id2lZ = inv(ensure_positive_precision(-d2lZ) - 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean + id2lZ @ dlZ  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = power * (-cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=(0, 5))
@@ -927,10 +928,9 @@ class AudioAmplitudeDemodulation(Likelihood):
             - np.diag(modulator_cov)[..., None] ** -1
         ) * normpdf, axis=-1)
         d2lZ = np.diag(-dlZ ** 2 + Zinv * np.block([d2Z1, d2Z2]))
-
-        id2lZ = inv_any(d2lZ + 1e-10 * np.eye(d2lZ.shape[0]))
-        site_mean = cav_mean - id2lZ @ dlZ[..., None]  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
-        site_cov = -power * (cav_cov + id2lZ)  # approx. likelihood (site) variance
+        id2lZ = inv(ensure_positive_precision(-d2lZ) - 1e-10 * np.eye(d2lZ.shape[0]))
+        site_mean = cav_mean + id2lZ @ dlZ[..., None]  # approx. likelihood (site) mean (see Rasmussen & Williams p75)
+        site_cov = power * (-cav_cov + id2lZ)  # approx. likelihood (site) variance
         return lZ, site_mean, site_cov
 
     @partial(jit, static_argnums=0)

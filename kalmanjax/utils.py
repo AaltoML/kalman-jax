@@ -12,6 +12,16 @@ import itertools
 pi = 3.141592653589793
 
 
+def ensure_positive_precision(K):
+    """
+    Check whether matrix K has positive diagonal elements.
+    If not, then replace the negative elements with default value 0.01
+    """
+    K_diag = np.diag(np.diag(K))
+    K = np.where(np.any(np.diag(K) < 0), np.where(K_diag < 0, 1e-2, K_diag), K)
+    return K
+
+
 def solve(P, Q):
     """
     Compute P^-1 Q, where P is a PSD matrix, using the Cholesky factoristion

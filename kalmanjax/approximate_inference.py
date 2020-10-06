@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor, cho_solve
-from jax.scipy.linalg import inv as inv_any
-from utils import inv, symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite
+from utils import inv, symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite, \
+    ensure_positive_precision
 pi = 3.141592653589793
 
 
@@ -13,18 +13,6 @@ def compute_cavity(post_mean, post_cov, site_mean, site_cov, power):
     cav_cov = inv(post_precision - power * site_precision)  # cavity covariance
     cav_mean = cav_cov @ (post_precision @ post_mean - power * site_precision @ site_mean)  # cavity mean
     return cav_mean, cav_cov
-
-
-def ensure_positive_precision(K):
-    K_diag = np.diag(np.diag(K))
-    K = np.where(np.any(np.diag(K) < 0), np.where(K_diag < 0, 1e-2, K_diag), K)
-    return K
-
-
-def ensure_positive_variance(K):
-    K_diag = np.diag(np.diag(K))
-    K = np.where(np.any(np.diag(K) < 0), np.where(K_diag < 0, 1e2, K_diag), K)
-    return K
 
 
 class ApproxInf(object):
@@ -68,18 +56,15 @@ class ExpectationPropagation(ApproxInf):
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
             site_mean, site_cov = np.atleast_2d(site_mean), np.atleast_2d(site_cov)
-            site_cov = ensure_positive_variance(site_cov)
             return lml, site_mean, site_cov
         else:
             site_mean_prev, site_cov_prev = site_params  # previous site params
             # --- Compute the cavity distribution ---
             cav_mean, cav_cov = compute_cavity(post_mean, post_cov, site_mean_prev, site_cov_prev, self.power)
             # check that the cavity variances are positive
-            cav_cov = ensure_positive_variance(cav_cov)
             # calculate log marginal likelihood and the new sites via moment matching:
             lml, site_mean, site_cov = likelihood.moment_match(y, cav_mean, cav_cov, hyp, self.power, self.cubature_func)
             site_mean, site_cov = np.atleast_2d(site_mean), np.atleast_2d(site_cov)
-            site_cov = ensure_positive_variance(site_cov)
             if self.damping != 1.:
                 site_nat2, site_nat2_prev = inv(site_cov), inv(site_cov_prev)
                 site_nat1, site_nat1_prev = site_nat2 @ site_mean, site_nat2_prev @ site_mean_prev
@@ -321,19 +306,18 @@ class VariationalInference(ApproxInf):
         if site_params is None:
             _, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
-            site_cov = -0.5 * inv_any(dE_dv + 1e-10 * np.eye(dE_dv.shape[0]))
+            site_cov = 0.5 * inv(ensure_positive_precision(-dE_dv) + 1e-10 * np.eye(dE_dv.shape[0]))
             site_mean = post_mean + site_cov @ dE_dm
-            site_cov = ensure_positive_variance(site_cov)
         else:
             site_mean, site_cov = site_params
             log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
             dE_dv = -ensure_positive_precision(-dE_dv)
-            lambda_t_2 = inv_any(site_cov + 1e-10 * np.eye(site_cov.shape[0]))
+            lambda_t_2 = inv(site_cov + 1e-10 * np.eye(site_cov.shape[0]))
             lambda_t_1 = lambda_t_2 @ site_mean
             lambda_t_1 = (1 - self.damping) * lambda_t_1 + self.damping * (dE_dm - 2 * dE_dv @ post_mean)
             lambda_t_2 = (1 - self.damping) * lambda_t_2 + self.damping * (-2 * dE_dv)
-            site_cov = inv_any(lambda_t_2 + 1e-10 * np.eye(site_cov.shape[0]))
+            site_cov = inv(lambda_t_2 + 1e-10 * np.eye(site_cov.shape[0]))
             site_mean = site_cov @ lambda_t_1
         log_marg_lik, _, _ = likelihood.moment_match(y, post_mean, post_cov, hyp, 1.0, self.cubature_func)
         return log_marg_lik, site_mean, site_cov
