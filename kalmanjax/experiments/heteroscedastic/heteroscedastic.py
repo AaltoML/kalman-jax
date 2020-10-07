@@ -180,7 +180,7 @@ if plot_final:
     plt.fill_between(x_pred, lb, ub, color='c', alpha=0.05, label='95% confidence')
     plt.xlim(model.t_all[0], model.t_all[-1])
     plt.legend()
-    plt.title('Heteroschedastic Noise Model via Kalman smoothing (motorcycle crash data)')
+    plt.title('Heteroscedastic Noise Model via Kalman smoothing (motorcycle crash data)')
     plt.xlabel('time')
     plt.ylabel('acceleration')
     plt.show()
