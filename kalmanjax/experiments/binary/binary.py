@@ -18,7 +18,7 @@ print('generating some data ...')
 np.random.seed(99)
 N = 10000  # number of training points
 x = np.sort(70 * np.random.rand(N))
-sn = 0.25
+sn = 0.01
 f = lambda x_: 12. * np.sin(4 * pi * x_) / (0.25 * pi * x_ + 1)
 y_ = f(x) + np.math.sqrt(sn)*np.random.randn(x.shape[0])
 y = np.sign(y_)
