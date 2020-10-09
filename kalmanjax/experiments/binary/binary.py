@@ -40,57 +40,62 @@ print('batch number', fold)
 # Get training and test indices
 ind_test = ind_split[fold]  # np.sort(ind_shuffled[:N//10])
 ind_train = np.concatenate(ind_split[np.arange(10) != fold])
+
+x *= 100
+
 x_train = x[ind_train]  # 90/10 train/test split
 x_test = x[ind_test]
 y_train = y[ind_train]
 y_test = y[ind_test]
 
 var_f = 1.  # GP variance
-len_f = 0.25  # GP lengthscale
+len_f = 25.  # GP lengthscale
 
 prior = priors.Matern72(variance=var_f, lengthscale=len_f)
 
 lik = likelihoods.Bernoulli(link='logit')
 
+damping = .5
+
 if method == 0:
-    inf_method = approx_inf.EEP(power=1)
+    inf_method = approx_inf.EEP(power=1, damping=damping)
 elif method == 1:
-    inf_method = approx_inf.EEP(power=0.5)
+    inf_method = approx_inf.EEP(power=0.5, damping=damping)
 elif method == 2:
-    inf_method = approx_inf.EKS()
+    inf_method = approx_inf.EKS(damping=damping)
 
 elif method == 3:
-    inf_method = approx_inf.UEP(power=1)
+    inf_method = approx_inf.UEP(power=1, damping=damping)
 elif method == 4:
-    inf_method = approx_inf.UEP(power=0.5)
+    inf_method = approx_inf.UEP(power=0.5, damping=damping)
 elif method == 5:
-    inf_method = approx_inf.UKS()
+    inf_method = approx_inf.UKS(damping=damping)
 
 elif method == 6:
-    inf_method = approx_inf.GHEP(power=1)
+    inf_method = approx_inf.GHEP(power=1, damping=damping)
 elif method == 7:
-    inf_method = approx_inf.GHEP(power=0.5)
+    inf_method = approx_inf.GHEP(power=0.5, damping=damping)
 elif method == 8:
-    inf_method = approx_inf.GHKS()
+    inf_method = approx_inf.GHKS(damping=damping)
 
 elif method == 9:
-    inf_method = approx_inf.EP(power=1, intmethod='UT')
+    inf_method = approx_inf.EP(power=1, intmethod='UT', damping=damping)
 elif method == 10:
-    inf_method = approx_inf.EP(power=0.5, intmethod='UT')
+    inf_method = approx_inf.EP(power=0.5, intmethod='UT', damping=damping)
 elif method == 11:
-    inf_method = approx_inf.EP(power=0.01, intmethod='UT')
+    inf_method = approx_inf.EP(power=0.01, intmethod='UT', damping=damping)
 
 elif method == 12:
-    inf_method = approx_inf.EP(power=1, intmethod='GH')
+    inf_method = approx_inf.EP(power=1, intmethod='GH', damping=damping)
 elif method == 13:
-    inf_method = approx_inf.EP(power=0.5, intmethod='GH')
+    inf_method = approx_inf.EP(power=0.5, intmethod='GH', damping=damping)
 elif method == 14:
-    inf_method = approx_inf.EP(power=0.01, intmethod='GH')
+    inf_method = approx_inf.EP(power=0.01, intmethod='GH', damping=damping)
 
 elif method == 15:
-    inf_method = approx_inf.VI(intmethod='UT')
+    inf_method = approx_inf.VI(intmethod='UT', damping=damping)
 elif method == 16:
-    inf_method = approx_inf.VI(intmethod='GH')
+    inf_method = approx_inf.VI(intmethod='GH', damping=damping)
 
 model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, t_test=x_test, y_test=y_test, approx_inf=inf_method)
 
@@ -121,7 +126,7 @@ def gradient_step(i, state, mod):
 
 print('optimising the hyperparameters ...')
 t0 = time.time()
-num_iters = 250
+num_iters = 500
 for j in range(num_iters):
     opt_state = gradient_step(j, opt_state, model)
 t1 = time.time()
