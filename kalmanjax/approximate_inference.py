@@ -310,7 +310,7 @@ class VariationalInference(ApproxInf):
             site_mean = post_mean + site_cov @ dE_dm
         else:
             site_mean, site_cov = site_params
-            log_marg_lik, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
+            _, dE_dm, dE_dv = likelihood.variational_expectation(y, post_mean, post_cov, hyp, self.cubature_func)
             dE_dm, dE_dv = np.atleast_2d(dE_dm), np.atleast_2d(dE_dv)
             dE_dv = -ensure_positive_precision(-dE_dv)
             lambda_t_2 = inv(site_cov + 1e-10 * np.eye(site_cov.shape[0]))
