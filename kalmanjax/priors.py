@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax import jit, partial
 from jax.scipy.linalg import expm
-from utils import softplus, softplus_inv, softplus_list, rotation_matrix, solve
+from kalmanjax.utils import softplus, softplus_inv, softplus_list, rotation_matrix, solve
 
 
 class Prior(object):

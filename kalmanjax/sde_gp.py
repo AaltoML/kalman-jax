@@ -2,8 +2,8 @@ import jax.numpy as np
 from jax.ops import index, index_update, index_add
 from jax.experimental import loops
 from jax import value_and_grad, jit, partial, random, vmap
-from utils import softplus, softplus_list, sample_gaussian_noise, solve, input_admin
-from approximate_inference import EP
+from kalmanjax.utils import softplus, softplus_list, sample_gaussian_noise, solve, input_admin
+from kalmanjax.approximate_inference import EP
 from jax.config import config
 config.update("jax_enable_x64", True)
 pi = 3.141592653589793
