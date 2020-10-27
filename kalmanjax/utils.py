@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax import random
-from jax.ops import index_add, index
+from jax.ops import index_add, index_update, index
 import numpy as nnp
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
@@ -84,28 +84,17 @@ def softplus_inv(x_):
         return np.log(1 - np.exp(-np.abs(x_))) + np.maximum(x_, 0)  # safer version
 
 
-def input_admin(t, y, r, t_test, y_test, r_test):
+def input_admin(t, y, r):
     """
-    TODO: tidy this function up
-    Order the inputs, remove duplicates, and index the train and test input locations.
+    Order the inputs.
     :param t: training inputs [N, 1]
     :param y: observations at the training inputs [N, 1]
     :param r: training spatial inputs
-    :param t_test: testing inputs [N*, 1]
-    :param y_test: observations at the test inputs [N*, 1]
-    :param r_test: test spatial inputs
     :return:
-        t_all: the combined and sorted training and test inputs [N + N*, 1]
-        y_all: an array of observations y augmented with nans at test locations [N + N*, R]
-        r_all: spatial inputs with nans at test locations [N + N*, R]
         t_train: training inputs [N, 1]
         y_train: training observations [N, R]
         r_train: training spatial inputs [N, R]
-        dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
         dt_train: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
-        train_id: an array of indices corresponding to the training inputs [N, 1]
-        test_id: an array of indices corresponding to the test inputs [N*, 1]
-        mask: boolean array to signify training locations [N + N*, 1]
     """
     assert t.shape[0] == y.shape[0]
     if t.ndim < 2:
@@ -120,13 +109,51 @@ def input_admin(t, y, r, t_test, y_test, r_test):
     t_train = t[ind, ...]
     y_train = y[ind, ...]
     r_train = r[ind, ...]
+    dt_train = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
+    return (np.array(t_train, dtype=np.float64), np.array(y_train, dtype=np.float64),
+            np.array(r_train, dtype=np.float64), np.array(dt_train, dtype=np.float64))
+
+
+def test_input_admin(t, y, r, t_test, y_test, r_test):
+    """
+    TODO: tidy this function up
+    Order the inputs, remove duplicates, and index the train and test input locations.
+    :param t: training inputs [N, 1]
+    :param y: observations at the training inputs [N, 1]
+    :param r: training spatial inputs
+    :param t_test: testing inputs [N*, 1]
+    :param y_test: observations at the test inputs [N*, 1]
+    :param r_test: test spatial inputs
+    :return:
+        t_all: the combined and sorted training and test inputs [N + N*, 1]
+        y_all: an array of observations y augmented with nans at test locations [N + N*, R]
+        r_all: spatial inputs with nans at test locations [N + N*, R]
+        dt_all: combined training and test step sizes, Δtₙ = tₙ - tₙ₋₁ [N + N*, 1]
+        dt_train: training step sizes, Δtₙ = tₙ - tₙ₋₁ [N, 1]
+        train_id: an array of indices corresponding to the training inputs [N, 1]
+        test_id: an array of indices corresponding to the test inputs [N*, 1]
+        mask: boolean array to signify training locations [N + N*, 1]
+    """
+    assert t.shape[0] == y.shape[0]
+    if t.ndim < 2:
+        t = np.expand_dims(t, 1)  # make 2-D
+    if y.ndim < 2:
+        y = np.expand_dims(y, 1)  # make 2-D
+    if r is None:
+        r = np.nan * t  # np.empty((1,) + x.shape[1:]) * np.nan
+    if r.ndim < 2:
+        r = np.expand_dims(r, 1)  # make 2-D
+    ind = np.argsort(t[:, 0], axis=0)
+    t_train = t[ind, ...]
+    y_train = y[ind, ...]
+    r_train = r[ind, ...]
     if t_test is None:
         t_test = np.empty((1,) + t_train.shape[1:]) * np.nan
         r_test = np.empty((1,) + t_train.shape[1:]) * np.nan
     else:
         if t_test.ndim < 2:
-            t_test = nnp.expand_dims(t_test, 1)  # make 2-D
-        test_sort_ind = nnp.argsort(t_test[:, 0], axis=0)
+            t_test = np.expand_dims(t_test, 1)  # make 2-D
+        test_sort_ind = np.argsort(t_test[:, 0], axis=0)
         t_test = t_test[test_sort_ind, ...]
         if y_test is not None:
             y_test = y_test[test_sort_ind, ...].reshape((-1,) + y.shape[1:])
@@ -138,31 +165,32 @@ def input_admin(t, y, r, t_test, y_test, r_test):
         t_test = np.concatenate([t_test[:, 0][:, None],
                                  np.nan * np.empty([t_test.shape[0], t_train.shape[1]-1])], axis=1)
     # here we use non-JAX numpy to sort out indexing of these static arrays
-    t_train_test = nnp.concatenate([t_train, t_test])
+    t_train_test = np.concatenate([t_train, t_test])
     keep_ind = ~np.isnan(t_train_test[:, 0])
     t_train_test = t_train_test[keep_ind, ...]
     r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
-    r_train_test = nnp.concatenate([r_train, r_test_nan])
+    r_train_test = np.concatenate([r_train, r_test_nan])
     r_train_test = r_train_test[keep_ind, ...]
-    t_ind = nnp.argsort(t_train_test[:, 0])
+    t_ind = np.argsort(t_train_test[:, 0])
     t_all = t_train_test[t_ind]
     r_all = r_train_test[t_ind]
-    reverse_ind = nnp.argsort(t_ind)
+    reverse_ind = np.argsort(t_ind)
     n_train = t_train.shape[0]
     train_id = reverse_ind[:n_train]  # index the training locations
     test_id = reverse_ind[n_train:]  # index the test locations
-    y_all = nnp.nan * nnp.zeros([t_all.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
-    y_all[reverse_ind[:n_train], ...] = y_train  # and the data at the train locations
+    y_all = np.nan * np.zeros([t_all.shape[0], y_train.shape[1]])  # observation vector with nans at test locations
+    # y_all[reverse_ind[:n_train], ...] = y_train  # and the data at the train locations
+    y_all = index_update(y_all, index[reverse_ind[:n_train]], y_train)  # and the data at the train locations
     if y_test is not None:
-        y_all[reverse_ind[n_train:], ...] = y_test  # and the data at the train locations
-    mask = nnp.ones_like(y_all, dtype=bool)
-    mask[train_id] = False
-    dt_train = nnp.concatenate([np.array([0.0]), nnp.diff(t_train[:, 0])])
-    dt_all = nnp.concatenate([np.array([0.0]), nnp.diff(t_all[:, 0])])
+        # y_all[reverse_ind[n_train:], ...] = y_test  # and the data at the train locations
+        y_all = index_update(y_all, index[reverse_ind[n_train:]], y_test)  # and the data at the train locations
+    mask = np.ones_like(y_all, dtype=bool)
+    # mask[train_id] = False
+    mask = index_update(mask, index[train_id], False)
+    dt_all = np.concatenate([np.array([0.0]), np.diff(t_all[:, 0])])
     return (np.array(t_all, dtype=np.float64), np.array(y_all, dtype=np.float64), np.array(r_all, dtype=np.float64),
-            np.array(t_train, dtype=np.float64), np.array(y_train, dtype=np.float64), np.array(r_train, dtype=np.float64),
             np.array(r_test, dtype=np.float64),
-            np.array(dt_all, dtype=np.float64), np.array(dt_train, dtype=np.float64),
+            np.array(dt_all, dtype=np.float64),
             np.array(train_id, dtype=np.int64), np.array(test_id, dtype=np.int64), np.array(mask, dtype=bool))
 
 

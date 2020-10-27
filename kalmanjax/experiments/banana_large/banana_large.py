@@ -81,7 +81,7 @@ prior = priors.SpatioTemporalMatern52(variance=var_f, lengthscale_time=len_time,
 
 lik = likelihoods.Bernoulli(link='logit')
 
-model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, t_test=XT, y_test=YT, r_test=RT, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -120,7 +120,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict(return_full=True)
+nlpd = model.negative_log_predictive_density(t=XT, y=YT, r=RT, full_cov=True)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('test NLPD: %1.2f' % nlpd)

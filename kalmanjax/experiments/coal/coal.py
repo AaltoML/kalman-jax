@@ -12,12 +12,9 @@ import likelihoods
 from utils import softplus_list, plot
 import pickle
 
-plot_final = False
 plot_intermediate = False
 
 print('loading coal data ...')
-if plot_final:
-    disaster_timings = pd.read_csv('../../../data/coal.txt', header=None).values[:, 0]
 cvind = np.loadtxt('cvind.csv').astype(int)
 # 10-fold cross-validation
 nt = np.floor(cvind.shape[0]/10).astype(int)
@@ -34,9 +31,13 @@ np.random.seed(123)
 if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
+    save_result = True
+    plot_final = False
 else:
     method = 0
     fold = 0
+    save_result = False
+    plot_final = True
 
 print('method number', method)
 print('batch number', fold)
@@ -96,7 +97,7 @@ elif method == 15:
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH')
 
-model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, t_test=x_test, y_test=y_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2.5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -129,46 +130,39 @@ for j in range(250):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
+x_plot = np.linspace(np.min(x_test)-5, np.max(x_test)+5, 200)
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+nlpd = model.negative_log_predictive_density(t=x_test, y=y_test)
+posterior_mean, posterior_var = model.predict(t=x_plot)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)
 
-with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
-    pickle.dump(nlpd, fp)
+if save_result:
+    with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
+        pickle.dump(nlpd, fp)
 
 # with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
 #     nlpd_show = pickle.load(fp)
 # print(nlpd_show)
 
 if plot_final:
-    x_pred = model.t_all[:, 0]
+    disaster_timings = pd.read_csv('../../../data/coal.txt', header=None).values[:, 0]
     link_fn = model.likelihood.link_fn
-    scale = N / (max(x_pred) - min(x_pred))
-    post_mean_lgcp = link_fn(posterior_mean[:, 0] + posterior_var[:, 0] / 2) * scale
-    lb_lgcp = link_fn(posterior_mean[:, 0] - np.sqrt(posterior_var[:, 0]) * 1.645) * scale
-    ub_lgcp = link_fn(posterior_mean[:, 0] + np.sqrt(posterior_var[:, 0]) * 1.645) * scale
-    test_id = model.test_id
-    t_test = model.t_all[test_id]
-
-    # print('sampling from the posterior ...')
-    # t0 = time.time()
-    # posterior_samp = model.posterior_sample(20)
-    # post_samp_lgcp = link_fn(posterior_samp[test_id, 0, :]) * scale
-    # t1 = time.time()
-    # print('sampling time: %2.2f secs' % (t1-t0))
+    scale = N / (max(x) - min(x))
+    post_mean_lgcp = link_fn(posterior_mean + posterior_var / 2) * scale
+    lb_lgcp = link_fn(posterior_mean - np.sqrt(posterior_var) * 1.645) * scale
+    ub_lgcp = link_fn(posterior_mean + np.sqrt(posterior_var) * 1.645) * scale
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
     plt.clf()
     plt.plot(disaster_timings, 0*disaster_timings, 'k+', label='observations', clip_on=False)
-    plt.plot(x_pred, post_mean_lgcp, 'g', label='posterior mean')
-    plt.fill_between(x_pred, lb_lgcp, ub_lgcp, color='g', alpha=0.05, label='95% confidence')
-    # plt.plot(model.t_test, post_samp_lgcp, 'g', alpha=0.15)
-    plt.xlim(t_test[0], t_test[-1])
+    plt.plot(x_plot, post_mean_lgcp, 'g', label='posterior mean')
+    plt.fill_between(x_plot, lb_lgcp, ub_lgcp, color='g', alpha=0.05, label='95% confidence')
+    plt.xlim(x_plot[0], x_plot[-1])
     plt.ylim(0.0)
     plt.legend()
     plt.title('log-Gaussian Cox process via Kalman smoothing (coal mining disasters)')
