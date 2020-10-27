@@ -168,7 +168,10 @@ def test_input_admin(t, y, r, t_test, y_test, r_test):
     t_train_test = np.concatenate([t_train, t_test])
     keep_ind = ~np.isnan(t_train_test[:, 0])
     t_train_test = t_train_test[keep_ind, ...]
-    r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
+    if r_test.shape[1] != r_train.shape[1]:  # do spatial test points have different dimensionality to training points?
+        r_test_nan = np.nan * np.zeros([r_test.shape[0], r_train.shape[1]])
+    else:
+        r_test_nan = r_test
     r_train_test = np.concatenate([r_train, r_test_nan])
     r_train_test = r_train_test[keep_ind, ...]
     t_ind = np.argsort(t_train_test[:, 0])

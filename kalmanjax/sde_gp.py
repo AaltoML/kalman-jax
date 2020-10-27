@@ -49,7 +49,7 @@ class SDEGP(object):
         self.sites = EP() if approx_inf is None else approx_inf
         print('inference method is', self.sites.name)
 
-    def predict(self, t=None, r=None, site_params=None, sampling=False, return_full=False):
+    def predict(self, t=None, r=None, site_params=None, sampling=False):
         """
         Calculate posterior predictive distribution p(f*|f,y) by filtering and smoothing across the
         training & test locations.
@@ -59,8 +59,6 @@ class SDEGP(object):
         :param r: spatial test locations [M, R]
         :param site_params: the sites computed during a previous inference proceedure [2, M, obs_dim]
         :param sampling: notify whether we are doing posterior sampling
-        :param return_full: flag to notify if we are handling the case where spatial test locations are a different
-                            size to training locations
         :return:
             predict_mean: the posterior predictive mean [M, state_dim] or [M, obs_dim]
             predict_cov: the posterior predictive (co)variance [M, M, state_dim] or [M, obs_dim]
@@ -71,6 +69,7 @@ class SDEGP(object):
         (t, y, r, r_test, dt,
          train_id, test_id, mask
          ) = test_input_admin(self.t, self.y, self.r, t, None, r)
+        return_full = r_test.shape[1] != r.shape[1]  # are spatial test locations different size to training locations?
         posterior_mean, posterior_cov, site_params = self.predict_everywhere(y, r, dt, train_id, mask, site_params,
                                                                              sampling, return_full)
         # only return the posterior at the test locations
@@ -108,7 +107,7 @@ class SDEGP(object):
         H = self.prior.measurement_model(r, hyp_prior)
         return H @ mean, H @ cov @ H.T
 
-    def negative_log_predictive_density(self, t=None, y=None, r=None, full_cov=False):
+    def negative_log_predictive_density(self, t=None, y=None, r=None):
         """
         Compute the (normalised) negative log predictive density (NLPD) of the test data yₙ*:
             NLPD = - ∑ₙ log ∫ p(yₙ*|fₙ*) 𝓝(fₙ*|mₙ*,vₙ*) dfₙ*
@@ -117,8 +116,6 @@ class SDEGP(object):
         :param t: test time steps [M, 1]
         :param y: test observations [M, 1]
         :param r: test spatial locations [M, R]
-        :param full_cov: flag to notify if we are handling the case where spatial test locations are a different
-                            size to training locations
         :return:
             NLPD: the negative log predictive density for the test data
         """
@@ -127,12 +124,13 @@ class SDEGP(object):
         (t, y, r, r_test, dt,
          train_id, test_id, mask
          ) = test_input_admin(self.t, self.y, self.r, t, y, r)
+        return_full = r_test.shape[1] != r.shape[1]  # are spatial test locations different size to training locations?
         # run the filter and smooth across both train and test points
         posterior_mean, posterior_cov, _ = self.predict_everywhere(y, r, dt, train_id, mask,
-                                                                   sampling=False, return_full=full_cov)
+                                                                   sampling=False, return_full=return_full)
         test_mean, test_cov = posterior_mean[test_id], posterior_cov[test_id]
         hyp_prior, hyp_lik = softplus_list(self.prior.hyp), softplus(self.likelihood.hyp)
-        if full_cov:
+        if return_full:
             measure_func = vmap(
                 self.compute_measurement, (0, 0, 0, None)
             )

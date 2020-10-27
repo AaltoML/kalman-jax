@@ -142,7 +142,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-nlpd = model.negative_log_predictive_density(t=XT, y=YT, r=RT, full_cov=True)
+nlpd = model.negative_log_predictive_density(t=XT, y=YT, r=RT)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('test NLPD: %1.2f' % nlpd)

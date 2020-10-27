@@ -80,7 +80,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-mu, var = model.predict(t=Xtest, r=Rtest, return_full=True)
+mu, var = model.predict(t=Xtest, r=Rtest)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 
