@@ -106,7 +106,7 @@ elif method == 15:
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH')
 
-model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, t_test=x_test, y_test=y_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -141,7 +141,7 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+nlpd = model.negative_log_predictive_density(t=x_test, y=y_test)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)

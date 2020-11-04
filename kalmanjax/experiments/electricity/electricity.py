@@ -8,7 +8,7 @@ from sde_gp import SDEGP
 import approximate_inference as approx_inf
 import priors
 import likelihoods
-from utils import softplus_list, plot
+from utils import plot
 import pickle
 import pandas as pd
 pi = 3.141592653589793
@@ -77,8 +77,7 @@ elif method == 5:
 elif method == 6:
     inf_method = approx_inf.VI(intmethod='GH', damping=.1)
 
-model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, t_test=x_test, y_test=y_test,
-              approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=1e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -93,7 +92,6 @@ def gradient_step(i, state, mod):
     # grad(Filter) + Smoother:
     neg_log_marg_lik, gradients = mod.run()
 
-    # prior_params = softplus_list(params[0])
     print('iter %2d: nlml=%2.2f' %
           (i, neg_log_marg_lik))
 
@@ -111,10 +109,12 @@ for j in range(num_iters):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
+x_plot = np.linspace(np.min(x), np.max(x), N)
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_cov, _, nlpd = model.predict()
+nlpd = model.negative_log_predictive_density(t=x_test, y=y_test)
+posterior_mean, posterior_cov = model.predict(t=x_plot)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('test NLPD: %1.2f' % nlpd)
@@ -127,18 +127,17 @@ with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
 # print(nlpd_show)
 
 if plot_final:
-    lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0]**0.5
-    ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0]**0.5
-    t_test = model.t_all[:, 0]
+    lb = posterior_mean - 1.96 * posterior_cov**0.5
+    ub = posterior_mean + 1.96 * posterior_cov**0.5
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
     plt.clf()
     plt.plot(x, y, 'b.', label='training observations', markersize=4)
     plt.plot(x_test, y_test, 'r.', alpha=0.5, label='test observations', markersize=4)
-    plt.plot(t_test, posterior_mean[:, 0], 'g', label='posterior mean')
-    plt.fill_between(t_test, lb, ub, color='g', alpha=0.05, label='95% confidence')
-    plt.xlim(t_test[0], t_test[-1])
+    plt.plot(x_plot, posterior_mean, 'g', label='posterior mean')
+    plt.fill_between(x_plot, lb, ub, color='g', alpha=0.05, label='95% confidence')
+    plt.xlim(x_plot[0], x_plot[-1])
     plt.legend()
     plt.title('GP regression via Kalman smoothing. Test NLPD: %1.2f' % nlpd)
     plt.xlabel('time, $t$')

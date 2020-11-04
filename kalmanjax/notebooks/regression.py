@@ -42,7 +42,7 @@ inf_method = approx_inf.EP(power=0.5)
 # inf_method = approx_inf.EEP()
 # inf_method = approx_inf.VI()
 
-model = SDEGP(prior=prior, likelihood=lik, t=x, y=y, t_test=x_test, y_test=y_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x, y=y, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -75,23 +75,22 @@ for j in range(100):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
+x_plot = np.linspace(np.min(x)-20.0, np.max(x)+20.0, 200)
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_cov, _, nlpd = model.predict()
+nlpd = model.negative_log_predictive_density(t=x_test, y=y_test)
+posterior_mean, posterior_cov = model.predict(t=x_plot)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('test NLPD: %1.2f' % nlpd)
 
-lb = posterior_mean[:, 0, 0] - 1.96 * posterior_cov[:, 0, 0] ** 0.5
-ub = posterior_mean[:, 0, 0] + 1.96 * posterior_cov[:, 0, 0] ** 0.5
-x_pred = model.t_all[:, 0]
-test_id = model.test_id
-t_test = model.t_all[test_id]
+lb = posterior_mean - 1.96 * posterior_cov ** 0.5
+ub = posterior_mean + 1.96 * posterior_cov ** 0.5
 
 print('sampling from the posterior ...')
 t0 = time.time()
-posterior_samp = model.posterior_sample(20)
+posterior_samp = model.posterior_sample(20, t=x_plot)
 t1 = time.time()
 print('sampling time: %2.2f secs' % (t1-t0))
 
@@ -100,10 +99,10 @@ plt.figure(1, figsize=(12, 5))
 plt.clf()
 plt.plot(x, y, 'k.', label='training observations')
 plt.plot(x_test, y_test, 'r.', alpha=0.4, label='test observations')
-plt.plot(x_pred, posterior_mean[..., 0], 'b', label='posterior mean')
-plt.fill_between(x_pred, lb, ub, color='b', alpha=0.05, label='95% confidence')
-plt.plot(t_test, posterior_samp[test_id, 0, :], 'b', alpha=0.15)
-plt.xlim([t_test[0], t_test[-1]])
+plt.plot(x_plot, posterior_mean, 'b', label='posterior mean')
+plt.fill_between(x_plot, lb, ub, color='b', alpha=0.05, label='95% confidence')
+plt.plot(x_plot, posterior_samp, 'b', alpha=0.15)
+plt.xlim([x_plot[0], x_plot[-1]])
 plt.legend()
 plt.title('GP regression via Kalman smoothing. Test NLPD: %1.2f' % nlpd)
 plt.xlabel('time - $t$')

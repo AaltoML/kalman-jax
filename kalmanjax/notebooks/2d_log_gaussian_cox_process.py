@@ -32,7 +32,7 @@ lik = likelihoods.Poisson()
 inf_method = approx_inf.ExtendedKalmanSmoother(damping=0.5)
 # inf_method = approx_inf.ExtendedEP()
 
-model = SDEGP(prior=prior, likelihood=lik, t=t, y=Y, r=r, t_test=t, y_test=Y, r_test=r, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=t, y=Y, r=r, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -67,20 +67,13 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-# posterior_mean, posterior_cov, _, nlpd = model.predict()
-mu, var, _, _ = model.predict(compute_nlpd=False)
-mu = np.squeeze(mu)
+# nlpd = model.negative_log_predictive_density(t=t, r=r, y=Y)
+mu, var = model.predict(t=t, r=r)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 # print('test NLPD: %1.2f' % nlpd)
 
 link_fn = model.likelihood.link_fn
-
-# print('sampling from the posterior ...')
-# t0 = time.time()
-# posterior_samp = model.posterior_sample(20)
-# t1 = time.time()
-# print('sampling time: %2.2f secs' % (t1-t0))
 
 print('plotting ...')
 plt.figure(1, figsize=(10, 5))

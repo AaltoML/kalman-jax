@@ -2,6 +2,8 @@ import sys
 sys.path.insert(0, '../../')
 import numpy as np
 from jax.experimental import optimizers
+from jax import vmap
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import time
 from sde_gp import SDEGP
@@ -109,7 +111,7 @@ elif method == 15:
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH', damping=0.05)
 
-model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, t_test=x_test, y_test=y_test, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=x_train, y=y_train, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-2)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -170,10 +172,12 @@ for j in range(num_iters):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
+x_plot = np.linspace(np.min(x), np.max(x), 20000)
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+posterior_mean, posterior_var = model.predict(t=x_plot)
+nlpd = model.negative_log_predictive_density(t=x_test, y=y_test)
 t1 = time.time()
 print('NLPD: %1.2f' % nlpd)
 print('prediction time: %2.2f secs' % (t1-t0))
@@ -187,38 +191,54 @@ if save_result:
     # print(nlpd_show)
 
 if plot_final:
-    x_pred = model.t_all[:, 0]
-    # link = model.likelihood.link_fn
-    # lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0]) * 1.96
-    # ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0]) * 1.96
-    test_id = model.test_id
 
-    posterior_mean_subbands = posterior_mean[:, :3, 0]
-    posterior_mean_modulators = softplus(posterior_mean[:, 3:, 0])
+    def diag(Q):
+        vectorised_diag = vmap(jnp.diag, 0)
+        return vectorised_diag(Q)
+
+    posterior_mean_subbands = posterior_mean[:, :3]
+    posterior_mean_modulators = softplus(posterior_mean[:, 3:])
     posterior_mean_sig = np.sum(posterior_mean_subbands * posterior_mean_modulators, axis=-1)
-    posterior_var_subbands = posterior_var[:, :3, 0]
-    posterior_var_modulators = softplus(posterior_var[:, 3:, 0])
+    posterior_var_subbands = diag(posterior_var[:, :3, :3])
+    posterior_var_modulators = softplus(diag(posterior_var[:, 3:, 3:]))
+    lb_subbands = posterior_mean_subbands - np.sqrt(posterior_var_subbands) * 1.96
+    ub_subbands = posterior_mean_subbands + np.sqrt(posterior_var_subbands) * 1.96
+    lb_modulators = softplus(posterior_mean_modulators - np.sqrt(posterior_var_modulators) * 1.96)
+    ub_modulators = softplus(posterior_mean_modulators + np.sqrt(posterior_var_modulators) * 1.96)
+
+    color1 = [0.2667, 0.4471, 0.7098]  # blue
+    color2 = [0.1647, 0.6706, 0.3804]  # green
+    color3 = [0.8275, 0.2627, 0.3059]  # red
+    color4 = [0.5216, 0.4392, 0.7176]  # purple
+    color5 = [0.8118, 0.7255, 0.4118]  # yellow
+    color6 = [0.2745, 0.7176, 0.8157]  # light blue
+    colors = [color1, color2, color3, color4, color5, color6]
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
     plt.clf()
     plt.plot(x, y, 'k', label='signal', linewidth=0.6)
     plt.plot(x_test, y_test, 'g.', label='test', markersize=4)
-    plt.plot(x_pred, posterior_mean_sig, 'r', label='posterior mean', linewidth=0.6)
+    plt.plot(x_plot, posterior_mean_sig, 'r', label='posterior mean', linewidth=0.6)
     # plt.fill_between(x_pred, lb, ub, color='r', alpha=0.05, label='95% confidence')
-    plt.xlim(model.t_all[0], model.t_all[-1])
+    plt.xlim(x_plot[0], x_plot[-1])
     plt.legend()
     plt.title('Audio Signal Processing via Kalman smoothing (human speech signal)')
     plt.xlabel('time (milliseconds)')
 
     plt.figure(2, figsize=(12, 8))
     plt.subplot(2, 1, 1)
-    plt.plot(x_pred, posterior_mean_subbands, linewidth=0.6)
-    plt.xlim(model.t_all[0], model.t_all[-1])
+    for i in range(3):
+        plt.plot(x_plot, posterior_mean_subbands[:, i], color=colors[i], linewidth=0.6)
+        plt.fill_between(x_plot, lb_subbands[:, i], ub_subbands[:, i], color=colors[i], alpha=0.05, label='95% confidence')
+    plt.xlim(x_plot[0], x_plot[-1])
     plt.title('subbands')
     plt.subplot(2, 1, 2)
-    plt.plot(x_pred, posterior_mean_modulators, linewidth=0.6)
-    plt.xlim(model.t_all[0], model.t_all[-1])
+    plt.plot(x_plot, posterior_mean_modulators, linewidth=0.6)
+    for i in range(3):
+        plt.plot(x_plot, posterior_mean_modulators[:, i], color=colors[i], linewidth=0.6)
+        plt.fill_between(x_plot, lb_modulators[:, i], ub_modulators[:, i], color=colors[i], alpha=0.05, label='95% confidence')
+    plt.xlim(x_plot[0], x_plot[-1])
     plt.xlabel('time (milliseconds)')
     plt.title('amplitude modulators')
     plt.show()

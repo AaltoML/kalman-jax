@@ -1,7 +1,8 @@
 import jax.numpy as np
 from jax import jit, partial
 from jax.scipy.linalg import expm
-from kalmanjax.utils import softplus, softplus_inv, softplus_list, rotation_matrix, solve
+from utils import softplus, softplus_inv, softplus_list, rotation_matrix, solve
+from kernels import Matern12Kernel, Matern32Kernel, Matern52Kernel
 
 
 class Prior(object):
@@ -1099,6 +1100,7 @@ class SpatioTemporalMatern52(Prior):
         self.z = z.reshape(-1, 1)
         self.M = self.z.shape[0]
         self.fixed_grid = fixed_grid
+        self.spatial_kernel = Matern52Kernel()
         self.name = 'Spatio-Temporal Matern-5/2'
 
     @property
@@ -1113,17 +1115,12 @@ class SpatioTemporalMatern52(Prior):
     def lengthscale_space(self):
         return softplus(self.hyp[2])
 
-    @staticmethod
-    def spatial_covariance(z, z_prime, ell):
-        tau = np.sqrt(5) * (np.abs(z - z_prime.T) + 1e-8) / ell
-        return (1 + tau + tau**2 / 3) * np.exp(-tau)
-
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell_time, ell_space = hyperparams[0], hyperparams[1], hyperparams[2]
-        Kmm = self.spatial_covariance(self.z, self.z, ell_space)
+        Kmm = self.spatial_kernel.K(self.z, self.z, ell_space)
         lam = 5.0**0.5 / ell_time
         F_time = np.array([[0.0, 1.0, 0.0],
                            [0.0, 0.0, 1.0],
@@ -1150,8 +1147,8 @@ class SpatioTemporalMatern52(Prior):
         if self.fixed_grid:
             Kx = np.eye(self.z.shape[0])
         else:
-            Kzz = self.spatial_covariance(self.z, self.z, ell_space)
-            Kxz = self.spatial_covariance(r.reshape(-1, 1), self.z, ell_space)
+            Kzz = self.spatial_kernel.K(self.z, self.z, ell_space)
+            Kxz = self.spatial_kernel.K(r.reshape(-1, 1), self.z, ell_space)
             Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
         H = np.kron(Kx, H_time)
         return H
@@ -1193,6 +1190,7 @@ class SpatialMatern52(Prior):
         self.z = z.reshape(-1, 1)
         self.M = self.z.shape[0]
         self.fixed_grid = fixed_grid
+        self.spatial_kernel = Matern52Kernel()
         self.name = 'Spatial Matern-5/2'
 
     @property
@@ -1203,17 +1201,12 @@ class SpatialMatern52(Prior):
     def lengthscale(self):
         return softplus(self.hyp[1])
 
-    @staticmethod
-    def spatial_covariance(z, z_prime, ell):
-        tau = np.sqrt(5) * (np.abs(z - z_prime.T) + 1e-8) / ell
-        return (1 + tau + tau**2 / 3) * np.exp(-tau)
-
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
-        Kmm = self.spatial_covariance(self.z, self.z, ell)
+        Kmm = self.spatial_kernel.K(self.z, self.z, ell)
         lam = 5.0**0.5 / ell
         F_time = np.array([[0.0, 1.0, 0.0],
                            [0.0, 0.0, 1.0],
@@ -1240,8 +1233,8 @@ class SpatialMatern52(Prior):
         if self.fixed_grid:
             Kx = np.eye(self.z.shape[0])
         else:
-            Kzz = self.spatial_covariance(self.z, self.z, ell)
-            Kxz = self.spatial_covariance(r.reshape(-1, 1), self.z, ell)
+            Kzz = self.spatial_kernel.K(self.z, self.z, ell)
+            Kxz = self.spatial_kernel.K(r.reshape(-1, 1), self.z, ell)
             Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
         H = np.kron(Kx, H_time)
         return H
@@ -1283,6 +1276,7 @@ class SpatialMatern32(Prior):
         self.z = z.reshape(-1, 1)
         self.M = self.z.shape[0]
         self.fixed_grid = fixed_grid
+        self.spatial_kernel = Matern32Kernel()
         self.name = 'Spatial Matern-3/2'
 
     @property
@@ -1293,17 +1287,12 @@ class SpatialMatern32(Prior):
     def lengthscale(self):
         return softplus(self.hyp[1])
 
-    @staticmethod
-    def spatial_covariance(z, z_prime, ell):
-        tau = np.sqrt(3) * (np.abs(z - z_prime.T) + 1e-8) / ell
-        return (1 + tau) * np.exp(-tau)
-
     @partial(jit, static_argnums=0)
     def kernel_to_state_space(self, hyperparams=None):
         # uses variance and lengthscale hyperparameters to construct the state space model
         hyperparams = softplus(self.hyp) if hyperparams is None else hyperparams
         var, ell = hyperparams[0], hyperparams[1]
-        Kmm = self.spatial_covariance(self.z, self.z, ell)
+        Kmm = self.spatial_kernel.K(self.z, self.z, ell)
         lam = 3.0 ** 0.5 / ell
         F_time = np.array([[0.0, 1.0],
                            [-lam ** 2, -2 * lam]])
@@ -1326,8 +1315,8 @@ class SpatialMatern32(Prior):
         if self.fixed_grid:
             Kx = np.eye(self.z.shape[0])
         else:
-            Kzz = self.spatial_covariance(self.z, self.z, ell)
-            Kxz = self.spatial_covariance(r.reshape(-1, 1), self.z, ell)
+            Kzz = self.spatial_kernel.K(self.z, self.z, ell)
+            Kxz = self.spatial_kernel.K(r.reshape(-1, 1), self.z, ell)
             Kx = solve(Kzz, Kxz.T).T  # Kxz / Kzz
         H = np.kron(Kx, H_time)
         return H
