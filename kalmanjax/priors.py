@@ -1092,12 +1092,17 @@ class SpatioTemporalMatern52(Prior):
         temporal lengthscale, lt
         spatial lengthscale, ls
     """
-    def __init__(self, variance=1.0, lengthscale_time=1.0, lengthscale_space=1.0, z=None, fixed_grid=False):
+    def __init__(self, variance=1.0, lengthscale_time=1.0, lengthscale_space=1.0, spatial_dims=1, z=None, fixed_grid=False):
         hyp = [variance, lengthscale_time, lengthscale_space]
         super().__init__(hyp=hyp)
+        self.spatial_dims = spatial_dims
         if z is None:
             z = np.linspace(-3., 3., num=15)
-        self.z = z.reshape(-1, 1)
+            if self.spatial_dims > 1:  # Quick, inelegant fix for |r| = 2
+                z = np.linspace(-3., 3., num=10)
+                zA, zB = np.meshgrid(z,z)  # Adding additional dimension to inducing points grid
+                z = np.hstack((zA.reshape(-1,1), zB.reshape(-1,1)))  # Flattening grid for use in kernel functions
+        self.z = z.reshape(-1, self.spatial_dims)
         self.M = self.z.shape[0]
         self.fixed_grid = fixed_grid
         self.spatial_kernel = Matern52Kernel()
