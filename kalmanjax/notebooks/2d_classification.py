@@ -41,7 +41,7 @@ inf_method = approx_inf.ExpectationPropagation(power=0.5)
 # inf_method = approx_inf.ExtendedKalmanSmoother()
 # inf_method = approx_inf.VariationalInference()
 
-model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, t_test=Xtest, r_test=Rtest, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, r=R, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=2e-1)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -80,20 +80,11 @@ print('optimisation time: %2.2f secs' % (t1-t0))
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-mu, var, _, nlpd_test = model.predict(return_full=True)
-mu = np.squeeze(mu)
+mu, var = model.predict(t=Xtest, r=Rtest)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
-# print('test NLPD: %1.2f' % nlpd)
 
-x_pred = model.t_all
 link_fn = model.likelihood.link_fn
-
-# print('sampling from the posterior ...')
-# t0 = time.time()
-# posterior_samp = model.posterior_sample(20)
-# t1 = time.time()
-# print('sampling time: %2.2f secs' % (t1-t0))
 
 print('plotting ...')
 plt.figure(1)

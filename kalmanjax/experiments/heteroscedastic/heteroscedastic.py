@@ -39,10 +39,12 @@ if len(sys.argv) > 1:
     method = int(sys.argv[1])
     fold = int(sys.argv[2])
     plot_final = False
+    save_result = True
 else:
     method = 15
     fold = 2
     plot_final = True
+    save_result = False
 
 print('method number', method)
 print('batch number', fold)
@@ -116,7 +118,7 @@ elif method == 15:
 elif method == 16:
     inf_method = approx_inf.VI(intmethod='GH', damping=0.5)
 
-model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, t_test=XT, y_test=YT, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=step_size)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -149,36 +151,37 @@ for j in range(250):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
+x_plot = np.linspace(np.min(Xall)-0.2, np.max(Xall)+0.2, 200)
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+nlpd = model.negative_log_predictive_density(t=XT, y=YT)
+posterior_mean, posterior_cov = model.predict(t=x_plot)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)
 
-with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
-    pickle.dump(nlpd, fp)
+if save_result:
+    with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "wb") as fp:
+        pickle.dump(nlpd, fp)
 
 # with open("output/" + str(method) + "_" + str(fold) + "_nlpd.txt", "rb") as fp:
 #     nlpd_show = pickle.load(fp)
 # print(nlpd_show)
 
 if plot_final:
-    x_pred = model.t_all[:, 0]
     link = model.likelihood.link_fn
-    lb = posterior_mean[:, 0, 0] - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
-    ub = posterior_mean[:, 0, 0] + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
-    test_id = model.test_id
+    lb = posterior_mean[:, 0] - np.sqrt(posterior_cov[:, 0, 0] + link(posterior_mean[:, 1]) ** 2) * 1.96
+    ub = posterior_mean[:, 0] + np.sqrt(posterior_cov[:, 0, 0] + link(posterior_mean[:, 1]) ** 2) * 1.96
 
     print('plotting ...')
     plt.figure(1, figsize=(12, 5))
     plt.clf()
     plt.plot(X, Y, 'k.', label='train')
     plt.plot(XT, YT, 'r.', label='test')
-    plt.plot(x_pred, posterior_mean[:, 0], 'c', label='posterior mean')
-    plt.fill_between(x_pred, lb, ub, color='c', alpha=0.05, label='95% confidence')
-    plt.xlim(model.t_all[0], model.t_all[-1])
+    plt.plot(x_plot, posterior_mean[:, 0], 'c', label='posterior mean')
+    plt.fill_between(x_plot, lb, ub, color='c', alpha=0.05, label='95% confidence')
+    plt.xlim(x_plot[0], x_plot[-1])
     plt.legend()
     plt.title('Heteroscedastic Noise Model via Kalman smoothing (motorcycle crash data)')
     plt.xlabel('time')

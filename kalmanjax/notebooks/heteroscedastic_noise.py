@@ -65,7 +65,7 @@ inf_method = approx_inf.ExpectationPropagation(power=0.01, intmethod='GH', dampi
 # inf_method = approx_inf.StatisticallyLinearisedEP(intmethod='UT', damping=0.5)
 # inf_method = approx_inf.UnscentedKalmanSmoother(damping=0.5)
 
-model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, t_test=XT, y_test=YT, approx_inf=inf_method)
+model = SDEGP(prior=prior, likelihood=lik, t=X, y=Y, approx_inf=inf_method)
 
 opt_init, opt_update, get_params = optimizers.adam(step_size=5e-2)
 # parameters should be a 2-element list [param_prior, param_likelihood]
@@ -98,21 +98,22 @@ for j in range(250):
 t1 = time.time()
 print('optimisation time: %2.2f secs' % (t1-t0))
 
+x_plot = np.linspace(np.min(Xall)-0.2, np.max(Xall)+0.2, 200)
 # calculate posterior predictive distribution via filtering and smoothing at train & test locations:
 print('calculating the posterior predictive distribution ...')
 t0 = time.time()
-posterior_mean, posterior_var, _, nlpd = model.predict()
+nlpd = model.negative_log_predictive_density(t=XT, y=YT)
+posterior_mean, posterior_cov = model.predict(t=x_plot)
 t1 = time.time()
 print('prediction time: %2.2f secs' % (t1-t0))
 print('NLPD: %1.2f' % nlpd)
 
 
-x_pred = X_scaler.inverse_transform(model.t_all[:, 0])
+x_pred = X_scaler.inverse_transform(x_plot)
 link = model.likelihood.link_fn
-post_mean = posterior_mean[:, 0, 0]
-lb = post_mean - np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
-ub = post_mean + np.sqrt(posterior_var[:, 0, 0] + link(posterior_mean[:, 1, 0]) ** 2) * 1.96
-post_mean = y_scaler.inverse_transform(post_mean)
+lb = posterior_mean[:, 0] - np.sqrt(posterior_cov[:, 0, 0] + link(posterior_mean[:, 1]) ** 2) * 1.96
+ub = posterior_mean[:, 0] + np.sqrt(posterior_cov[:, 0, 0] + link(posterior_mean[:, 1]) ** 2) * 1.96
+post_mean = y_scaler.inverse_transform(posterior_mean[:, 0])
 lb = y_scaler.inverse_transform(lb)
 ub = y_scaler.inverse_transform(ub)
 
