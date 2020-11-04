@@ -622,3 +622,54 @@ def symmetric_cubature_fifth_order(dim=1):
 #             else:
 #                 U = np.block([U, u - u])
 #     return U
+
+def scaled_squared_euclid_dist(X, X2, ell):
+    """
+    Returns ‖(X - X2ᵀ) / ℓ‖², i.e. the squared L₂-norm.
+
+    Adapted from GPflow: https://github.com/GPflow/GPflow
+    http://www.apache.org/licenses/LICENSE-2.0
+
+    """
+    return square_distance(X / ell, X2 / ell)
+
+
+def square_distance(X, X2):
+    """
+
+    Adapted from GPflow: https://github.com/GPflow/GPflow
+    http://www.apache.org/licenses/LICENSE-2.0
+
+    Returns ||X - X2ᵀ||²
+    Due to the implementation and floating-point imprecision, the
+    result may actually be very slightly negative for entries very
+    close to each other.
+
+    This function can deal with leading dimensions in X and X2.
+    In the sample case, where X and X2 are both 2 dimensional,
+    for example, X is [N, D] and X2 is [M, D], then a tensor of shape
+    [N, M] is returned. If X is [N1, S1, D] and X2 is [N2, S2, D]
+    then the output will be [N1, S1, N2, S2].
+    """
+    Xs = np.sum(np.square(X), axis=-1)
+    X2s = np.sum(np.square(X2), axis=-1)
+    dist = -2 * np.tensordot(X, X2, [[-1], [-1]])
+    dist += broadcasting_elementwise(np.add, Xs, X2s)
+    return dist
+
+
+def broadcasting_elementwise(op, a, b):
+    """
+
+    Adapted from GPflow: https://github.com/GPflow/GPflow
+    http://www.apache.org/licenses/LICENSE-2.0
+
+    Apply binary operation `op` to every pair in tensors `a` and `b`.
+
+    :param op: binary operator on tensors, e.g. tf.add, tf.substract
+    :param a: tf.Tensor, shape [n_1, ..., n_a]
+    :param b: tf.Tensor, shape [m_1, ..., m_b]
+    :return: tf.Tensor, shape [n_1, ..., n_a, m_1, ..., m_b]
+    """
+    flatres = op(np.reshape(a, [-1, 1]), np.reshape(b, [1, -1]))
+    return flatres.reshape(a.shape[0], b.shape[0])
