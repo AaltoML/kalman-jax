@@ -2,7 +2,7 @@ import jax.numpy as np
 from jax.scipy.special import erf, gammaln
 from jax import jit, partial, jacrev, random, vmap, grad
 from jax.scipy.linalg import cholesky, cho_factor, cho_solve
-from kalmanjax.utils import inv, softplus, sigmoid, logphi, gaussian_moment_match, softplus_inv, gauss_hermite, \
+from utils import inv, softplus, sigmoid, logphi, gaussian_moment_match, softplus_inv, gauss_hermite, \
     ensure_positive_precision
 pi = 3.141592653589793
 

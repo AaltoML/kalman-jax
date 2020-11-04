@@ -1,6 +1,6 @@
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor, cho_solve
-from kalmanjax.utils import inv, symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite, \
+from utils import inv, symmetric_cubature_third_order, symmetric_cubature_fifth_order, gauss_hermite, \
     ensure_positive_precision
 pi = 3.141592653589793
 
