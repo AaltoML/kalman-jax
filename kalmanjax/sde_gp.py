@@ -290,9 +290,10 @@ class SDEGP(object):
                     site_mean, site_cov = site_params[0][n], site_params[1][n]
                 # modified Kalman update (see Nickish et. al. ICML 2018 or Wilkinson et. al. ICML 2019):
                 S = predict_cov + site_cov
-                K = solve(S, H @ P_).T  # PH'(S^-1)
+                HP = H @ P_
+                K = solve(S, HP).T  # PH'(S^-1)
                 s.m = m_ + K @ (site_mean - predict_mean)
-                s.P = P_ - K @ S @ K.T
+                s.P = P_ - K @ HP
                 if mask is not None:  # note: this is a bit redundant but may come in handy in multi-output problems
                     s.m = np.where(np.any(mask[n]), m_, s.m)
                     s.P = np.where(np.any(mask[n]), P_, s.P)
