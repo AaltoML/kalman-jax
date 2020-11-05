@@ -1099,9 +1099,11 @@ class SpatioTemporalMatern52(Prior):
         if z is None:
             z = np.linspace(-3., 3., num=15)
             if self.spatial_dims > 1:  # Quick, inelegant fix for |r| = 2
-                z = np.linspace(-3., 3., num=10)
+                z = np.linspace(-3., 3., num=5)
                 zA, zB = np.meshgrid(z,z)  # Adding additional dimension to inducing points grid
                 z = np.hstack((zA.reshape(-1,1), zB.reshape(-1,1)))  # Flattening grid for use in kernel functions
+            elif self.spatial_dims > 2:
+                raise NotImplementedError('initialisation of z with more than 2 dimensions not implemented, please provide a custom initialisation') 
         self.z = z.reshape(-1, self.spatial_dims)
         self.M = self.z.shape[0]
         self.fixed_grid = fixed_grid
