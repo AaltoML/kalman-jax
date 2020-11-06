@@ -278,7 +278,6 @@ class Likelihood(object):
         Computes the "variational expectation" via cubature, i.e. the
         expected log-likelihood, and its derivatives w.r.t. the posterior mean
             E[log p(yₙ|fₙ)] = ∫ log p(yₙ|fₙ) 𝓝(fₙ|mₙ,vₙ) dfₙ
-        with EP power a.
         :param y: observed data (yₙ) [scalar]
         :param post_mean: posterior mean (mₙ) [scalar]
         :param post_cov: posterior variance (vₙ) [scalar]
