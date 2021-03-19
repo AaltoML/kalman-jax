@@ -1,3 +1,5 @@
+**Note: kalman-jax is now obselete. A significantly improved version of this code is now available at [https://github.com/AaltoML/Newt/](https://github.com/AaltoML/Newt/)**
+
 # kalman-jax
 Approximate inference for Markov (i.e., temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://wil-j-wil.github.io/).
 The Bernoulli likelihood was implemented by **Paul Chang**. We are based in [**Arno Solin**](https://users.aalto.fi/~asolin/)'s machine learning group at Aalto University, Finland.
