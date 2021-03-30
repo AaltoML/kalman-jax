@@ -1,4 +1,4 @@
-# Note: kalman-jax is now obselete. A significantly improved version of this code is now available at [https://github.com/AaltoML/Newt/](https://github.com/AaltoML/Newt/)
+## Note: kalman-jax is now obselete. A significantly improved version of this code is now available at [https://github.com/AaltoML/Newt/](https://github.com/AaltoML/Newt/)
 
 # kalman-jax
 Approximate inference for Markov (i.e., temporal) Gaussian processes using iterated Kalman filtering and smoothing. Developed and maintained by [**William Wilkinson**](https://wil-j-wil.github.io/).
